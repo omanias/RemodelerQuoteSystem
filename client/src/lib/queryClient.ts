@@ -1,11 +1,15 @@
 import { QueryClient } from "@tanstack/react-query";
+import { auth } from "./firebase";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: async ({ queryKey }) => {
+        const token = await auth.currentUser?.getIdToken();
         const res = await fetch(queryKey[0] as string, {
-          credentials: "include",
+          headers: token ? {
+            Authorization: `Bearer ${token}`,
+          } : undefined,
         });
 
         if (!res.ok) {

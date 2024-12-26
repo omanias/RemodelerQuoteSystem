@@ -19,9 +19,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    console.log("ProtectedRoute state:", { loading, user: !!user, error });
     if (!loading && !user) {
-      console.log("Redirecting to login");
       setLocation("/login");
     }
   }, [user, loading, setLocation]);
@@ -60,25 +58,27 @@ function App() {
   useEffect(() => {
     if (loading) return;
 
-    console.log("App auth state:", { loading, user: !!user, location });
     if (user && location === "/login") {
-      console.log("Redirecting to dashboard");
       setLocation("/");
     }
   }, [user, loading, location, setLocation]);
 
   return (
+    <Switch>
+      <Route path="/login" component={Login} />
+      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
+      <Route path="/products" component={() => <ProtectedRoute component={Products} />} />
+      <Route path="/templates" component={() => <ProtectedRoute component={Templates} />} />
+    </Switch>
+  );
+}
+
+export default function AppWrapper() {
+  return (
     <QueryClientProvider client={queryClient}>
-      <Switch>
-        <Route path="/login" component={Login} />
-        <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-        <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
-        <Route path="/products" component={() => <ProtectedRoute component={Products} />} />
-        <Route path="/templates" component={() => <ProtectedRoute component={Templates} />} />
-      </Switch>
+      <App />
       <Toaster />
     </QueryClientProvider>
   );
 }
-
-export default App;
