@@ -15,11 +15,13 @@ import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
+    console.log("ProtectedRoute state:", { loading, user: !!user, error });
     if (!loading && !user) {
+      console.log("Redirecting to login");
       setLocation("/login");
     }
   }, [user, loading, setLocation]);
@@ -28,6 +30,14 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-red-500">Error: {error.message}</div>
       </div>
     );
   }
@@ -47,9 +57,10 @@ function App() {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
 
-  // Redirect to dashboard if user is logged in and trying to access login page
   useEffect(() => {
+    console.log("App auth state:", { loading, user: !!user, location });
     if (!loading && user && location === "/login") {
+      console.log("Redirecting to dashboard");
       setLocation("/");
     }
   }, [user, loading, location, setLocation]);

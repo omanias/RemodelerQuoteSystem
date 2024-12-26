@@ -13,21 +13,24 @@ export type AuthUser = {
 
 export function useAuth() {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    console.log("Setting up Firebase auth listener");
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("Firebase auth state changed:", user?.email);
       setFirebaseUser(user);
-      setLoading(false);
+      setAuthChecked(true);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const { data: user, isLoading: isUserLoading } = useQuery<AuthUser>({
+  const { data: user, isLoading: isUserLoading, error } = useQuery<AuthUser>({
     queryKey: ["/api/auth/user"],
     enabled: !!firebaseUser,
     queryFn: async () => {
+      console.log("Fetching user data for:", firebaseUser?.email);
       const token = await firebaseUser?.getIdToken();
       const res = await fetch("/api/auth/user", {
         headers: {
@@ -35,16 +38,21 @@ export function useAuth() {
         },
       });
       if (!res.ok) {
-        throw new Error(await res.text());
+        const errorText = await res.text();
+        console.error("Error fetching user data:", errorText);
+        throw new Error(errorText);
       }
-      return res.json();
+      const userData = await res.json();
+      console.log("User data received:", userData);
+      return userData;
     },
   });
 
   return {
     user,
     firebaseUser,
-    loading: loading || isUserLoading,
+    loading: !authChecked || (!!firebaseUser && isUserLoading),
+    error,
     isAuthenticated: !!user,
   };
 }
