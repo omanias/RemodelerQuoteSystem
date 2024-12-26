@@ -16,7 +16,7 @@ export function Login() {
     try {
       setLoading(true);
       await signInWithPopup(auth, googleProvider);
-      setLocation("/");
+      // The redirection will be handled by App.tsx useEffect
     } catch (error: any) {
       let errorMessage = error.message;
       if (error.code === 'auth/operation-not-allowed') {

@@ -1,9 +1,11 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 
 // Pages
 import { Login } from "@/pages/Login";
@@ -14,13 +16,23 @@ import { Templates } from "@/pages/Templates";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      setLocation("/login");
+    }
+  }, [user, loading, setLocation]);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   if (!user) {
-    window.location.href = "/login";
     return null;
   }
 
@@ -32,6 +44,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function App() {
+  const { user, loading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Redirect to dashboard if user is logged in and trying to access login page
+  useEffect(() => {
+    if (!loading && user && location === "/login") {
+      setLocation("/");
+    }
+  }, [user, loading, location, setLocation]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Switch>

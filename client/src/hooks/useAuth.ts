@@ -24,15 +24,27 @@ export function useAuth() {
     return () => unsubscribe();
   }, []);
 
-  const { data: user } = useQuery({
-    queryKey: ["/api/auth/user", firebaseUser?.uid],
+  const { data: user, isLoading: isUserLoading } = useQuery<AuthUser>({
+    queryKey: ["/api/auth/user"],
     enabled: !!firebaseUser,
+    queryFn: async () => {
+      const token = await firebaseUser?.getIdToken();
+      const res = await fetch("/api/auth/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      return res.json();
+    },
   });
 
   return {
     user,
     firebaseUser,
-    loading,
+    loading: loading || isUserLoading,
     isAuthenticated: !!user,
   };
 }
