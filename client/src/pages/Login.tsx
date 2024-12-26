@@ -18,11 +18,16 @@ export function Login() {
       await signInWithPopup(auth, googleProvider);
       setLocation("/");
     } catch (error: any) {
+      let errorMessage = error.message;
+      if (error.code === 'auth/operation-not-allowed') {
+        errorMessage = "Google Sign-In is not enabled. Please enable it in the Firebase console.";
+      }
       toast({
-        title: "Error",
-        description: error.message,
+        title: "Authentication Error",
+        description: errorMessage,
         variant: "destructive",
       });
+      console.error('Login error:', error.code, error.message);
     } finally {
       setLoading(false);
     }
