@@ -17,18 +17,18 @@ export function useAuth() {
 
   useEffect(() => {
     console.log("Setting up Firebase auth listener");
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    return onAuthStateChanged(auth, (user) => {
       console.log("Firebase auth state changed:", user?.email);
       setFirebaseUser(user);
       setAuthChecked(true);
     });
-
-    return () => unsubscribe();
   }, []);
 
   const { data: user, isLoading: isUserLoading, error } = useQuery<AuthUser>({
-    queryKey: ["/api/auth/user"],
+    queryKey: ["/api/auth/user", firebaseUser?.uid],
     enabled: !!firebaseUser,
+    staleTime: Infinity,
+    cacheTime: Infinity,
     queryFn: async () => {
       console.log("Fetching user data for:", firebaseUser?.email);
       const token = await firebaseUser?.getIdToken();
@@ -37,11 +37,13 @@ export function useAuth() {
           Authorization: `Bearer ${token}`,
         },
       });
+
       if (!res.ok) {
         const errorText = await res.text();
         console.error("Error fetching user data:", errorText);
         throw new Error(errorText);
       }
+
       const userData = await res.json();
       console.log("User data received:", userData);
       return userData;

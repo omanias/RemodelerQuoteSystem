@@ -58,8 +58,10 @@ function App() {
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
+    if (loading) return;
+
     console.log("App auth state:", { loading, user: !!user, location });
-    if (!loading && user && location === "/login") {
+    if (user && location === "/login") {
       console.log("Redirecting to dashboard");
       setLocation("/");
     }
