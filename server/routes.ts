@@ -49,24 +49,37 @@ function setupSession(app: Express) {
 
 // Auth middleware
 const requireAuth = async (req: any, res: any, next: any) => {
-  if (!req.session.userId) {
-    return res.status(401).json({ message: "Unauthorized" });
+  try {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, req.session.userId),
+    });
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(500).json({ message: "Server error" });
   }
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, req.session.userId),
-  });
-  if (!user) {
-    return res.status(401).json({ message: "User not found" });
-  }
-  req.user = user;
-  next();
 };
 
 const requireRole = (allowedRoles: string[]) => async (req: any, res: any, next: any) => {
-  if (!allowedRoles.includes(req.user.role)) {
-    return res.status(403).json({ message: "Insufficient permissions" });
+  try {
+    if (!req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
+    next();
+  } catch (error) {
+    console.error('Role middleware error:', error);
+    res.status(500).json({ message: "Server error" });
   }
-  next();
 };
 
 export function registerRoutes(app: Express) {
@@ -80,20 +93,28 @@ export function registerRoutes(app: Express) {
     try {
       console.log(`Login attempt for email: ${email}`);
 
-      // Delete existing admin user first
-      await db.delete(users).where(eq(users.email, "admin@quotebuilder.com"));
+      // Find or create admin user
+      let user = await db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
 
-      // Create new admin user with correct password hash
-      const hashedPassword = await crypto.hash("admin123");
-      const [user] = await db.insert(users)
-        .values({
-          email: "admin@quotebuilder.com",
-          password: hashedPassword,
-          name: "Admin User",
-          role: UserRole.ADMIN,
-          status: UserStatus.ACTIVE,
-        })
-        .returning();
+      if (!user && email === "admin@quotebuilder.com") {
+        // Create new admin user with correct password hash
+        const hashedPassword = await crypto.hash("admin123");
+        [user] = await db.insert(users)
+          .values({
+            email: "admin@quotebuilder.com",
+            password: hashedPassword,
+            name: "Admin User",
+            role: UserRole.ADMIN,
+            status: UserStatus.ACTIVE,
+          })
+          .returning();
+      }
+
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
       // Now try to log in
       const isValidPassword = await crypto.compare(password, user.password);
@@ -150,6 +171,16 @@ export function registerRoutes(app: Express) {
   app.post("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
     try {
       const { email, password, name, role } = req.body;
+
+      // Check if user already exists
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this email already exists" });
+      }
+
       const hashedPassword = await crypto.hash(password);
       const [user] = await db.insert(users)
         .values({
@@ -178,6 +209,16 @@ export function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
       const { email, name, role, status } = req.body;
+
+      // Check if email is being changed and if it's already taken
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+
+      if (existingUser && existingUser.id !== parseInt(id)) {
+        return res.status(400).json({ message: "Email already taken" });
+      }
+
       const [user] = await db.update(users)
         .set({ email, name, role, status })
         .where(eq(users.id, parseInt(id)))
@@ -199,6 +240,16 @@ export function registerRoutes(app: Express) {
   app.delete("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
     try {
       const { id } = req.params;
+
+      // Prevent deleting the admin user
+      const userToDelete = await db.query.users.findFirst({
+        where: eq(users.id, parseInt(id)),
+      });
+
+      if (userToDelete?.email === "admin@quotebuilder.com") {
+        return res.status(400).json({ message: "Cannot delete admin user" });
+      }
+
       await db.delete(users).where(eq(users.id, parseInt(id)));
       res.json({ message: "User deleted successfully" });
     } catch (error) {
