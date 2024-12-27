@@ -578,8 +578,24 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Category and template are required" });
       }
 
+      // Generate quote number
+      const currentYear = new Date().getFullYear();
+      const latestQuote = await db.query.quotes.findFirst({
+        where: ilike(quotes.number, `QT-${currentYear}-%`),
+        orderBy: (quotes, { desc }) => [desc(quotes.number)],
+      });
+
+      let sequence = 1;
+      if (latestQuote) {
+        const lastSequence = parseInt(latestQuote.number.split('-')[2]);
+        sequence = lastSequence + 1;
+      }
+
+      const quoteNumber = `QT-${currentYear}-${sequence.toString().padStart(4, '0')}`;
+
       const [quote] = await db.insert(quotes)
         .values({
+          number: quoteNumber,
           categoryId,
           templateId,
           items,
