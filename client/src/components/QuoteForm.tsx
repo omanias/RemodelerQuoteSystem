@@ -231,7 +231,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
         },
         body: JSON.stringify({
           categoryId: parseInt(data.categoryId),
-          userId: user?.id,
           templateId: parseInt(data.templateId || "0"),
           customerInfo: {
             name: data.clientName,
@@ -258,6 +257,8 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
               total,
               downPayment,
               remainingBalance,
+              discount: calculateDiscount(),
+              tax: calculateTax()
             },
           },
         }),

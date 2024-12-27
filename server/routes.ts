@@ -683,7 +683,8 @@ export function registerRoutes(app: Express) {
         taxRate,
         subtotal,
         remainingBalance,
-        notes 
+        notes,
+        status 
       } = req.body;
 
       // Parse numeric values with fallbacks
@@ -711,6 +712,7 @@ export function registerRoutes(app: Express) {
           taxRate: parsedTaxRate,
           remainingBalance: parsedRemainingBalance,
           notes: notes || '',
+          status: status || QuoteStatus.DRAFT,
           content: {
             products: selectedProducts.map(product => ({
               ...product,
