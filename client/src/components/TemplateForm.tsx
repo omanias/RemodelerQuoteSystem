@@ -29,7 +29,6 @@ import { X } from "lucide-react";
 const templateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   categoryId: z.string().min(1, "Category is required"),
-  content: z.string().min(1, "Content is required"),
   termsAndConditions: z.string().optional(),
   isDefault: z.boolean().default(false),
 });
@@ -56,7 +55,6 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
     defaultValues: {
       name: template?.name || "",
       categoryId: template?.categoryId?.toString() || "",
-      content: template ? JSON.stringify(template.content, null, 2) : "",
       termsAndConditions: template?.termsAndConditions || "",
       isDefault: template?.isDefault || false,
     },
@@ -75,7 +73,6 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
             body: JSON.stringify({
               ...data,
               categoryId: parseInt(data.categoryId),
-              content: JSON.parse(data.content),
               imageUrls: images,
             }),
             credentials: "include",
@@ -88,9 +85,6 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
 
         return response.json();
       } catch (error: any) {
-        if (error.message.includes("JSON")) {
-          throw new Error("Invalid JSON in content field");
-        }
         throw error;
       }
     },
@@ -129,7 +123,7 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto p-4">
         <FormField
           control={form.control}
           name="name"
@@ -164,20 +158,6 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="content"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Content (JSON)</FormLabel>
-              <FormControl>
-                <Textarea {...field} rows={10} />
-              </FormControl>
               <FormMessage />
             </FormItem>
           )}

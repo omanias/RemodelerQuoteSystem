@@ -75,7 +75,6 @@ export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
-  content: jsonb("content").notNull(),
   termsAndConditions: text("terms_and_conditions"),
   imageUrls: jsonb("image_urls"),
   isDefault: boolean("is_default").default(false).notNull(),

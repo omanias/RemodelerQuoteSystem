@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,6 +62,7 @@ const quoteFormSchema = z.object({
   downPaymentType: z.enum(["percentage", "fixed"]).optional(),
   downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
+  templateId: z.string().optional(), // Added templateId field
 });
 
 interface QuoteFormProps {
@@ -108,6 +109,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
       downPaymentType: quote?.downPaymentType || "percentage",
       downPaymentValue: quote?.downPaymentValue?.toString() || "",
       notes: quote?.notes || "",
+      templateId: quote?.templateId?.toString() || "", //Added default value for templateId
     },
   });
 
@@ -214,7 +216,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           ...data,
           categoryId: parseInt(data.categoryId),
           userId: user?.id,
-          templateId: defaultTemplate.id,
+          templateId: parseInt(data.templateId), // Parse templateId to integer
           subtotal: calculateSubtotal(),
           total,
           downPaymentValue: downPayment,
@@ -269,6 +271,18 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     }
     mutation.mutate(data);
   };
+
+  // Add this effect to automatically select the default template for the category
+  useEffect(() => {
+    if (selectedCategoryId && templates?.length > 0) {
+      const categoryTemplates = templates.filter((t: any) => t.categoryId.toString() === selectedCategoryId);
+      const defaultTemplate = categoryTemplates.find((t: any) => t.isDefault) || categoryTemplates[0];
+
+      if (defaultTemplate) {
+        form.setValue("templateId", defaultTemplate.id.toString());
+      }
+    }
+  }, [selectedCategoryId, templates, form]);
 
   return (
     <Form {...form}>
@@ -365,6 +379,35 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
             </FormItem>
           )}
         />
+
+        {/* Added Template Selection Field */}
+        <FormField
+          control={form.control}
+          name="templateId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Template</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a template" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {templates
+                    .filter((t: any) => t.categoryId.toString() === selectedCategoryId)
+                    .map((template: any) => (
+                      <SelectItem key={template.id} value={template.id.toString()}>
+                        {template.name} {template.isDefault && "(Default)"}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
 
         {selectedCategoryId && (
           <Card>
