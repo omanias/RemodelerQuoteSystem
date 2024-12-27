@@ -22,6 +22,13 @@ export const QuoteStatus = {
   REVISED: 'REVISED'
 } as const;
 
+export const PaymentMethod = {
+  CASH: 'Cash',
+  CREDIT_CARD: 'Credit Card',
+  BANK_TRANSFER: 'Bank Transfer',
+  PAYMENT_PLAN: 'Payment Plan'
+} as const;
+
 export const ProductUnit = {
   SQUARE_FOOT: 'Square Foot',
   LINEAR_FOOT: 'Linear Foot',
@@ -74,17 +81,40 @@ export const templates = pgTable("templates", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Enhanced quotes table with new fields
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
   number: text("number").notNull().unique(),
   clientName: text("client_name").notNull(),
   clientEmail: text("client_email").notNull(),
+  clientPhone: text("client_phone"),
+  clientAddress: text("client_address"),
   status: text("status").notNull().$type<keyof typeof QuoteStatus>(),
+
+  // Financial details
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  discountType: text("discount_type"), // 'percentage' or 'fixed'
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
+  discountCode: text("discount_code"),
+  taxRate: decimal("tax_rate", { precision: 5, scale: 2 }),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+
+  // Payment details
+  paymentMethod: text("payment_method").$type<keyof typeof PaymentMethod>(),
+  downPaymentType: text("down_payment_type"), // 'percentage' or 'fixed'
+  downPaymentValue: decimal("down_payment_value", { precision: 10, scale: 2 }),
+  remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
+
+  // Content holds the detailed line items and calculations
   content: jsonb("content").notNull(),
+  notes: text("notes"),
+
+  // Relations
   userId: integer("user_id").references(() => users.id).notNull(),
   templateId: integer("template_id").references(() => templates.id).notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
