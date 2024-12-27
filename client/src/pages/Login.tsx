@@ -1,9 +1,19 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { auth, googleProvider } from "@/lib/firebase";
-import { signInWithPopup, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SiFirebase } from "react-icons/si";
 import { useToast } from "@/hooks/use-toast";
@@ -19,31 +29,49 @@ export function Login() {
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
+      console.log("Attempting Google login");
       await signInWithPopup(auth, googleProvider);
+      console.log("Google login successful");
+      setLocation("/");
     } catch (error: any) {
+      console.error("Google login error:", error);
       let errorMessage = error.message;
-      if (error.code === 'auth/operation-not-allowed') {
-        errorMessage = "Google Sign-In is not enabled. Please enable it in the Firebase console.";
+      if (error.code === "auth/operation-not-allowed") {
+        errorMessage =
+          "Google Sign-In is not enabled. Please enable it in the Firebase console.";
       }
       toast({
         title: "Authentication Error",
         description: errorMessage,
         variant: "destructive",
       });
-      console.error('Login error:', error.code, error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleEmailSignUp = async () => {
+    if (!email || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
+      console.log("Attempting email signup");
       await createUserWithEmailAndPassword(auth, email, password);
+      console.log("Email signup successful");
+      setLocation("/");
     } catch (error: any) {
+      console.error("Email signup error:", error);
       let errorMessage = error.message;
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "This email is already registered. Please try logging in instead.";
+      if (error.code === "auth/email-already-in-use") {
+        errorMessage =
+          "This email is already registered. Please try logging in instead.";
       }
       toast({
         title: "Sign Up Error",
@@ -56,12 +84,28 @@ export function Login() {
   };
 
   const handleEmailLogin = async () => {
+    if (!email || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter both email and password",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
+      console.log("Attempting email login");
       await signInWithEmailAndPassword(auth, email, password);
+      console.log("Email login successful");
+      setLocation("/");
     } catch (error: any) {
+      console.error("Email login error:", error);
       let errorMessage = error.message;
-      if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+      if (
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/user-not-found"
+      ) {
         errorMessage = "Invalid email or password";
       }
       toast({
@@ -107,7 +151,7 @@ export function Login() {
                 <Button
                   className="w-full"
                   onClick={handleEmailLogin}
-                  disabled={loading || !email || !password}
+                  disabled={loading}
                 >
                   {loading ? "Signing in..." : "Sign in with Email"}
                 </Button>
@@ -131,7 +175,7 @@ export function Login() {
                 <Button
                   className="w-full"
                   onClick={handleEmailSignUp}
-                  disabled={loading || !email || !password}
+                  disabled={loading}
                 >
                   {loading ? "Creating account..." : "Create Account"}
                 </Button>
