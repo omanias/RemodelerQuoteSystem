@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
+import { QuoteDetail } from "@/pages/QuoteDetail";
 import { Categories } from "@/pages/Categories";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
@@ -45,6 +46,8 @@ function App() {
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/quotes" component={Quotes} />
+          <Route path="/quotes/new" component={QuoteDetail} />
+          <Route path="/quotes/:id" component={QuoteDetail} />
           <Route path="/contacts" component={Contacts} />
           <Route path="/contacts/new" component={ContactDetail} />
           <Route path="/contacts/:id" component={ContactDetail} />
