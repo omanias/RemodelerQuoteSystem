@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 export type AuthUser = {
   id: number;
@@ -12,34 +12,30 @@ export type AuthUser = {
 };
 
 export function useAuth() {
-  const queryClient = useQueryClient();
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [initialAuthChecked, setInitialAuthChecked] = useState(false);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (user) => {
+    // Handle Firebase auth state changes
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      setAuthChecked(true);
-      if (user) {
-        // Prefetch user data when Firebase auth changes
-        queryClient.prefetchQuery({
-          queryKey: ["/api/auth/user"],
-        });
-      }
+      setInitialAuthChecked(true);
     });
-  }, [queryClient]);
 
-  const { data: user, isLoading: isUserLoading, error } = useQuery<AuthUser>({
-    queryKey: ["/api/auth/user"],
+    return () => unsubscribe();
+  }, []);
+
+  const { data: user, isLoading: isUserLoading, error } = useQuery({
+    queryKey: ["/api/auth/user", firebaseUser?.uid],
     enabled: !!firebaseUser,
     staleTime: Infinity,
-    gcTime: Infinity,
+    retry: 1,
   });
 
   return {
     user,
     firebaseUser,
-    loading: !authChecked || (!!firebaseUser && isUserLoading),
+    loading: !initialAuthChecked || (!!firebaseUser && isUserLoading),
     error,
     isAuthenticated: !!user,
   };
