@@ -1,11 +1,10 @@
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -19,7 +18,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { LeadStatus } from "@db/schema";
+import { LeadStatus, LeadSource, PropertyType } from "@db/schema";
+import { useToast } from "@/hooks/use-toast";
 
 const contactFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -29,9 +29,9 @@ const contactFormSchema = z.object({
   primaryPhone: z.string().min(1, "Phone number is required"),
   secondaryPhone: z.string().optional(),
   leadStatus: z.enum([LeadStatus.NEW, LeadStatus.CONTACTED, LeadStatus.QUOTE_SENT, LeadStatus.PROJECT_STARTED, LeadStatus.COMPLETED, LeadStatus.LOST]),
-  leadSource: z.string(),
-  propertyType: z.string(),
-  primaryAddress: z.string(),
+  leadSource: z.enum([LeadSource.WEBSITE, LeadSource.REFERRAL, LeadSource.SOCIAL_MEDIA, LeadSource.HOME_SHOW, LeadSource.ADVERTISEMENT, LeadSource.OTHER]),
+  propertyType: z.enum([PropertyType.SINGLE_FAMILY, PropertyType.MULTI_FAMILY, PropertyType.COMMERCIAL]),
+  primaryAddress: z.string().min(1, "Address is required"),
   projectTimeline: z.string(),
   budget: z.string(),
   notes: z.string().optional(),
@@ -41,10 +41,78 @@ type ContactFormValues = z.infer<typeof contactFormSchema>;
 
 export function ContactDetail() {
   const { id } = useParams();
+  const [location, navigate] = useLocation();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: contact, isLoading } = useQuery({
     queryKey: [`/api/contacts/${id}`],
     enabled: !!id
+  });
+
+  const createContact = useMutation({
+    mutationFn: async (data: ContactFormValues) => {
+      const response = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+      toast({
+        title: "Success",
+        description: "Contact created successfully",
+      });
+      navigate('/contacts');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateContact = useMutation({
+    mutationFn: async (data: ContactFormValues) => {
+      const response = await fetch(`/api/contacts/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${id}`] });
+      toast({
+        title: "Success",
+        description: "Contact updated successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const form = useForm<ContactFormValues>({
@@ -57,14 +125,22 @@ export function ContactDetail() {
       primaryPhone: "",
       secondaryPhone: "",
       leadStatus: LeadStatus.NEW,
-      leadSource: "",
-      propertyType: "",
+      leadSource: LeadSource.WEBSITE,
+      propertyType: PropertyType.SINGLE_FAMILY,
       primaryAddress: "",
       projectTimeline: "",
       budget: "",
       notes: "",
     },
   });
+
+  const onSubmit = async (data: ContactFormValues) => {
+    if (id) {
+      await updateContact.mutateAsync(data);
+    } else {
+      await createContact.mutateAsync(data);
+    }
+  };
 
   if (isLoading) {
     return <div>Loading...</div>;
@@ -105,7 +181,7 @@ export function ContactDetail() {
             </CardHeader>
             <CardContent>
               <Form {...form}>
-                <form className="grid gap-4 md:grid-cols-2">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
                     name="firstName"
@@ -214,9 +290,20 @@ export function ContactDetail() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Lead Source</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select source" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Object.values(LeadSource).map((source) => (
+                              <SelectItem key={source} value={source}>
+                                {source}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -227,9 +314,20 @@ export function ContactDetail() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Property Type</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select property type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {Object.values(PropertyType).map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -924,7 +924,7 @@ export function registerRoutes(app: Express) {
       doc.fontSize(12);
       doc.text(`Subtotal: $${quote.subtotal}`);
       if (quote.discountValue) {
-        doc.text(`Discount: ${quote.discountType === 'percentage' ? quote.discountValue + '%' : '$'+ quote.discountValue}`);
+        doc.text(`Discount: ${quote.discountType === 'percentage' ? quote.discountValue + '%' : '$' + quote.discountValue}`);
       }
       if (quote.taxRate) {
         doc.text(`Tax Rate: ${quote.taxRate}%`);
@@ -1009,14 +1009,10 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Contact Routes
+  // Contact Management Routes
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
       const allContacts = await db.query.contacts.findMany({
-        with: {
-          assignedUser: true,
-          category: true,
-        },
         orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
       });
       res.json(allContacts);
@@ -1028,28 +1024,41 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/contacts", requireAuth, async (req, res) => {
     try {
-      const result = insertContactSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ 
-          message: "Invalid input", 
-          errors: result.error.issues 
-        });
-      }
+      const contact = req.body;
 
       // Convert arrays to JSON strings
-      const contactData = {
-        ...result.data,
-        productInterests: JSON.stringify(result.data.productInterests || []),
-        tags: JSON.stringify(result.data.tags || []),
-      };
+      contact.productInterests = JSON.stringify(contact.productInterests || []);
+      contact.tags = JSON.stringify(contact.tags || []);
 
-      const [contact] = await db.insert(contacts)
-        .values(contactData)
+      const [newContact] = await db.insert(contacts)
+        .values({
+          ...contact,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
         .returning();
+
+      res.json(newContact);
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      res.status(500).json({ message: "Server error creating contact" });
+    }
+  });
+
+  app.get("/api/contacts/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const contact = await db.query.contacts.findFirst({
+        where: eq(contacts.id, parseInt(id)),
+      });
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
 
       res.json(contact);
     } catch (error) {
-      console.error('Error creating contact:', error);
+      console.error('Error fetching contact:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -1057,36 +1066,25 @@ export function registerRoutes(app: Express) {
   app.put("/api/contacts/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const result = insertContactSchema.partial().safeParse(req.body);
+      const updates = req.body;
 
-      if (!result.success) {
-        return res.status(400).json({ 
-          message: "Invalid input", 
-          errors: result.error.issues 
-        });
+      // Convert arrays to JSON strings
+      if (updates.productInterests) {
+        updates.productInterests = JSON.stringify(updates.productInterests);
+      }
+      if (updates.tags) {
+        updates.tags = JSON.stringify(updates.tags);
       }
 
-      // Convert arrays to JSON strings if they exist in the update
-      const updateData = {
-        ...result.data,
-        ...(result.data.productInterests && {
-          productInterests: JSON.stringify(result.data.productInterests)
-        }),
-        ...(result.data.tags && {
-          tags: JSON.stringify(result.data.tags)
-        }),
-      };
-
-      const [contact] = await db.update(contacts)
-        .set(updateData)
+      const [updatedContact] = await db.update(contacts)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
         .where(eq(contacts.id, parseInt(id)))
         .returning();
 
-      if (!contact) {
-        return res.status(404).json({ message: "Contact not found" });
-      }
-
-      res.json(contact);
+      res.json(updatedContact);
     } catch (error) {
       console.error('Error updating contact:', error);
       res.status(500).json({ message: "Server error" });
