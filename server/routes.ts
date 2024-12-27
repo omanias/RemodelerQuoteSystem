@@ -122,101 +122,28 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Quote routes
-  app.get("/api/quotes", requireAuth, async (req: any, res) => {
+  // Let's create the initial admin user if it doesn't exist
+  const createInitialAdmin = async () => {
     try {
-      const userQuotes = await db.query.quotes.findMany({
-        where: eq(quotes.userId, req.user.id),
-        orderBy: (quotes, { desc }) => [desc(quotes.createdAt)],
+      const adminExists = await db.query.users.findFirst({
+        where: eq(users.email, "admin@quotebuilder.com"),
       });
-      res.json(userQuotes);
+
+      if (!adminExists) {
+        const hashedPassword = await crypto.hash("admin123");
+        await db.insert(users).values({
+          email: "admin@quotebuilder.com",
+          password: hashedPassword,
+          name: "Admin User",
+          role: UserRole.ADMIN,
+        });
+        console.log("Initial admin user created");
+      }
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      console.error("Error creating initial admin:", error);
     }
-  });
-
-  app.post("/api/quotes", requireAuth, async (req: any, res) => {
-    try {
-      const { clientName, clientEmail, templateId, content } = req.body;
-      const timestamp = new Date().getTime().toString();
-      const quoteNumber = `Q${timestamp}`;
-
-      const [newQuote] = await db.insert(quotes)
-        .values({
-          number: quoteNumber,
-          clientName,
-          clientEmail,
-          status: QuoteStatus.DRAFT,
-          total: 0,
-          content,
-          userId: req.user.id,
-          templateId,
-        })
-        .returning();
-
-      res.json(newQuote);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Product routes
-  app.get("/api/products", requireAuth, async (_req, res) => {
-    try {
-      const allProducts = await db.query.products.findMany({
-        orderBy: (products, { asc }) => [asc(products.name)],
-      });
-      res.json(allProducts);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.post("/api/products", requireAuth, requireRole([UserRole.ADMIN, UserRole.MANAGER]), async (req: any, res) => {
-    try {
-      const { name, category, basePrice, unit, isActive, variations } = req.body;
-      const [newProduct] = await db.insert(products).values({
-        name,
-        category,
-        basePrice,
-        unit,
-        isActive,
-        variations,
-      }).returning();
-
-      res.json(newProduct);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Template routes
-  app.get("/api/templates", requireAuth, async (_req, res) => {
-    try {
-      const allTemplates = await db.query.templates.findMany({
-        orderBy: (templates, { desc }) => [desc(templates.isDefault), desc(templates.updatedAt)],
-      });
-      res.json(allTemplates);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.post("/api/templates", requireAuth, requireRole([UserRole.ADMIN]), async (req: any, res) => {
-    try {
-      const { name, category, content, isDefault } = req.body;
-      const [newTemplate] = await db.insert(templates).values({
-        name,
-        category,
-        content,
-        isDefault,
-      }).returning();
-
-      res.json(newTemplate);
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
+  };
+  createInitialAdmin();
 
   return httpServer;
 }
