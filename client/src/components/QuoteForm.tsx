@@ -278,6 +278,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
         title: "Success",
         description: quote ? "Quote updated successfully" : "Quote created successfully",
       });
+      // Call the onSuccess callback to close the dialog
       onSuccess?.();
     },
     onError: (error: Error) => {
