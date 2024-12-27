@@ -75,7 +75,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
     unitPrice: number;
   }>>([]);
 
-  const { data: categories = [] } = useQuery<Category[]>({
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
@@ -98,8 +98,13 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
     },
   });
 
-  const selectedCategory = form.watch("categoryId");
-  const category = categories.find(c => c.id.toString() === selectedCategory);
+  const selectedCategoryId = form.watch("categoryId");
+  const selectedCategory = categories.find(c => c.id.toString() === selectedCategoryId);
+
+  const { data: categoryProducts = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+    queryKey: ["/api/categories", selectedCategoryId, "products"],
+    enabled: !!selectedCategoryId,
+  });
 
   const calculateSubtotal = () => {
     return selectedProducts.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
@@ -244,6 +249,19 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Sales Person Information */}
+        {user && (
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-2">Sales Representative</h3>
+              <div className="text-sm text-muted-foreground">
+                <p>Name: {user.name}</p>
+                <p>Email: {user.email}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -324,59 +342,65 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
           )}
         />
 
-        {category && (
+        {selectedCategoryId && (
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">
                 <h3 className="font-semibold">Products</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {category.products?.map((product) => (
-                    <Card key={product.id}>
-                      <CardContent className="pt-6">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium">{product.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              Base Price: ${product.basePrice}/{product.unit}
-                            </p>
+                {isLoadingProducts ? (
+                  <div className="text-center py-4">Loading products...</div>
+                ) : categoryProducts.length === 0 ? (
+                  <div className="text-center py-4">No products found in this category</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {categoryProducts.map((product) => (
+                      <Card key={product.id}>
+                        <CardContent className="pt-6">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-medium">{product.name}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Base Price: ${product.basePrice}/{product.unit}
+                              </p>
+                            </div>
+                            {product.variations ? (
+                              <Select onValueChange={(value) => addProduct(product, value)}>
+                                <FormControl>
+                                  <SelectTrigger className="w-[140px]">
+                                    <SelectValue placeholder="Select variant" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {product.variations.map((variation) => (
+                                    <SelectItem key={variation.name} value={variation.price}>
+                                      {variation.name} - ${variation.price}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => addProduct(product)}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
-                          {product.variations ? (
-                            <Select onValueChange={(value) => addProduct(product, value)}>
-                              <FormControl>
-                                <SelectTrigger className="w-[140px]">
-                                  <SelectValue placeholder="Select variant" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {product.variations.map((variation) => (
-                                  <SelectItem key={variation.name} value={variation.price}>
-                                    {variation.name} - ${variation.price}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => addProduct(product)}
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
 
                 {selectedProducts.length > 0 && (
                   <div className="space-y-4">
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => {
-                        const product = category.products.find(p => p.id === item.productId);
+                        const product = categoryProducts.find(p => p.id === item.productId);
                         return (
                           <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                             <div className="flex-1">
