@@ -21,13 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { QuoteStatus, PaymentMethod } from "@db/schema";
+import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 
 const quoteFormSchema = z.object({
-  contactId: z.string().optional(),
+  contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
   clientEmail: z.string().email("Invalid email address"),
   clientPhone: z.string().optional(),
@@ -42,11 +42,11 @@ const quoteFormSchema = z.object({
   downPaymentType: z.enum(["percentage", "fixed"]).optional(),
   downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
-  templateId: z.string().optional(),
+  templateId: z.string().min(1, "Template is required"),
 });
 
 interface QuoteFormProps {
-  quote?: any;
+  quote?: Quote;
   onSuccess?: () => void;
   user?: {
     id: number;
@@ -142,6 +142,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Update form when contact data is available
   useEffect(() => {
     if (contact) {
+      form.setValue("contactId", contact.id.toString());
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
       form.setValue("clientEmail", contact.primaryEmail);
       form.setValue("clientPhone", contact.primaryPhone);
@@ -165,6 +166,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const selectedCategoryId = form.watch("categoryId");
 
+  // Set initial category ID from quote if available
+  useEffect(() => {
+    if (quote?.categoryId && !selectedCategoryId) {
+      form.setValue("categoryId", quote.categoryId.toString());
+    }
+  }, [quote, form, selectedCategoryId]);
+
   // Load products based on selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -184,13 +192,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       }
     }
   }, [selectedCategoryId, templates, form]);
-
-  // Set initial category ID from quote if available
-  useEffect(() => {
-    if (quote?.categoryId && !selectedCategoryId) {
-      form.setValue("categoryId", quote.categoryId.toString());
-    }
-  }, [quote, form, selectedCategoryId]);
 
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
@@ -296,9 +297,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contactId: parseInt(data.contactId || "0"),
+          contactId: parseInt(data.contactId),
           categoryId: parseInt(data.categoryId),
-          templateId: parseInt(data.templateId || "0"),
+          templateId: parseInt(data.templateId),
           clientName: data.clientName,
           clientEmail: data.clientEmail,
           clientPhone: data.clientPhone,
@@ -516,8 +517,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 </FormControl>
                 <SelectContent>
                   {templates
-                    .filter((t: any) => t.categoryId.toString() === selectedCategoryId)
-                    .map((template: any) => (
+                    .filter((t) => t.categoryId.toString() === selectedCategoryId)
+                    .map((template) => (
                       <SelectItem key={template.id} value={template.id.toString()}>
                         {template.name} {template.isDefault && "(Default)"}
                       </SelectItem>
