@@ -10,8 +10,8 @@ export const UserRole = {
 } as const;
 
 export const UserStatus = {
-  ACTIVE: 'active',
-  INACTIVE: 'inactive'
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE'
 } as const;
 
 export const QuoteStatus = {
@@ -38,13 +38,20 @@ export const ProductUnit = {
   PIECE: 'Piece'
 } as const;
 
+export const PermissionType = {
+  VIEW: 'VIEW',
+  CREATE: 'CREATE',
+  EDIT: 'EDIT',
+  DELETE: 'DELETE'
+} as const;
+
 // Tables
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   role: text("role").notNull().$type<keyof typeof UserRole>(),
-  status: text("status").notNull().$type<keyof typeof UserStatus>().default('active'),
+  status: text("status").notNull().$type<keyof typeof UserStatus>(),
   password: text("password").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -82,7 +89,18 @@ export const templates = pgTable("templates", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Enhanced quotes table with new fields
+// Table for storing table-specific permissions
+export const tablePermissions = pgTable("table_permissions", {
+  id: serial("id").primaryKey(),
+  tableName: text("table_name").notNull(),
+  roleId: text("role").notNull().$type<keyof typeof UserRole>(),
+  permissionType: text("permission_type").notNull().$type<keyof typeof PermissionType>(),
+  isAllowed: boolean("is_allowed").default(false).notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
   number: text("number").notNull().unique(),
@@ -91,31 +109,22 @@ export const quotes = pgTable("quotes", {
   clientPhone: text("client_phone"),
   clientAddress: text("client_address"),
   status: text("status").notNull().$type<keyof typeof QuoteStatus>(),
-
-  // Financial details
   subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
-  discountType: text("discount_type"), // 'percentage' or 'fixed'
+  discountType: text("discount_type"),
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
   discountCode: text("discount_code"),
   taxRate: decimal("tax_rate", { precision: 5, scale: 2 }),
   taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-
-  // Payment details
   paymentMethod: text("payment_method").$type<keyof typeof PaymentMethod>(),
-  downPaymentType: text("down_payment_type"), // 'percentage' or 'fixed'
+  downPaymentType: text("down_payment_type"),
   downPaymentValue: decimal("down_payment_value", { precision: 10, scale: 2 }),
   remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
-
-  // Content holds the detailed line items and calculations
   content: jsonb("content").notNull(),
   notes: text("notes"),
-
-  // Relations
   userId: integer("user_id").references(() => users.id).notNull(),
   templateId: integer("template_id").references(() => templates.id).notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
-
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -123,6 +132,7 @@ export const quotes = pgTable("quotes", {
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   quotes: many(quotes),
+  createdPermissions: many(tablePermissions, { relationName: "createdPermissions" }),
 }));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
@@ -171,6 +181,8 @@ export const insertQuoteSchema = createInsertSchema(quotes);
 export const selectQuoteSchema = createSelectSchema(quotes);
 export const insertCategorySchema = createInsertSchema(categories);
 export const selectCategorySchema = createSelectSchema(categories);
+export const insertTablePermissionSchema = createInsertSchema(tablePermissions);
+export const selectTablePermissionSchema = createSelectSchema(tablePermissions);
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -183,3 +195,5 @@ export type Quote = typeof quotes.$inferSelect;
 export type NewQuote = typeof quotes.$inferInsert;
 export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
+export type TablePermission = typeof tablePermissions.$inferSelect;
+export type NewTablePermission = typeof tablePermissions.$inferInsert;

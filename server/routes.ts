@@ -1,8 +1,11 @@
 import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
-import { users, quotes, products, templates, UserRole, QuoteStatus, UserStatus, categories } from "@db/schema";
-import { eq, ilike, desc } from "drizzle-orm";
+import { 
+  users, quotes, products, templates, permissions, rolePermissions, tablePermissions,
+  UserRole, QuoteStatus, UserStatus, categories, PermissionType 
+} from "@db/schema";
+import { eq, ilike, desc, and } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -769,5 +772,130 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Permission Management Routes
+  app.get("/api/permissions", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const allPermissions = await db.query.tablePermissions.findMany({
+        orderBy: (tablePermissions, { asc }) => [
+          asc(tablePermissions.tableName),
+          asc(tablePermissions.roleId),
+        ],
+      });
+      res.json(allPermissions);
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/permissions", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { tableName, roleId, permissionType, isAllowed } = req.body;
+
+      // Validate input
+      if (!tableName || !roleId || !permissionType) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Check if permission already exists
+      const existingPermission = await db.query.tablePermissions.findFirst({
+        where: and(
+          eq(tablePermissions.tableName, tableName),
+          eq(tablePermissions.roleId, roleId),
+          eq(tablePermissions.permissionType, permissionType)
+        ),
+      });
+
+      let permission;
+
+      if (existingPermission) {
+        // Update existing permission
+        [permission] = await db.update(tablePermissions)
+          .set({ 
+            isAllowed,
+            updatedAt: new Date()
+          })
+          .where(eq(tablePermissions.id, existingPermission.id))
+          .returning();
+      } else {
+        // Create new permission
+        [permission] = await db.insert(tablePermissions)
+          .values({
+            tableName,
+            roleId,
+            permissionType,
+            isAllowed,
+            createdBy: req.user.id,
+          })
+          .returning();
+      }
+
+      res.json(permission);
+    } catch (error) {
+      console.error('Error updating permission:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Bulk permission update
+  app.post("/api/permissions/bulk", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { tableName, roleId, isAllowed } = req.body;
+
+      // Update all permission types for the given table and role
+      const permissions = await Promise.all(
+        Object.values(PermissionType).map(async (permissionType) => {
+          const [permission] = await db.update(tablePermissions)
+            .set({ isAllowed })
+            .where(and(
+              eq(tablePermissions.tableName, tableName),
+              eq(tablePermissions.roleId, roleId),
+              eq(tablePermissions.permissionType, permissionType)
+            ))
+            .returning();
+          return permission;
+        })
+      );
+
+      res.json(permissions);
+    } catch (error) {
+      console.error('Error bulk updating permissions:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   return httpServer;
+}
+
+// Helper function to check if a user has permission for an action
+export async function hasPermission(
+  userId: number,
+  tableName: string,
+  permissionType: keyof typeof PermissionType
+): Promise<boolean> {
+  try {
+    // Get user's role
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) return false;
+
+    // Admin always has all permissions
+    if (user.role === UserRole.ADMIN) return true;
+
+    // Check specific permission
+    const permission = await db.query.tablePermissions.findFirst({
+      where: and(
+        eq(tablePermissions.tableName, tableName),
+        eq(tablePermissions.roleId, user.role),
+        eq(tablePermissions.permissionType, permissionType)
+      ),
+    });
+
+    return permission?.isAllowed ?? false;
+  } catch (error) {
+    console.error('Error checking permission:', error);
+    return false;
+  }
 }

@@ -14,6 +14,7 @@ import { Categories } from "@/pages/Categories";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
+import { AdminPermissions } from "@/pages/AdminPermissions";
 import { useAuth } from "@/hooks/useAuth";
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
           <Route path="/products" component={Products} />
           <Route path="/templates" component={Templates} />
           <Route path="/users" component={Users} />
+          <Route path="/permissions" component={AdminPermissions} />
         </Switch>
       </Layout>
       <Toaster />

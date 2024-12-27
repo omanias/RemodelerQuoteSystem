@@ -1,0 +1,121 @@
+Create a Permission Management System similar to phpMyAdmin's simple checkbox interface, but for a web application. The system should focus on:
+
+Admin Permission Management Interface:
+
+
+Grid/table view showing:
+
+All database tables in rows
+All user roles in columns
+Checkbox matrix for permissions
+
+
+Permission types per table:
+
+View
+Create
+Edit
+Delete
+
+
+Ability to:
+
+Set permissions by role
+Set permissions by table
+Bulk enable/disable permissions
+Save permission configurations
+
+
+
+
+User Access Control:
+
+
+Entry-level permissions:
+
+Users can only see their own created entries by default
+Admin can grant access to view others' entries
+Option to limit edit/delete to entry creator
+
+
+Role-based visibility:
+
+Define what tables each role can access
+Control CRUD operations per role
+Handle nested relationships between tables
+
+
+
+
+Core Features:
+
+
+Simple checkbox interface for permissions
+Real-time permission updates
+Permission inheritance system
+Override capabilities for specific cases
+Audit log of permission changes
+
+Technical Requirements:
+
+React with TypeScript
+State management for permissions
+Database schema for storing permissions
+API endpoints for permission management
+Role-based middleware
+Permission validation system
+
+Data Structure:
+
+Permissions table:
+
+Role ID
+Table name
+Permission type (view/edit/delete)
+Created by
+Created at
+
+
+Roles table
+User-Role relationships
+Entry ownership tracking
+
+UI Components:
+
+Permission matrix (tables × roles)
+Bulk action controls
+Role management interface
+User assignment interface
+Permission audit log viewer
+
+Example Interface:
+CopyTables/Roles | Admin | Manager | User | Guest
+--------------------------------------------
+Quotes      | [√]   | [√]     | [~]  | [ ]
+Products    | [√]   | [√]     | [√]  | [√]
+Categories  | [√]   | [√]     | [√]  | [√]
+Users       | [√]   | [ ]     | [ ]  | [ ]
+[√] Full Access
+[~] Own Entries Only
+[ ] No Access
+The system should:
+
+Be simple to configure
+Be easy to maintain
+Have clear visual feedback
+Include permission inheritance
+Support bulk operations
+Maintain audit logs
+Handle edge cases
+Be scalable for new tables/roles
+
+Security Considerations:
+
+Permission validation on frontend and backend
+Prevention of permission escalation
+Secure permission storage
+Audit logging of changes
+Role hierarchy enforcement
+Session validation
+
+Implementation should focus on simplicity and usability while maintaining robust security measures. The interface should be intuitive enough for non-technical administrators to manage permissions effectively.
