@@ -122,10 +122,10 @@ export function registerRoutes(app: Express) {
       }
 
       req.session.userId = user.id;
-      res.json({ 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
         role: user.role,
         status: user.status
       });
@@ -573,6 +573,12 @@ export function registerRoutes(app: Express) {
     try {
       const { categoryId, templateId, items, total, status, customerInfo } = req.body;
 
+      console.log('Quote creation request:', {
+        categoryId,
+        templateId,
+        customerInfo
+      });
+
       // Validate quote data
       if (!categoryId || !templateId) {
         return res.status(400).json({ message: "Category and template are required" });
@@ -582,38 +588,32 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Client name is required" });
       }
 
-      // Generate quote number
-      const currentYear = new Date().getFullYear();
-      const latestQuote = await db.query.quotes.findFirst({
-        where: ilike(quotes.number, `QT-${currentYear}-%`),
-        orderBy: (quotes, { desc }) => [desc(quotes.number)],
-      });
-
-      let sequence = 1;
-      if (latestQuote) {
-        const lastSequence = parseInt(latestQuote.number.split('-')[2]);
-        sequence = lastSequence + 1;
-      }
-
-      const quoteNumber = `QT-${currentYear}-${sequence.toString().padStart(4, '0')}`;
-
       const [quote] = await db.insert(quotes)
         .values({
-          number: quoteNumber,
           categoryId,
           templateId,
           items,
           total,
           status: status || QuoteStatus.DRAFT,
           clientName: customerInfo.name,
-          clientEmail: customerInfo.email,
-          clientPhone: customerInfo.phone,
-          clientAddress: customerInfo.address,
+          clientEmail: customerInfo.email || null,
+          clientPhone: customerInfo.phone || null,
+          clientAddress: customerInfo.address || null,
           userId: req.user.id,
         })
         .returning();
 
-      res.json(quote);
+      // Generate quote number using the quote ID
+      const quoteNumber = `QT-${quote.id.toString().padStart(6, '0')}`;
+
+      // Update the quote with the generated number
+      const [updatedQuote] = await db
+        .update(quotes)
+        .set({ number: quoteNumber })
+        .where(eq(quotes.id, quote.id))
+        .returning();
+
+      res.json(updatedQuote);
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error creating quote" });
