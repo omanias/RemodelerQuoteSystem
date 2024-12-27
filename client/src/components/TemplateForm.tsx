@@ -80,12 +80,21 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
         );
 
         if (!response.ok) {
-          throw new Error(await response.text());
+          const text = await response.text();
+          try {
+            // Try to parse as JSON first
+            const json = JSON.parse(text);
+            throw new Error(json.message || "Failed to save template");
+          } catch (e) {
+            // If not JSON, use the text directly
+            throw new Error(text || "Failed to save template");
+          }
         }
 
-        return response.json();
+        const result = await response.json();
+        return result;
       } catch (error: any) {
-        throw error;
+        throw new Error(error.message || "An unexpected error occurred");
       }
     },
     onSuccess: () => {
