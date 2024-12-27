@@ -10,7 +10,6 @@ import { promisify } from "util";
 
 const scryptAsync = promisify(scrypt);
 
-// Utility for password hashing
 const crypto = {
   hash: async (password: string) => {
     const salt = randomBytes(16).toString('hex');
@@ -30,7 +29,6 @@ const crypto = {
   }
 };
 
-// Setup session middleware
 function setupSession(app: Express) {
   const MemoryStore = createMemoryStore(session);
   app.use(
@@ -47,7 +45,6 @@ function setupSession(app: Express) {
   );
 }
 
-// Auth middleware
 const requireAuth = async (req: any, res: any, next: any) => {
   try {
     if (!req.session.userId) {
@@ -428,6 +425,145 @@ export function registerRoutes(app: Express) {
       res.json({ message: "User deleted successfully" });
     } catch (error) {
       console.error('Error deleting user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Template Routes
+  app.get("/api/templates", requireAuth, async (req, res) => {
+    try {
+      const allTemplates = await db.query.templates.findMany({
+        with: {
+          category: true,
+        },
+        orderBy: (templates, { asc }) => [asc(templates.name)],
+      });
+      res.json(allTemplates);
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/templates", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { name, categoryId, termsAndConditions, imageUrls, isDefault } = req.body;
+
+      // Validate that category exists
+      const category = await db.query.categories.findFirst({
+        where: eq(categories.id, categoryId),
+      });
+
+      if (!category) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+
+      // If this is set as default, unset any existing default templates for this category
+      if (isDefault) {
+        await db
+          .update(templates)
+          .set({ isDefault: false })
+          .where(eq(templates.categoryId, categoryId));
+      }
+
+      const [template] = await db.insert(templates)
+        .values({
+          name,
+          categoryId,
+          termsAndConditions,
+          imageUrls,
+          isDefault: isDefault || false,
+        })
+        .returning();
+
+      res.json({
+        ...template,
+        category,
+      });
+    } catch (error) {
+      console.error('Error creating template:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/templates/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, categoryId, termsAndConditions, imageUrls, isDefault } = req.body;
+
+      // Validate that category exists
+      const category = await db.query.categories.findFirst({
+        where: eq(categories.id, categoryId),
+      });
+
+      if (!category) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+
+      // If this is set as default, unset any existing default templates for this category
+      if (isDefault) {
+        await db
+          .update(templates)
+          .set({ isDefault: false })
+          .where(eq(templates.categoryId, categoryId));
+      }
+
+      const [template] = await db.update(templates)
+        .set({
+          name,
+          categoryId,
+          termsAndConditions,
+          imageUrls,
+          isDefault: isDefault || false,
+        })
+        .where(eq(templates.id, parseInt(id)))
+        .returning();
+
+      res.json({
+        ...template,
+        category,
+      });
+    } catch (error) {
+      console.error('Error updating template:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.delete("/api/templates/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if this is the only template for the category
+      const template = await db.query.templates.findFirst({
+        where: eq(templates.id, parseInt(id)),
+      });
+
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const templatesInCategory = await db.query.templates.findMany({
+        where: eq(templates.categoryId, template.categoryId),
+      });
+
+      if (templatesInCategory.length === 1) {
+        return res.status(400).json({ message: "Cannot delete the only template in a category" });
+      }
+
+      // If this was the default template, make another template the default
+      if (template.isDefault && templatesInCategory.length > 1) {
+        const newDefault = templatesInCategory.find(t => t.id !== template.id);
+        if (newDefault) {
+          await db.update(templates)
+            .set({ isDefault: true })
+            .where(eq(templates.id, newDefault.id));
+        }
+      }
+
+      await db.delete(templates).where(eq(templates.id, parseInt(id)));
+      res.json({ message: "Template deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting template:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
