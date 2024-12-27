@@ -1,11 +1,10 @@
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { Layout } from "@/components/Layout";
-import { useAuth } from "@/hooks/useAuth";
-import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { AuthProvider, useFirebaseAuth } from "@/contexts/AuthContext";
 
 // Pages
 import { Login } from "@/pages/Login";
@@ -14,61 +13,79 @@ import { Quotes } from "@/pages/Quotes";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, loading } = useAuth();
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { firebaseUser, isLoading } = useFirebaseAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!isLoading && !firebaseUser) {
       setLocation("/login");
     }
-  }, [user, loading, setLocation]);
+  }, [firebaseUser, isLoading, setLocation]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!user) {
+  if (!firebaseUser) {
     return null;
   }
 
-  return (
-    <Layout>
-      <Component />
-    </Layout>
-  );
+  return <Layout>{children}</Layout>;
+}
+
+function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
+  const { firebaseUser, isLoading } = useFirebaseAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && firebaseUser) {
+      setLocation("/");
+    }
+  }, [firebaseUser, isLoading, setLocation]);
+
+  if (firebaseUser) {
+    return null;
+  }
+
+  return <>{children}</>;
 }
 
 function App() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
-      <Route path="/" component={() => <ProtectedRoute component={Dashboard} />} />
-      <Route path="/quotes" component={() => <ProtectedRoute component={Quotes} />} />
-      <Route path="/products" component={() => <ProtectedRoute component={Products} />} />
-      <Route path="/templates" component={() => <ProtectedRoute component={Templates} />} />
+      <Route path="/login">
+        <RedirectIfAuthenticated>
+          <Login />
+        </RedirectIfAuthenticated>
+      </Route>
+      <Route path="/">
+        <RequireAuth>
+          <Dashboard />
+        </RequireAuth>
+      </Route>
+      <Route path="/quotes">
+        <RequireAuth>
+          <Quotes />
+        </RequireAuth>
+      </Route>
+      <Route path="/products">
+        <RequireAuth>
+          <Products />
+        </RequireAuth>
+      </Route>
+      <Route path="/templates">
+        <RequireAuth>
+          <Templates />
+        </RequireAuth>
+      </Route>
     </Switch>
   );
 }
 
 export default function AppWrapper() {
-  const { user, loading } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (!loading && user && location === "/login") {
-      setLocation("/");
-    }
-  }, [user, loading, location, setLocation]);
-
   return (
     <QueryClientProvider client={queryClient}>
-      <App />
-      <Toaster />
+      <AuthProvider>
+        <App />
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
