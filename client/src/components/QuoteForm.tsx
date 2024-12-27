@@ -30,7 +30,7 @@ interface Product {
   name: string;
   basePrice: number;
   unit: string;
-  categoryId: number; // Added categoryId to Product interface
+  categoryId: number;
   variations?: Array<{ name: string; price: string }>;
 }
 
@@ -58,6 +58,7 @@ const quoteFormSchema = z.object({
 });
 
 interface QuoteFormProps {
+  quote?: any;
   onSuccess?: () => void;
   user?: {
     id: number;
@@ -66,7 +67,7 @@ interface QuoteFormProps {
   };
 }
 
-export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
+export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedProducts, setSelectedProducts] = useState<Array<{
@@ -74,29 +75,35 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
     quantity: number;
     variation?: string;
     unitPrice: number;
-  }>>([]);
+  }>([]);
 
   // Fetch all categories
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["/api/categories"],
+  });
+
+  // Fetch all templates
+  const { data: templates = [] } = useQuery({
+    queryKey: ["/api/templates"],
   });
 
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      clientName: "",
-      clientEmail: "",
-      clientPhone: "",
-      clientAddress: "",
-      status: QuoteStatus.DRAFT,
-      paymentMethod: PaymentMethod.CASH,
-      discountType: "percentage",
-      discountValue: "",
-      discountCode: "",
-      taxRate: "0",
-      downPaymentType: "percentage",
-      downPaymentValue: "",
-      notes: "",
+      clientName: quote?.clientName || "",
+      clientEmail: quote?.clientEmail || "",
+      clientPhone: quote?.clientPhone || "",
+      clientAddress: quote?.clientAddress || "",
+      categoryId: quote?.categoryId?.toString() || "",
+      status: quote?.status || QuoteStatus.DRAFT,
+      paymentMethod: quote?.paymentMethod || PaymentMethod.CASH,
+      discountType: quote?.discountType || "percentage",
+      discountValue: quote?.discountValue?.toString() || "",
+      discountCode: quote?.discountCode || "",
+      taxRate: quote?.taxRate?.toString() || "0",
+      downPaymentType: quote?.downPaymentType || "percentage",
+      downPaymentValue: quote?.downPaymentValue?.toString() || "",
+      notes: quote?.notes || "",
     },
   });
 
@@ -105,7 +112,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
   // Fetch products for selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery({
     queryKey: ["/api/products"],
-    select: (data) => data.filter((product: Product) => 
+    select: (data) => data.filter((product: Product) =>
       product.categoryId.toString() === selectedCategoryId
     ),
     enabled: !!selectedCategoryId,
@@ -189,14 +196,22 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
 
-      const response = await fetch("/api/quotes", {
-        method: "POST",
+      // Get default template
+      const defaultTemplate = templates.find((t: any) => t.isDefault) || templates[0];
+      if (!defaultTemplate) {
+        throw new Error("No template available");
+      }
+
+      const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
+        method: quote ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           ...data,
+          categoryId: parseInt(data.categoryId),
           userId: user?.id,
+          templateId: defaultTemplate.id,
           subtotal: calculateSubtotal(),
           total,
           downPaymentValue: downPayment,
@@ -217,7 +232,8 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
       return response.json();
@@ -226,7 +242,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
       toast({
         title: "Success",
-        description: "Quote created successfully",
+        description: quote ? "Quote updated successfully" : "Quote created successfully",
       });
       onSuccess?.();
     },
@@ -335,7 +351,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category) => (
+                  {categories.map((category: any) => (
                     <SelectItem key={category.id} value={category.id.toString()}>
                       {category.name}
                     </SelectItem>
@@ -579,6 +595,31 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
 
           <FormField
             control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {Object.values(QuoteStatus).map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="downPaymentValue"
             render={({ field }) => (
               <FormItem>
@@ -642,7 +683,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
 
         <div className="flex justify-end">
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? "Creating..." : "Create Quote"}
+            {mutation.isPending ? (quote ? "Updating..." : "Creating...") : (quote ? "Update Quote" : "Create Quote")}
           </Button>
         </div>
       </form>
