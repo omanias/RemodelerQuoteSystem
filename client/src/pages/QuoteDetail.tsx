@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { QuoteForm } from "@/components/QuoteForm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { Link } from "wouter";
+import { type Quote, type User } from "@db/schema";
 
 export function QuoteDetail() {
   const [, setLocation] = useLocation();
@@ -13,7 +13,7 @@ export function QuoteDetail() {
   const contactId = searchParams.get("contactId");
   const id = params.id;
 
-  const { data: quote } = useQuery({
+  const { data: quote, isLoading: isLoadingQuote } = useQuery<Quote>({
     queryKey: [`/api/quotes/${id}`],
     enabled: !!id,
   });
@@ -23,9 +23,13 @@ export function QuoteDetail() {
     enabled: !!contactId,
   });
 
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/auth/user"],
   });
+
+  if (id && isLoadingQuote) {
+    return <div>Loading quote...</div>;
+  }
 
   return (
     <div className="container mx-auto py-6 max-w-5xl">
