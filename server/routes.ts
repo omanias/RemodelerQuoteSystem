@@ -577,15 +577,22 @@ export function registerRoutes(app: Express) {
         customerInfo, 
         selectedProducts = [], 
         total, 
-        downPaymentValue = 0,
+        downPaymentValue,
+        downPaymentType,
+        discountType,
+        discountValue,
+        taxRate,
         subtotal,
-        remainingBalance 
+        remainingBalance,
+        notes
       } = req.body;
 
       console.log('Quote creation request:', {
         categoryId,
         templateId,
-        customerInfo
+        customerInfo,
+        downPaymentValue,
+        total
       });
 
       // Validate quote data
@@ -607,6 +614,14 @@ export function registerRoutes(app: Express) {
       const nextId = latestQuote ? latestQuote.id + 1 : 1;
       const quoteNumber = `QT-${nextId.toString().padStart(6, '0')}`;
 
+      // Parse numeric values with fallbacks
+      const parsedTotal = parseFloat(total?.toString() || '0') || 0;
+      const parsedDownPayment = parseFloat(downPaymentValue?.toString() || '0') || 0;
+      const parsedSubtotal = parseFloat(subtotal?.toString() || '0') || 0;
+      const parsedRemainingBalance = parseFloat(remainingBalance?.toString() || '0') || 0;
+      const parsedDiscountValue = parseFloat(discountValue?.toString() || '0') || 0;
+      const parsedTaxRate = parseFloat(taxRate?.toString() || '0') || 0;
+
       const [quote] = await db.insert(quotes)
         .values({
           number: quoteNumber,
@@ -618,17 +633,28 @@ export function registerRoutes(app: Express) {
           clientAddress: customerInfo.address || null,
           status: QuoteStatus.DRAFT,
           userId: req.user.id,
-          subtotal,
-          total,
-          downPaymentValue,
-          remainingBalance,
+          subtotal: parsedSubtotal,
+          total: parsedTotal,
+          downPaymentValue: parsedDownPayment,
+          downPaymentType: downPaymentType || 'percentage',
+          discountType: discountType || 'percentage',
+          discountValue: parsedDiscountValue,
+          taxRate: parsedTaxRate,
+          remainingBalance: parsedRemainingBalance,
+          notes: notes || '',
           content: {
-            products: selectedProducts,
+            products: selectedProducts.map(product => ({
+              ...product,
+              price: parseFloat(product.price?.toString() || '0') || 0,
+              quantity: parseInt(product.quantity?.toString() || '1') || 1
+            })),
             calculations: {
-              subtotal,
-              total,
-              downPayment: downPaymentValue,
-              remainingBalance,
+              subtotal: parsedSubtotal,
+              total: parsedTotal,
+              downPayment: parsedDownPayment,
+              remainingBalance: parsedRemainingBalance,
+              discount: parsedDiscountValue,
+              tax: parsedTaxRate
             },
           },
         })
@@ -641,7 +667,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Add PUT endpoint for updating quotes
   app.put("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
@@ -651,10 +676,23 @@ export function registerRoutes(app: Express) {
         customerInfo, 
         selectedProducts = [], 
         total, 
-        downPaymentValue = 0,
+        downPaymentValue,
+        downPaymentType,
+        discountType,
+        discountValue,
+        taxRate,
         subtotal,
-        remainingBalance 
+        remainingBalance,
+        notes 
       } = req.body;
+
+      // Parse numeric values with fallbacks
+      const parsedTotal = parseFloat(total?.toString() || '0') || 0;
+      const parsedDownPayment = parseFloat(downPaymentValue?.toString() || '0') || 0;
+      const parsedSubtotal = parseFloat(subtotal?.toString() || '0') || 0;
+      const parsedRemainingBalance = parseFloat(remainingBalance?.toString() || '0') || 0;
+      const parsedDiscountValue = parseFloat(discountValue?.toString() || '0') || 0;
+      const parsedTaxRate = parseFloat(taxRate?.toString() || '0') || 0;
 
       const [quote] = await db.update(quotes)
         .set({
@@ -664,17 +702,28 @@ export function registerRoutes(app: Express) {
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
           clientAddress: customerInfo.address || null,
-          subtotal,
-          total,
-          downPaymentValue,
-          remainingBalance,
+          subtotal: parsedSubtotal,
+          total: parsedTotal,
+          downPaymentValue: parsedDownPayment,
+          downPaymentType: downPaymentType || 'percentage',
+          discountType: discountType || 'percentage',
+          discountValue: parsedDiscountValue,
+          taxRate: parsedTaxRate,
+          remainingBalance: parsedRemainingBalance,
+          notes: notes || '',
           content: {
-            products: selectedProducts,
+            products: selectedProducts.map(product => ({
+              ...product,
+              price: parseFloat(product.price?.toString() || '0') || 0,
+              quantity: parseInt(product.quantity?.toString() || '1') || 1
+            })),
             calculations: {
-              subtotal,
-              total,
-              downPayment: downPaymentValue,
-              remainingBalance,
+              subtotal: parsedSubtotal,
+              total: parsedTotal,
+              downPayment: parsedDownPayment,
+              remainingBalance: parsedRemainingBalance,
+              discount: parsedDiscountValue,
+              tax: parsedTaxRate
             },
           },
         })

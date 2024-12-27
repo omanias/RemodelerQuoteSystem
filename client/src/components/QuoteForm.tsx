@@ -62,7 +62,7 @@ const quoteFormSchema = z.object({
   downPaymentType: z.enum(["percentage", "fixed"]).optional(),
   downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
-  templateId: z.string().optional(), // Added templateId field
+  templateId: z.string().optional(),
 });
 
 interface QuoteFormProps {
@@ -79,15 +79,18 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
-    quote?.content?.products || []
+    quote?.content?.products?.map((p: any) => ({
+      productId: p.id,
+      quantity: p.quantity || 1,
+      variation: p.variation,
+      unitPrice: parseFloat(p.price) || 0,
+    })) || []
   );
 
-  // Fetch all categories
   const { data: categories = [] } = useQuery({
     queryKey: ["/api/categories"],
   });
 
-  // Fetch all templates
   const { data: templates = [] } = useQuery({
     queryKey: ["/api/templates"],
   });
@@ -103,36 +106,35 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
       status: quote?.status || QuoteStatus.DRAFT,
       paymentMethod: quote?.paymentMethod || PaymentMethod.CASH,
       discountType: quote?.discountType || "percentage",
-      discountValue: quote?.discountValue?.toString() || "",
+      discountValue: quote?.discountValue?.toString() || "0",
       discountCode: quote?.discountCode || "",
       taxRate: quote?.taxRate?.toString() || "0",
       downPaymentType: quote?.downPaymentType || "percentage",
-      downPaymentValue: quote?.downPaymentValue?.toString() || "",
+      downPaymentValue: (quote?.downPaymentValue || 0).toString(),
       notes: quote?.notes || "",
-      templateId: quote?.templateId?.toString() || "", //Added default value for templateId
+      templateId: quote?.templateId?.toString() || "",
     },
   });
 
-  const selectedCategoryId = form.watch("categoryId");
-
-  // Fetch products for selected category
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
-    queryKey: ["/api/products"],
-    select: (data: Product[]) =>
-      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
-    enabled: !!selectedCategoryId,
-  });
+  // Add these helper functions for numeric value handling
+  const parseNumber = (value: any): number => {
+    const parsed = parseFloat(value?.toString() || "0");
+    return isNaN(parsed) ? 0 : parsed;
+  };
 
   const calculateSubtotal = () => {
-    return selectedProducts.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    if (!selectedProducts.length) return 0;
+    return selectedProducts.reduce((sum, item) => {
+      const quantity = parseNumber(item.quantity);
+      const price = parseNumber(item.unitPrice);
+      return sum + (quantity * price);
+    }, 0);
   };
 
   const calculateDiscount = () => {
     const subtotal = calculateSubtotal();
     const discountType = form.watch("discountType");
-    const discountValue = parseFloat(form.watch("discountValue") || "0");
-
-    if (!discountValue) return 0;
+    const discountValue = parseNumber(form.watch("discountValue"));
 
     return discountType === "percentage"
       ? (subtotal * discountValue) / 100
@@ -142,7 +144,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const calculateTax = () => {
     const subtotal = calculateSubtotal();
     const discount = calculateDiscount();
-    const taxRate = parseFloat(form.watch("taxRate") || "0");
+    const taxRate = parseNumber(form.watch("taxRate"));
 
     return ((subtotal - discount) * taxRate) / 100;
   };
@@ -157,9 +159,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const calculateDownPayment = () => {
     const total = calculateTotal();
     const downPaymentType = form.watch("downPaymentType");
-    const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
-
-    if (!downPaymentValue) return 0;
+    const downPaymentValue = parseNumber(form.watch("downPaymentValue"));
 
     return downPaymentType === "percentage"
       ? (total * downPaymentValue) / 100
@@ -171,6 +171,15 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     const downPayment = calculateDownPayment();
     return total - downPayment;
   };
+
+  const selectedCategoryId = form.watch("categoryId");
+
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["/api/products"],
+    select: (data: Product[]) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    enabled: !!selectedCategoryId,
+  });
 
   const addProduct = (product: Product, variationPrice?: string) => {
     setSelectedProducts(prev => [
@@ -209,7 +218,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           id: item.productId,
           quantity: item.quantity,
           name: product?.name,
-          price: item.unitPrice,
+          price: parseFloat(item.unitPrice.toString()),
           variation: item.variation,
           unit: product?.unit
         };
@@ -235,6 +244,13 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           total,
           downPaymentValue: downPayment,
           remainingBalance,
+          discountType: data.discountType,
+          discountValue: parseFloat(data.discountValue || "0"),
+          taxRate: parseFloat(data.taxRate || "0"),
+          status: data.status,
+          paymentMethod: data.paymentMethod,
+          downPaymentType: data.downPaymentType,
+          notes: data.notes,
           content: {
             products: formattedProducts,
             calculations: {
@@ -284,7 +300,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     mutation.mutate(data);
   };
 
-  // Add this effect to automatically select the default template for the category
   useEffect(() => {
     if (selectedCategoryId && templates?.length > 0) {
       const categoryTemplates = templates.filter((t: any) => t.categoryId.toString() === selectedCategoryId);
@@ -299,7 +314,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Sales Person Information */}
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -392,7 +406,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           )}
         />
 
-        {/* Added Template Selection Field */}
         <FormField
           control={form.control}
           name="templateId"
