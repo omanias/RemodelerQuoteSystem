@@ -11,23 +11,34 @@ const authenticateToken = async (req: any, res: any, next: any) => {
   try {
     const token = req.headers.authorization?.split(" ")[1];
     if (!token) {
+      console.log("No token provided");
       return res.status(401).json({ message: "No token provided" });
     }
 
-    const decodedToken = await getAuth().verifyIdToken(token);
-    req.user = decodedToken;
-    next();
+    try {
+      const decodedToken = await getAuth().verifyIdToken(token);
+      console.log("Decoded token:", decodedToken.email);
+      req.user = decodedToken;
+      next();
+    } catch (error) {
+      console.error("Token verification failed:", error);
+      res.status(401).json({ message: "Invalid token" });
+    }
   } catch (error) {
-    res.status(401).json({ message: "Invalid token" });
+    console.error("Auth error:", error);
+    res.status(401).json({ message: "Authentication failed" });
   }
 };
 
 // Middleware to check user role
 const checkRole = (allowedRoles: string[]) => async (req: any, res: any, next: any) => {
   try {
+    console.log("Checking role for user:", req.user.email);
     const dbUser = await db.query.users.findFirst({
-      where: eq(users.uid, req.user.uid),
+      where: eq(users.email, req.user.email),
     });
+
+    console.log("Found user in DB:", dbUser);
 
     if (!dbUser || !allowedRoles.includes(dbUser.role)) {
       return res.status(403).json({ message: "Insufficient permissions" });
@@ -36,6 +47,7 @@ const checkRole = (allowedRoles: string[]) => async (req: any, res: any, next: a
     req.dbUser = dbUser;
     next();
   } catch (error) {
+    console.error("Role check error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -46,23 +58,29 @@ export function registerRoutes(app: Express) {
   // Auth routes
   app.get("/api/auth/user", authenticateToken, async (req: any, res) => {
     try {
+      console.log("Getting user data for:", req.user.email);
       const user = await db.query.users.findFirst({
-        where: eq(users.uid, req.user.uid),
+        where: eq(users.email, req.user.email),
       });
 
       if (!user) {
+        console.log("Creating new user");
         // Create new user if it doesn't exist
-        const newUser = await db.insert(users).values({
+        const [newUser] = await db.insert(users).values({
           uid: req.user.uid,
           email: req.user.email!,
           name: req.user.name || req.user.email!.split("@")[0],
-          role: UserRole.SALES_REP, // Default role
+          role: req.user.email === 'admin@quotebuilder.com' ? UserRole.ADMIN : UserRole.SALES_REP,
         }).returning();
-        res.json(newUser[0]);
+
+        console.log("Created new user:", newUser);
+        res.json(newUser);
       } else {
+        console.log("Returning existing user:", user);
         res.json(user);
       }
     } catch (error) {
+      console.error("User fetch error:", error);
       res.status(500).json({ message: "Server error" });
     }
   });

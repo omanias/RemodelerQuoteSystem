@@ -17,6 +17,7 @@ export function useAuth() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log("Firebase auth state changed:", user?.email);
       setFirebaseUser(user);
       setIsInitializing(false);
     });
@@ -25,24 +26,38 @@ export function useAuth() {
   }, []);
 
   const { data: user, isLoading: isUserLoading } = useQuery({
-    queryKey: ["/api/auth/user", firebaseUser?.uid],
+    queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      if (!firebaseUser) return null;
-
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/auth/user", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(await res.text());
+      if (!firebaseUser) {
+        console.log("No firebase user, returning null");
+        return null;
       }
 
-      return res.json() as Promise<AuthUser>;
+      try {
+        const token = await firebaseUser.getIdToken();
+        console.log("Got firebase token, fetching user data");
+
+        const res = await fetch("/api/auth/user", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          console.error("Failed to fetch user data:", await res.text());
+          throw new Error(await res.text());
+        }
+
+        const userData = await res.json() as AuthUser;
+        console.log("Got user data:", userData);
+        return userData;
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        throw error;
+      }
     },
     enabled: !!firebaseUser,
+    retry: false,
   });
 
   return {
