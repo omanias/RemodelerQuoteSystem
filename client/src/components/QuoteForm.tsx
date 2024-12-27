@@ -91,14 +91,19 @@ interface SelectedProduct {
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
-    quote?.content?.products?.map((p: any) => ({
-      productId: p.id,
-      quantity: p.quantity || 1,
-      variation: p.variation,
-      unitPrice: parseFloat(p.price) || 0,
-    })) || []
-  );
+
+  // Initialize selected products from quote data if it exists
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
+    if (quote?.content?.products) {
+      return quote.content.products.map((p: any) => ({
+        productId: p.id,
+        quantity: p.quantity || 1,
+        variation: p.variation,
+        unitPrice: parseFloat(p.price) || 0,
+      }));
+    }
+    return [];
+  });
 
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
@@ -128,7 +133,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       discountCode: quote?.discountCode || "",
       taxRate: quote?.taxRate?.toString() || "0",
       downPaymentType: quote?.downPaymentType || "percentage",
-      downPaymentValue: (quote?.downPaymentValue || 0).toString(),
+      downPaymentValue: quote?.downPaymentValue?.toString() || "0",
       notes: quote?.notes || "",
       templateId: quote?.templateId?.toString() || "",
     },
@@ -144,7 +149,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     }
   }, [contact, form]);
 
-  // Add watch for contactId to auto-fill contact details
+  // Watch for contactId changes to auto-fill contact details
   const selectedContactId = form.watch("contactId");
   useEffect(() => {
     if (selectedContactId && !contact) {
@@ -160,9 +165,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const selectedCategoryId = form.watch("categoryId");
 
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+  // Load products based on selected category
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["/api/products"],
-    select: (data: Product[]) =>
+    select: (data) =>
       data.filter((product) => product.categoryId.toString() === selectedCategoryId),
     enabled: !!selectedCategoryId,
   });
@@ -170,14 +176,21 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Update templates when category changes
   useEffect(() => {
     if (selectedCategoryId && templates?.length > 0) {
-      const categoryTemplates = templates.filter((t: any) => t.categoryId.toString() === selectedCategoryId);
-      const defaultTemplate = categoryTemplates.find((t: any) => t.isDefault) || categoryTemplates[0];
+      const categoryTemplates = templates.filter((t) => t.categoryId.toString() === selectedCategoryId);
+      const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
 
       if (defaultTemplate) {
         form.setValue("templateId", defaultTemplate.id.toString());
       }
     }
   }, [selectedCategoryId, templates, form]);
+
+  // Set initial category ID from quote if available
+  useEffect(() => {
+    if (quote?.categoryId && !selectedCategoryId) {
+      form.setValue("categoryId", quote.categoryId.toString());
+    }
+  }, [quote, form, selectedCategoryId]);
 
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
@@ -286,12 +299,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           contactId: parseInt(data.contactId || "0"),
           categoryId: parseInt(data.categoryId),
           templateId: parseInt(data.templateId || "0"),
-          customerInfo: {
-            name: data.clientName,
-            email: data.clientEmail,
-            phone: data.clientPhone,
-            address: data.clientAddress,
-          },
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientPhone: data.clientPhone,
+          clientAddress: data.clientAddress,
           selectedProducts: formattedProducts,
           subtotal,
           total,
@@ -299,6 +310,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           remainingBalance,
           discountType: data.discountType,
           discountValue: parseFloat(data.discountValue || "0"),
+          discountCode: data.discountCode,
           taxRate: parseFloat(data.taxRate || "0"),
           status: data.status,
           paymentMethod: data.paymentMethod,
