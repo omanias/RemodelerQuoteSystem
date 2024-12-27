@@ -15,7 +15,7 @@ import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
-  const { user, loading, error } = useAuth();
+  const { user, loading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
@@ -32,14 +32,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-red-500">Error: {error.message}</div>
-      </div>
-    );
-  }
-
   if (!user) {
     return null;
   }
@@ -52,17 +44,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 }
 
 function App() {
-  const { user, loading } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (loading) return;
-
-    if (user && location === "/login") {
-      setLocation("/");
-    }
-  }, [user, loading, location, setLocation]);
-
   return (
     <Switch>
       <Route path="/login" component={Login} />
@@ -75,6 +56,15 @@ function App() {
 }
 
 export default function AppWrapper() {
+  const { user, loading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!loading && user && location === "/login") {
+      setLocation("/");
+    }
+  }, [user, loading, location, setLocation]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <App />

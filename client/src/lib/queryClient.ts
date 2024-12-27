@@ -1,16 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
-import { auth } from "./firebase";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: async ({ queryKey }) => {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch(queryKey[0] as string, {
-          headers: token ? {
-            Authorization: `Bearer ${token}`,
-          } : undefined,
-        });
+        const res = await fetch(queryKey[0] as string);
 
         if (!res.ok) {
           if (res.status >= 500) {
@@ -24,7 +18,7 @@ export const queryClient = new QueryClient({
       },
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 0,
       retry: false,
     },
     mutations: {

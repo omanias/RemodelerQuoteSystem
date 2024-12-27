@@ -16,26 +16,42 @@ export function useAuth() {
   const [initialAuthChecked, setInitialAuthChecked] = useState(false);
 
   useEffect(() => {
-    // Handle Firebase auth state changes
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
       setInitialAuthChecked(true);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const { data: user, isLoading: isUserLoading, error } = useQuery({
     queryKey: ["/api/auth/user", firebaseUser?.uid],
-    enabled: !!firebaseUser,
+    queryFn: async () => {
+      if (!firebaseUser) return null;
+
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/auth/user", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      return res.json();
+    },
+    enabled: !!firebaseUser && initialAuthChecked,
     staleTime: Infinity,
-    retry: 1,
+    cacheTime: 0,
   });
 
   return {
     user,
-    firebaseUser,
-    loading: !initialAuthChecked || (!!firebaseUser && isUserLoading),
+    loading: !initialAuthChecked || isUserLoading,
     error,
     isAuthenticated: !!user,
   };
