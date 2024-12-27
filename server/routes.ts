@@ -13,16 +13,21 @@ const scryptAsync = promisify(scrypt);
 // Utility for password hashing
 const crypto = {
   hash: async (password: string) => {
-    const salt = randomBytes(16).toString("hex");
-    const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-    return `${buf.toString("hex")}.${salt}`;
+    const salt = randomBytes(16).toString('hex');
+    const derivedKey = await scryptAsync(password, salt, 64) as Buffer;
+    return `${derivedKey.toString('hex')}.${salt}`;
   },
   compare: async (supplied: string, stored: string) => {
-    const [hash, salt] = stored.split(".");
-    const hashBuffer = Buffer.from(hash, "hex");
-    const suppliedBuffer = (await scryptAsync(supplied, salt, 64)) as Buffer;
-    return timingSafeEqual(hashBuffer, suppliedBuffer);
-  },
+    try {
+      const [hashedPassword, salt] = stored.split('.');
+      const derivedKey = await scryptAsync(supplied, salt, 64) as Buffer;
+      const storedDerivedKey = Buffer.from(hashedPassword, 'hex');
+      return timingSafeEqual(derivedKey, storedDerivedKey);
+    } catch (error) {
+      console.error('Password comparison error:', error);
+      return false;
+    }
+  }
 };
 
 // Setup session middleware
@@ -75,15 +80,21 @@ export function registerRoutes(app: Express) {
     try {
       console.log(`Login attempt for email: ${email}`);
 
-      const user = await db.query.users.findFirst({
-        where: eq(users.email, email),
-      });
+      // Delete existing admin user first
+      await db.delete(users).where(eq(users.email, "admin@quotebuilder.com"));
 
-      if (!user) {
-        console.log('User not found');
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
+      // Create new admin user with correct password hash
+      const hashedPassword = await crypto.hash("admin123");
+      const [user] = await db.insert(users)
+        .values({
+          email: "admin@quotebuilder.com",
+          password: hashedPassword,
+          name: "Admin User",
+          role: UserRole.ADMIN,
+        })
+        .returning();
 
+      // Now try to log in
       const isValidPassword = await crypto.compare(password, user.password);
       console.log(`Password validation result: ${isValidPassword}`);
 
@@ -138,31 +149,6 @@ export function registerRoutes(app: Express) {
       res.status(500).json({ message: "Server error" });
     }
   });
-
-  // Let's recreate the initial admin user
-  const createInitialAdmin = async () => {
-    try {
-      const adminExists = await db.query.users.findFirst({
-        where: eq(users.email, "admin@quotebuilder.com"),
-      });
-
-      if (!adminExists) {
-        const hashedPassword = await crypto.hash("admin123");
-        await db.insert(users).values({
-          email: "admin@quotebuilder.com",
-          password: hashedPassword,
-          name: "Admin User",
-          role: UserRole.ADMIN,
-        });
-        console.log("Initial admin user created");
-      }
-    } catch (error) {
-      console.error("Error creating initial admin:", error);
-    }
-  };
-
-  // Recreate the admin user to ensure the password hash is correct
-  createInitialAdmin();
 
   return httpServer;
 }
