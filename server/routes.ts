@@ -2,7 +2,7 @@ import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
 import { users, quotes, products, templates, UserRole, QuoteStatus, UserStatus, categories } from "@db/schema";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, desc } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -571,7 +571,7 @@ export function registerRoutes(app: Express) {
   // Quote Routes
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const { categoryId, templateId, items, total, status, customerInfo } = req.body;
+      const { categoryId, templateId, items, total, status, customerInfo, selectedProducts, downPayment } = req.body;
 
       console.log('Quote creation request:', {
         categoryId,
@@ -588,32 +588,67 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Client name is required" });
       }
 
+      // Generate quote number before insertion
+      const [latestQuote] = await db
+        .select({ id: quotes.id })
+        .from(quotes)
+        .orderBy(desc(quotes.id))
+        .limit(1);
+
+      const nextId = latestQuote ? latestQuote.id + 1 : 1;
+      const quoteNumber = `QT-${nextId.toString().padStart(6, '0')}`;
+
+      const calculateSubtotal = () => {
+        //Implementation to calculate subtotal
+        let subtotal = 0;
+          selectedProducts.forEach(product => {
+            subtotal += product.quantity * product.price;
+          });
+          return subtotal;
+      };
+
+      const calculateDiscount = () => {
+          //Implementation to calculate discount
+          return 0; // Placeholder - needs actual discount calculation logic
+      };
+
+      const calculateTax = () => {
+          //Implementation to calculate tax
+          return 0; // Placeholder - needs actual tax calculation logic
+      };
+
+      const remainingBalance = total - downPayment;
+
       const [quote] = await db.insert(quotes)
         .values({
-          categoryId,
-          templateId,
-          items,
-          total,
-          status: status || QuoteStatus.DRAFT,
+          number: quoteNumber,
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
           clientAddress: customerInfo.address || null,
+          status: status || QuoteStatus.DRAFT,
           userId: req.user.id,
+          subtotal: calculateSubtotal(),
+          total,
+          downPaymentValue: downPayment,
+          remainingBalance,
+          content: {
+            products: selectedProducts,
+            calculations: {
+              subtotal: calculateSubtotal(),
+              discount: calculateDiscount(),
+              tax: calculateTax(),
+              total,
+              downPayment,
+              remainingBalance,
+            },
+          },
         })
         .returning();
 
-      // Generate quote number using the quote ID
-      const quoteNumber = `QT-${quote.id.toString().padStart(6, '0')}`;
-
-      // Update the quote with the generated number
-      const [updatedQuote] = await db
-        .update(quotes)
-        .set({ number: quoteNumber })
-        .where(eq(quotes.id, quote.id))
-        .returning();
-
-      res.json(updatedQuote);
+      res.json(quote);
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error creating quote" });
