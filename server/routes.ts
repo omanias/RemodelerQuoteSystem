@@ -250,7 +250,7 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/products", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
     try {
-      const { name, categoryId, basePrice, unit, variations } = req.body;
+      const { name, categoryId, basePrice, cost, unit, isActive } = req.body;
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
@@ -266,9 +266,9 @@ export function registerRoutes(app: Express) {
           name,
           categoryId,
           basePrice,
+          cost,
           unit,
-          variations,
-          isActive: true,
+          isActive: isActive ?? true,
         })
         .returning();
 
