@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, FileText, Package, FileEdit, 
-  LogOut, Settings, Users 
+  LogOut, Settings, Users, FolderTree
 } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -16,6 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Quotes", href: "/quotes", icon: FileText },
+    { name: "Categories", href: "/categories", icon: FolderTree },
     { name: "Products", href: "/products", icon: Package },
     { name: "Templates", href: "/templates", icon: FileEdit },
   ];

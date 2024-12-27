@@ -74,6 +74,7 @@ export const quotes = pgTable("quotes", {
   content: jsonb("content").notNull(),
   userId: integer("user_id").references(() => users.id).notNull(),
   templateId: integer("template_id").references(() => templates.id).notNull(),
+  categoryId: integer("category_id").references(() => categories.id).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -85,6 +86,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
+  quotes: many(quotes),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -102,6 +104,10 @@ export const quotesRelations = relations(quotes, ({ one }) => ({
   template: one(templates, {
     fields: [quotes.templateId],
     references: [templates.id],
+  }),
+  category: one(categories, {
+    fields: [quotes.categoryId],
+    references: [categories.id],
   }),
 }));
 
