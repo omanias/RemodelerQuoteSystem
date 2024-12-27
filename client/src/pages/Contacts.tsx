@@ -18,19 +18,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Search } from "lucide-react";
-import { LeadStatus, LeadSource, PropertyType } from "@db/schema";
-import { useToast } from "@/hooks/use-toast";
+import { Link, useLocation } from "wouter";
+import { Plus, Search } from "lucide-react";
+import { LeadStatus } from "@db/schema";
 
 export function Contacts() {
   const [searchQuery, setSearchQuery] = useState("");
-  const { toast } = useToast();
+  const [location, navigate] = useLocation();
 
   const { data: contacts = [] } = useQuery({
     queryKey: ["/api/contacts"],
@@ -40,10 +34,10 @@ export function Contacts() {
   const filteredContacts = contacts.filter((contact: any) => {
     const searchLower = searchQuery.toLowerCase();
     return (
-      contact.firstName.toLowerCase().includes(searchLower) ||
-      contact.lastName.toLowerCase().includes(searchLower) ||
-      contact.primaryEmail.toLowerCase().includes(searchLower) ||
-      contact.primaryPhone.toLowerCase().includes(searchLower)
+      contact.firstName?.toLowerCase().includes(searchLower) ||
+      contact.lastName?.toLowerCase().includes(searchLower) ||
+      contact.primaryEmail?.toLowerCase().includes(searchLower) ||
+      contact.primaryPhone?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -76,9 +70,11 @@ export function Contacts() {
           </p>
         </div>
 
-        <Button>
-          <Plus className="mr-2 h-4 w-4" /> New Contact
-        </Button>
+        <Link href="/contacts/new">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" /> New Contact
+          </Button>
+        </Link>
       </div>
 
       <Card>
@@ -111,12 +107,15 @@ export function Contacts() {
               <TableHead>Property</TableHead>
               <TableHead>Lead Source</TableHead>
               <TableHead>Timeline</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredContacts.map((contact: any) => (
-              <TableRow key={contact.id}>
+              <TableRow 
+                key={contact.id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() => navigate(`/contacts/${contact.id}`)}
+              >
                 <TableCell>
                   <div>
                     <div className="font-medium">
@@ -155,23 +154,6 @@ export function Contacts() {
                 </TableCell>
                 <TableCell>
                   {contact.projectTimeline || "Not specified"}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem>View Details</DropdownMenuItem>
-                      <DropdownMenuItem>Edit</DropdownMenuItem>
-                      <DropdownMenuItem>Create Quote</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
                 </TableCell>
               </TableRow>
             ))}

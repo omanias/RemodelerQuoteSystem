@@ -16,6 +16,7 @@ import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
+import { ContactDetail } from "@/pages/ContactDetail";
 import { useAuth } from "@/hooks/useAuth";
 
 function App() {
@@ -45,6 +46,8 @@ function App() {
           <Route path="/" component={Dashboard} />
           <Route path="/quotes" component={Quotes} />
           <Route path="/contacts" component={Contacts} />
+          <Route path="/contacts/new" component={ContactDetail} />
+          <Route path="/contacts/:id" component={ContactDetail} />
           <Route path="/categories" component={Categories} />
           <Route path="/products" component={Products} />
           <Route path="/templates" component={Templates} />
