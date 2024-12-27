@@ -581,16 +581,17 @@ export function registerRoutes(app: Express) {
       const { id } = req.params;
       const contactQuotes = await db.query.quotes.findMany({
         where: eq(quotes.contactId, parseInt(id)),
+        orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
         with: {
           category: true,
           template: true,
         },
-        orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
       });
+
       res.json(contactQuotes);
     } catch (error) {
       console.error('Error fetching contact quotes:', error);
-      res.status(500).json({ message: "Server error fetching contact quotes" });
+      res.status(500).json({ message: "Error fetching quotes for contact" });
     }
   });
 

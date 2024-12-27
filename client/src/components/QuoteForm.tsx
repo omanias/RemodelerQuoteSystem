@@ -26,37 +26,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 
-interface Product {
-  id: number;
-  name: string;
-  basePrice: number;
-  unit: string;
-  categoryId: number;
-  variations?: Array<{ name: string; price: string }>;
-}
-
-interface Category {
-  id: number;
-  name: string;
-  products: Product[];
-}
-
-interface Contact {
-  id: number;
-  firstName: string;
-  lastName: string;
-  primaryEmail: string;
-  primaryPhone: string;
-  primaryAddress: string;
-}
-
-interface SelectedProduct {
-  productId: number;
-  quantity: number;
-  variation?: string;
-  unitPrice: number;
-}
-
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
@@ -86,6 +55,37 @@ interface QuoteFormProps {
   };
   defaultContactId?: string | null;
   contact?: Contact | null;
+}
+
+interface Contact {
+  id: number;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  primaryPhone: string;
+  primaryAddress: string;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  basePrice: number;
+  unit: string;
+  categoryId: number;
+  variations?: Array<{ name: string; price: string }>;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  products: Product[];
+}
+
+interface SelectedProduct {
+  productId: number;
+  quantity: number;
+  variation?: string;
+  unitPrice: number;
 }
 
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
@@ -148,7 +148,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const selectedContactId = form.watch("contactId");
   useEffect(() => {
     if (selectedContactId && !contact) {
-      const selectedContact = contacts.find((c) => c.id.toString() === selectedContactId);
+      const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
       if (selectedContact) {
         form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
         form.setValue("clientEmail", selectedContact.primaryEmail);
@@ -157,6 +157,27 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       }
     }
   }, [selectedContactId, contacts, form, contact]);
+
+  const selectedCategoryId = form.watch("categoryId");
+
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["/api/products"],
+    select: (data: Product[]) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    enabled: !!selectedCategoryId,
+  });
+
+  // Update templates when category changes
+  useEffect(() => {
+    if (selectedCategoryId && templates?.length > 0) {
+      const categoryTemplates = templates.filter((t: any) => t.categoryId.toString() === selectedCategoryId);
+      const defaultTemplate = categoryTemplates.find((t: any) => t.isDefault) || categoryTemplates[0];
+
+      if (defaultTemplate) {
+        form.setValue("templateId", defaultTemplate.id.toString());
+      }
+    }
+  }, [selectedCategoryId, templates, form]);
 
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
@@ -212,15 +233,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     const downPayment = calculateDownPayment();
     return total - downPayment;
   };
-
-  const selectedCategoryId = form.watch("categoryId");
-
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
-    queryKey: ["/api/products"],
-    select: (data: Product[]) =>
-      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
-    enabled: !!selectedCategoryId,
-  });
 
   const addProduct = (product: Product, variationPrice?: string) => {
     setSelectedProducts(prev => [
@@ -343,17 +355,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     mutation.mutate(data);
   };
 
-  useEffect(() => {
-    if (selectedCategoryId && templates?.length > 0) {
-      const categoryTemplates = templates.filter((t: any) => t.categoryId.toString() === selectedCategoryId);
-      const defaultTemplate = categoryTemplates.find((t: any) => t.isDefault) || categoryTemplates[0];
-
-      if (defaultTemplate) {
-        form.setValue("templateId", defaultTemplate.id.toString());
-      }
-    }
-  }, [selectedCategoryId, templates, form]);
-
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -369,7 +370,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* New Contact Selection Section */}
+        {/* Contact Selection Section */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -395,7 +396,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {contacts.map((contact: any) => (
+                      {contacts.map((contact) => (
                         <SelectItem key={contact.id} value={contact.id.toString()}>
                           {contact.firstName} {contact.lastName} - {contact.primaryEmail}
                         </SelectItem>
@@ -477,7 +478,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category: any) => (
+                  {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id.toString()}>
                       {category.name}
                     </SelectItem>
@@ -515,7 +516,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             </FormItem>
           )}
         />
-
 
         {selectedCategoryId && (
           <Card>

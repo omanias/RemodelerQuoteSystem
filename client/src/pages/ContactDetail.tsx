@@ -1,8 +1,7 @@
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus } from "lucide-react";
-import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -405,12 +404,14 @@ export function ContactDetail() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Quotes</CardTitle>
-              <Link href={`/quotes/new?contactId=${id}`}>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Quote
-                </Button>
-              </Link>
+              {id && (
+                <Link href={`/quotes/new?contactId=${id}`}>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Quote
+                  </Button>
+                </Link>
+              )}
             </CardHeader>
             <CardContent>
               {isLoadingQuotes ? (
