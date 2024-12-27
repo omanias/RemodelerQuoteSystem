@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -46,11 +47,11 @@ export function Dashboard() {
             {quotes?.slice(0, 5).map((quote) => (
               <div key={quote.id} className="flex items-center">
                 <div className="ml-4 space-y-1">
-                  <p className="text-sm font-medium leading-none">
+                  <Link href="/quotes" className="text-sm font-medium leading-none hover:underline">
                     Quote #{quote.number}
-                  </p>
+                  </Link>
                   <p className="text-sm text-muted-foreground">
-                    {quote.clientName} - ${quote.total}
+                    {quote.clientName} - ${quote.total.toLocaleString()}
                   </p>
                 </div>
                 <div className="ml-auto">
@@ -67,7 +68,7 @@ export function Dashboard() {
   );
 }
 
-function getStatusVariant(status: string): "success" | "destructive" | "default" | "secondary" {
+function getStatusVariant(status: QuoteStatus): "success" | "destructive" | "default" | "secondary" {
   switch (status) {
     case QuoteStatus.ACCEPTED:
       return "success";
