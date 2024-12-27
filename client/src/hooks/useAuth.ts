@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useFirebaseAuth } from "@/contexts/AuthContext";
+import { auth } from "@/lib/firebase";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
 export type AuthUser = {
   id: number;
@@ -10,7 +12,17 @@ export type AuthUser = {
 };
 
 export function useAuth() {
-  const { firebaseUser, isLoading: isFirebaseLoading } = useFirebaseAuth();
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      setIsInitializing(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const { data: user, isLoading: isUserLoading } = useQuery({
     queryKey: ["/api/auth/user", firebaseUser?.uid],
@@ -35,7 +47,7 @@ export function useAuth() {
 
   return {
     user,
-    loading: isFirebaseLoading || isUserLoading,
+    loading: isInitializing || isUserLoading,
     isAuthenticated: !!user,
   };
 }
