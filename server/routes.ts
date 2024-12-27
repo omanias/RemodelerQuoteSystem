@@ -571,7 +571,7 @@ export function registerRoutes(app: Express) {
   // Quote Routes
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const { categoryId, templateId, items, total, status, customerInfo, selectedProducts, downPayment } = req.body;
+      const { categoryId, templateId, customerInfo, selectedProducts = [], total, downPayment = 0 } = req.body;
 
       console.log('Quote creation request:', {
         categoryId,
@@ -599,25 +599,14 @@ export function registerRoutes(app: Express) {
       const quoteNumber = `QT-${nextId.toString().padStart(6, '0')}`;
 
       const calculateSubtotal = () => {
-        //Implementation to calculate subtotal
-        let subtotal = 0;
-          selectedProducts.forEach(product => {
-            subtotal += product.quantity * product.price;
-          });
-          return subtotal;
+        if (!Array.isArray(selectedProducts)) return 0;
+        return selectedProducts.reduce((sum, product) => {
+          return sum + (product.quantity * product.price);
+        }, 0);
       };
 
-      const calculateDiscount = () => {
-          //Implementation to calculate discount
-          return 0; // Placeholder - needs actual discount calculation logic
-      };
-
-      const calculateTax = () => {
-          //Implementation to calculate tax
-          return 0; // Placeholder - needs actual tax calculation logic
-      };
-
-      const remainingBalance = total - downPayment;
+      const subtotal = calculateSubtotal();
+      const remainingBalance = total - (downPayment || 0);
 
       const [quote] = await db.insert(quotes)
         .values({
@@ -628,18 +617,16 @@ export function registerRoutes(app: Express) {
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
           clientAddress: customerInfo.address || null,
-          status: status || QuoteStatus.DRAFT,
+          status: QuoteStatus.DRAFT,
           userId: req.user.id,
-          subtotal: calculateSubtotal(),
+          subtotal,
           total,
           downPaymentValue: downPayment,
           remainingBalance,
           content: {
             products: selectedProducts,
             calculations: {
-              subtotal: calculateSubtotal(),
-              discount: calculateDiscount(),
-              tax: calculateTax(),
+              subtotal,
               total,
               downPayment,
               remainingBalance,

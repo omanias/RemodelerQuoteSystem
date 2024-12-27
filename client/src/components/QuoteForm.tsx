@@ -201,6 +201,18 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
 
+      const formattedProducts = selectedProducts.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: item.unitPrice,
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
+
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
@@ -216,21 +228,11 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
             phone: data.clientPhone,
             address: data.clientAddress,
           },
+          selectedProducts: formattedProducts,
           subtotal: calculateSubtotal(),
           total,
           downPaymentValue: downPayment,
           remainingBalance,
-          content: {
-            products: selectedProducts,
-            calculations: {
-              subtotal: calculateSubtotal(),
-              discount: calculateDiscount(),
-              tax: calculateTax(),
-              total,
-              downPayment,
-              remainingBalance,
-            },
-          },
         }),
         credentials: "include",
       });
