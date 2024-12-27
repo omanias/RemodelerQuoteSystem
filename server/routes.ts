@@ -571,12 +571,12 @@ export function registerRoutes(app: Express) {
   // Quote Routes
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const { 
-        categoryId, 
-        templateId, 
-        customerInfo, 
-        selectedProducts = [], 
-        total, 
+      const {
+        categoryId,
+        templateId,
+        customerInfo,
+        selectedProducts = [],
+        total,
         downPaymentValue,
         downPaymentType,
         discountType,
@@ -670,12 +670,12 @@ export function registerRoutes(app: Express) {
   app.put("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { 
-        categoryId, 
-        templateId, 
-        customerInfo, 
-        selectedProducts = [], 
-        total, 
+      const {
+        categoryId,
+        templateId,
+        customerInfo,
+        selectedProducts = [],
+        total,
         downPaymentValue,
         downPaymentType,
         discountType,
@@ -684,7 +684,7 @@ export function registerRoutes(app: Express) {
         subtotal,
         remainingBalance,
         notes,
-        status 
+        status
       } = req.body;
 
       // Parse numeric values with fallbacks
@@ -753,6 +753,19 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Error fetching quotes:', error);
       res.status(500).json({ message: "Server error fetching quotes" });
+    }
+  });
+
+  app.delete("/api/quotes/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Delete the quote
+      await db.delete(quotes).where(eq(quotes.id, parseInt(id)));
+      res.json({ message: "Quote deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      res.status(500).json({ message: "Server error deleting quote" });
     }
   });
 

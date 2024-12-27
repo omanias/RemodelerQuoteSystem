@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QuoteForm } from "@/components/QuoteForm";
 import {
   Table,
@@ -43,8 +43,9 @@ export function Quotes() {
   const [editQuote, setEditQuote] = useState<any>(null);
   const [deleteQuote, setDeleteQuote] = useState<any>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const { data: quotes = [], refetch } = useQuery({
+  const { data: quotes = [] } = useQuery({
     queryKey: ["/api/quotes"],
   });
 
@@ -63,12 +64,13 @@ export function Quotes() {
         throw new Error(await response.text());
       }
 
+      // Invalidate and refetch quotes after successful deletion
+      await queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+
       toast({
         title: "Quote deleted",
         description: "The quote has been deleted successfully.",
       });
-
-      refetch();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -129,9 +131,9 @@ export function Quotes() {
                     {quote.status}
                   </Badge>
                 </TableCell>
-                <TableCell>${quote.total}</TableCell>
-                <TableCell>${quote.downPaymentValue || 0}</TableCell>
-                <TableCell>${quote.remainingBalance || 0}</TableCell>
+                <TableCell>${quote.total.toLocaleString()}</TableCell>
+                <TableCell>${(quote.downPaymentValue || 0).toLocaleString()}</TableCell>
+                <TableCell>${(quote.remainingBalance || 0).toLocaleString()}</TableCell>
                 <TableCell>
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>
