@@ -40,6 +40,13 @@ interface Category {
   products: Product[];
 }
 
+interface SelectedProduct {
+  productId: number;
+  quantity: number;
+  variation?: string;
+  unitPrice: number;
+}
+
 const quoteFormSchema = z.object({
   clientName: z.string().min(1, "Client name is required"),
   clientEmail: z.string().email("Invalid email address"),
@@ -70,12 +77,9 @@ interface QuoteFormProps {
 export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedProducts, setSelectedProducts] = useState<Array<{
-    productId: number;
-    quantity: number;
-    variation?: string;
-    unitPrice: number;
-  }>([]);
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
+    quote?.content?.products || []
+  );
 
   // Fetch all categories
   const { data: categories = [] } = useQuery({
@@ -112,9 +116,8 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   // Fetch products for selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery({
     queryKey: ["/api/products"],
-    select: (data) => data.filter((product: Product) =>
-      product.categoryId.toString() === selectedCategoryId
-    ),
+    select: (data: Product[]) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
     enabled: !!selectedCategoryId,
   });
 
