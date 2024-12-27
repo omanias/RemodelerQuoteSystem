@@ -71,18 +71,35 @@ export function registerRoutes(app: Express) {
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
+
     try {
+      console.log(`Login attempt for email: ${email}`);
+
       const user = await db.query.users.findFirst({
         where: eq(users.email, email),
       });
 
-      if (!user || !(await crypto.compare(password, user.password))) {
+      if (!user) {
+        console.log('User not found');
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const isValidPassword = await crypto.compare(password, user.password);
+      console.log(`Password validation result: ${isValidPassword}`);
+
+      if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
       req.session.userId = user.id;
-      res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+      res.json({ 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role 
+      });
     } catch (error) {
+      console.error('Login error:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -122,7 +139,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Let's create the initial admin user if it doesn't exist
+  // Let's recreate the initial admin user
   const createInitialAdmin = async () => {
     try {
       const adminExists = await db.query.users.findFirst({
@@ -143,6 +160,8 @@ export function registerRoutes(app: Express) {
       console.error("Error creating initial admin:", error);
     }
   };
+
+  // Recreate the admin user to ensure the password hash is correct
   createInitialAdmin();
 
   return httpServer;
