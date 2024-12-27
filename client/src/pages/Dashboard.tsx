@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QuoteStatus } from "@db/schema";
 import { useAuth } from "@/hooks/useAuth";
+import { startOfMonth, subMonths, format, parseISO } from "date-fns";
 
 interface Quote {
   id: number;
@@ -12,6 +13,7 @@ interface Quote {
   clientName: string;
   total: number;
   status: QuoteStatus;
+  createdAt: string;
 }
 
 export function Dashboard() {
@@ -20,11 +22,50 @@ export function Dashboard() {
     queryKey: ["/api/quotes"],
   });
 
+  // Calculate all metrics
+  const totalQuotes = quotes.length;
+  const pendingQuotes = quotes.filter(q => q.status === QuoteStatus.DRAFT || q.status === QuoteStatus.SENT).length;
+  const acceptedQuotes = quotes.filter(q => q.status === QuoteStatus.ACCEPTED).length;
+  const rejectedQuotes = quotes.filter(q => q.status === QuoteStatus.REJECTED).length;
+  const totalValue = quotes.reduce((acc, q) => acc + Number(q.total), 0);
+  const averageValue = totalValue / (totalQuotes || 1);
+  const conversionRate = acceptedQuotes / (totalQuotes || 1);
+
+  // Calculate status distribution with values
+  const statusDistribution = Object.values(QuoteStatus).map(status => ({
+    status,
+    count: quotes.filter(q => q.status === status).length,
+    value: quotes
+      .filter(q => q.status === status)
+      .reduce((acc, q) => acc + Number(q.total), 0)
+  }));
+
+  // Calculate timeline data for the last 6 months
+  const now = new Date();
+  const timelineData = Array.from({ length: 6 }, (_, i) => {
+    const monthStart = startOfMonth(subMonths(now, i));
+    const monthQuotes = quotes.filter(q => {
+      const quoteDate = parseISO(q.createdAt);
+      return quoteDate >= monthStart && quoteDate < startOfMonth(subMonths(now, i - 1));
+    });
+
+    return {
+      date: format(monthStart, 'yyyy-MM-dd'),
+      count: monthQuotes.length,
+      value: monthQuotes.reduce((acc, q) => acc + Number(q.total), 0)
+    };
+  }).reverse();
+
   const stats = {
-    totalQuotes: quotes.length || 0,
-    pendingQuotes: quotes.filter(q => q.status === QuoteStatus.DRAFT || q.status === QuoteStatus.SENT).length || 0,
-    acceptedQuotes: quotes.filter(q => q.status === QuoteStatus.ACCEPTED).length || 0,
-    totalValue: quotes.reduce((acc, q) => acc + Number(q.total), 0) || 0,
+    totalQuotes,
+    pendingQuotes,
+    acceptedQuotes,
+    rejectedQuotes,
+    totalValue,
+    averageValue,
+    conversionRate,
+    timelineData,
+    statusDistribution
   };
 
   return (
@@ -51,7 +92,7 @@ export function Dashboard() {
                     Quote #{quote.number}
                   </Link>
                   <p className="text-sm text-muted-foreground">
-                    {quote.clientName} - ${quote.total.toLocaleString()}
+                    {quote.clientName} - ${Number(quote.total).toLocaleString()}
                   </p>
                 </div>
                 <div className="ml-auto">
