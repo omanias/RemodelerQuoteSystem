@@ -2,7 +2,7 @@ import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
 import { users, quotes, products, templates, UserRole, QuoteStatus } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -125,27 +125,73 @@ export function registerRoutes(app: Express) {
     res.json(req.user);
   });
 
-  // User management (admin only)
-  app.post("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
-    try {
-      const { email, password, name, role } = req.body;
-      const hashedPassword = await crypto.hash(password);
-      const [user] = await db.insert(users)
-        .values({ email, password: hashedPassword, name, role })
-        .returning();
-      res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
-    } catch (error) {
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
+  // User Management Routes
   app.get("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
     try {
       const allUsers = await db.query.users.findMany({
         orderBy: (users, { asc }) => [asc(users.name)],
       });
-      res.json(allUsers.map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role })));
+      res.json(allUsers.map(u => ({ 
+        id: u.id, 
+        email: u.email, 
+        name: u.name, 
+        role: u.role,
+        status: "active" // You might want to add this to your schema
+      })));
     } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { email, password, name, role, status } = req.body;
+      const hashedPassword = await crypto.hash(password);
+      const [user] = await db.insert(users)
+        .values({ email, password: hashedPassword, name, role })
+        .returning();
+      res.json({ 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role,
+        status: "active"
+      });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { email, name, role, status } = req.body;
+      const [user] = await db.update(users)
+        .set({ email, name, role })
+        .where(eq(users.id, parseInt(id)))
+        .returning();
+      res.json({ 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role,
+        status
+      });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(users).where(eq(users.id, parseInt(id)));
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting user:', error);
       res.status(500).json({ message: "Server error" });
     }
   });

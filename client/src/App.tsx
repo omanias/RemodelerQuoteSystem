@@ -12,6 +12,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
+import { Users } from "@/pages/Users";
 import { useAuth } from "@/hooks/useAuth";
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
           <Route path="/quotes" component={Quotes} />
           <Route path="/products" component={Products} />
           <Route path="/templates" component={Templates} />
+          <Route path="/users" component={Users} />
         </Switch>
       </Layout>
       <Toaster />

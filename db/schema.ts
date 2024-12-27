@@ -9,6 +9,11 @@ export const UserRole = {
   SALES_REP: 'SALES_REP'
 } as const;
 
+export const UserStatus = {
+  ACTIVE: 'active',
+  INACTIVE: 'inactive'
+} as const;
+
 export const QuoteStatus = {
   DRAFT: 'DRAFT',
   SENT: 'SENT',
@@ -24,6 +29,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role", { enum: Object.values(UserRole) }).notNull(),
+  status: text("status", { enum: Object.values(UserStatus) }).notNull().default(UserStatus.ACTIVE),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
