@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
 import { QuoteForm } from "@/components/QuoteForm";
 import {
   Table,
@@ -11,13 +12,6 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,15 +29,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { QuoteStatus } from "@db/schema";
-import { Plus, MoreVertical, FileText, Download } from "lucide-react";
+import { Plus, MoreVertical, FileText, Download, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export function Quotes() {
-  const [open, setOpen] = useState(false);
-  const [editQuote, setEditQuote] = useState<any>(null);
+  const [location, navigate] = useLocation();
   const [deleteQuote, setDeleteQuote] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Extract contactId from URL if present
+  const urlParams = new URLSearchParams(location.split('?')[1]);
+  const contactId = urlParams.get('contactId');
 
   const { data: quotes = [] } = useQuery({
     queryKey: ["/api/quotes"],
@@ -51,6 +48,11 @@ export function Quotes() {
 
   const { data: user } = useQuery({
     queryKey: ["/api/auth/user"],
+  });
+
+  const { data: contact } = useQuery({
+    queryKey: [`/api/contacts/${contactId}`],
+    enabled: !!contactId
   });
 
   const handleDelete = async () => {
@@ -64,7 +66,6 @@ export function Quotes() {
         throw new Error(await response.text());
       }
 
-      // Invalidate and refetch quotes after successful deletion
       await queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
 
       toast({
@@ -148,6 +149,32 @@ export function Quotes() {
     }
   };
 
+  // If we're on the new quote page
+  if (location === '/quotes/new' || location.startsWith('/quotes/new?')) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/quotes')}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">New Quote</h1>
+            {contact && (
+              <p className="text-muted-foreground">
+                Creating quote for {contact.firstName} {contact.lastName}
+              </p>
+            )}
+          </div>
+        </div>
+        <QuoteForm 
+          onSuccess={() => navigate('/quotes')} 
+          user={user} 
+          defaultContactId={contactId}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -164,19 +191,11 @@ export function Quotes() {
             Export All (CSV)
           </Button>
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" /> New Quote
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Quote</DialogTitle>
-              </DialogHeader>
-              <QuoteForm onSuccess={() => setOpen(false)} user={user} />
-            </DialogContent>
-          </Dialog>
+          <Link href="/quotes/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> New Quote
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -227,28 +246,11 @@ export function Quotes() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <DropdownMenuItem
-                              onSelect={(e) => {
-                                e.preventDefault();
-                                setEditQuote(quote);
-                              }}
-                            >
-                              Edit
-                            </DropdownMenuItem>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle>Edit Quote</DialogTitle>
-                            </DialogHeader>
-                            <QuoteForm
-                              quote={editQuote}
-                              onSuccess={() => setEditQuote(null)}
-                              user={user}
-                            />
-                          </DialogContent>
-                        </Dialog>
+                        <Link href={`/quotes/${quote.id}`}>
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                            Edit
+                          </DropdownMenuItem>
+                        </Link>
                         <DropdownMenuItem
                           className="text-destructive"
                           onSelect={() => setDeleteQuote(quote)}

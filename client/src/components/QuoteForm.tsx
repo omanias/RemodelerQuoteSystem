@@ -82,9 +82,10 @@ interface QuoteFormProps {
     email: string;
     name: string;
   };
+  defaultContactId?: string | null;
 }
 
-export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
+export function QuoteForm({ quote, onSuccess, user, defaultContactId }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
@@ -111,7 +112,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      contactId: quote?.contactId?.toString() || "",
+      contactId: quote?.contactId?.toString() || defaultContactId || "",
       clientName: quote?.clientName || "",
       clientEmail: quote?.clientEmail || "",
       clientPhone: quote?.clientPhone || "",
@@ -257,7 +258,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          contactId: parseInt(data.contactId || "0"), // Added contactId
+          contactId: parseInt(data.contactId || "0"),
           categoryId: parseInt(data.categoryId),
           templateId: parseInt(data.templateId || "0"),
           customerInfo: {

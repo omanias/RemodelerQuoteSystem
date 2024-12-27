@@ -154,30 +154,20 @@ export function ContactDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link href="/contacts">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
-            </h1>
-            <p className="text-muted-foreground">
-              {contact ? contact.primaryEmail : 'Create a new contact'}
-            </p>
-          </div>
+      <div className="flex items-center gap-4">
+        <Link href="/contacts">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
+          </h1>
+          <p className="text-muted-foreground">
+            {contact ? contact.primaryEmail : 'Create a new contact'}
+          </p>
         </div>
-        {id && (
-          <Link href={`/quotes/new?contactId=${id}`}>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Quote
-            </Button>
-          </Link>
-        )}
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
