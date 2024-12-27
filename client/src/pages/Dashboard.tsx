@@ -1,20 +1,29 @@
 import { useQuery } from "@tanstack/react-query";
 import { DashboardMetrics } from "@/components/DashboardMetrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { QuoteStatus } from "@db/schema";
 import { useAuth } from "@/hooks/useAuth";
 
+interface Quote {
+  id: number;
+  number: string;
+  clientName: string;
+  total: number;
+  status: QuoteStatus;
+}
+
 export function Dashboard() {
   const { user } = useAuth();
-  const { data: quotes } = useQuery({
+  const { data: quotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
   });
 
   const stats = {
-    totalQuotes: quotes?.length || 0,
-    pendingQuotes: quotes?.filter(q => q.status === QuoteStatus.DRAFT || q.status === QuoteStatus.SENT).length || 0,
-    acceptedQuotes: quotes?.filter(q => q.status === QuoteStatus.ACCEPTED).length || 0,
-    totalValue: quotes?.reduce((acc, q) => acc + Number(q.total), 0) || 0,
+    totalQuotes: quotes.length || 0,
+    pendingQuotes: quotes.filter(q => q.status === QuoteStatus.DRAFT || q.status === QuoteStatus.SENT).length || 0,
+    acceptedQuotes: quotes.filter(q => q.status === QuoteStatus.ACCEPTED).length || 0,
+    totalValue: quotes.reduce((acc, q) => acc + Number(q.total), 0) || 0,
   };
 
   return (
@@ -58,7 +67,7 @@ export function Dashboard() {
   );
 }
 
-function getStatusVariant(status: string) {
+function getStatusVariant(status: string): "success" | "destructive" | "default" | "secondary" {
   switch (status) {
     case QuoteStatus.ACCEPTED:
       return "success";
