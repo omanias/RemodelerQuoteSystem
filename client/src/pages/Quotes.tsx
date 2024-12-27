@@ -32,9 +32,35 @@ import { QuoteStatus } from "@db/schema";
 import { Plus, MoreVertical, FileText, Download, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+interface Quote {
+  id: number;
+  number: string;
+  clientName: string;
+  status: QuoteStatus;
+  total: number;
+  downPaymentValue: number;
+  remainingBalance: number;
+  createdAt: string;
+}
+
+interface Contact {
+  id: number;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  primaryPhone: string;
+  primaryAddress: string;
+}
+
+interface User {
+  id: number;
+  email: string;
+  name: string;
+}
+
 export function Quotes() {
   const [location, navigate] = useLocation();
-  const [deleteQuote, setDeleteQuote] = useState<any>(null);
+  const [deleteQuote, setDeleteQuote] = useState<Quote | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -42,20 +68,22 @@ export function Quotes() {
   const urlParams = new URLSearchParams(location.split('?')[1]);
   const contactId = urlParams.get('contactId');
 
-  const { data: quotes = [] } = useQuery({
+  const { data: quotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
   });
 
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/auth/user"],
   });
 
-  const { data: contact } = useQuery({
+  const { data: contact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId
   });
 
   const handleDelete = async () => {
+    if (!deleteQuote) return;
+
     try {
       const response = await fetch(`/api/quotes/${deleteQuote.id}`, {
         method: "DELETE",
@@ -83,7 +111,7 @@ export function Quotes() {
     }
   };
 
-  const handleExportPDF = async (quote: any) => {
+  const handleExportPDF = async (quote: Quote) => {
     try {
       const response = await fetch(`/api/quotes/${quote.id}/export/pdf`, {
         credentials: "include",
@@ -170,6 +198,7 @@ export function Quotes() {
           onSuccess={() => navigate('/quotes')} 
           user={user} 
           defaultContactId={contactId}
+          contact={contact}
         />
       </div>
     );
@@ -214,7 +243,7 @@ export function Quotes() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {quotes?.map((quote: any) => (
+            {quotes.map((quote) => (
               <TableRow key={quote.id}>
                 <TableCell>{quote.number}</TableCell>
                 <TableCell>{quote.clientName}</TableCell>
@@ -224,8 +253,8 @@ export function Quotes() {
                   </Badge>
                 </TableCell>
                 <TableCell>${quote.total.toLocaleString()}</TableCell>
-                <TableCell>${(quote.downPaymentValue || 0).toLocaleString()}</TableCell>
-                <TableCell>${(quote.remainingBalance || 0).toLocaleString()}</TableCell>
+                <TableCell>${quote.downPaymentValue.toLocaleString()}</TableCell>
+                <TableCell>${quote.remainingBalance.toLocaleString()}</TableCell>
                 <TableCell>
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>
@@ -293,14 +322,14 @@ export function Quotes() {
   );
 }
 
-function getStatusVariant(status: string) {
+function getStatusVariant(status: string): "default" | "destructive" | "secondary" | "outline" {
   switch (status) {
     case QuoteStatus.ACCEPTED:
-      return "success";
+      return "default";
     case QuoteStatus.REJECTED:
       return "destructive";
     case QuoteStatus.SENT:
-      return "default";
+      return "outline";
     default:
       return "secondary";
   }

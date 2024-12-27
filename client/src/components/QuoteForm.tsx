@@ -20,13 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,6 +39,15 @@ interface Category {
   id: number;
   name: string;
   products: Product[];
+}
+
+interface Contact {
+  id: number;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  primaryPhone: string;
+  primaryAddress: string;
 }
 
 interface SelectedProduct {
@@ -83,9 +85,10 @@ interface QuoteFormProps {
     name: string;
   };
   defaultContactId?: string | null;
+  contact?: Contact | null;
 }
 
-export function QuoteForm({ quote, onSuccess, user, defaultContactId }: QuoteFormProps) {
+export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(
@@ -97,15 +100,15 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId }: QuoteFor
     })) || []
   );
 
-  const { data: contacts = [] } = useQuery({
+  const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
 
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
-  const { data: templates = [] } = useQuery({
+  const { data: templates = [] } = useQuery<any[]>({
     queryKey: ["/api/templates"],
   });
 
@@ -131,11 +134,21 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId }: QuoteFor
     },
   });
 
+  // Update form when contact data is available
+  useEffect(() => {
+    if (contact) {
+      form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
+      form.setValue("clientEmail", contact.primaryEmail);
+      form.setValue("clientPhone", contact.primaryPhone);
+      form.setValue("clientAddress", contact.primaryAddress);
+    }
+  }, [contact, form]);
+
   // Add watch for contactId to auto-fill contact details
   const selectedContactId = form.watch("contactId");
   useEffect(() => {
-    if (selectedContactId) {
-      const selectedContact = contacts.find((c: any) => c.id.toString() === selectedContactId);
+    if (selectedContactId && !contact) {
+      const selectedContact = contacts.find((c) => c.id.toString() === selectedContactId);
       if (selectedContact) {
         form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
         form.setValue("clientEmail", selectedContact.primaryEmail);
@@ -143,7 +156,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId }: QuoteFor
         form.setValue("clientAddress", selectedContact.primaryAddress);
       }
     }
-  }, [selectedContactId, contacts, form]);
+  }, [selectedContactId, contacts, form, contact]);
 
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
