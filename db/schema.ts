@@ -34,10 +34,18 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const categories = pgTable("categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  category: text("category").notNull(),
+  categoryId: integer("category_id").references(() => categories.id).notNull(),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -75,6 +83,17 @@ export const usersRelations = relations(users, ({ many }) => ({
   quotes: many(quotes),
 }));
 
+export const categoriesRelations = relations(categories, ({ many }) => ({
+  products: many(products),
+}));
+
+export const productsRelations = relations(products, ({ one }) => ({
+  category: one(categories, {
+    fields: [products.categoryId],
+    references: [categories.id],
+  }),
+}));
+
 export const quotesRelations = relations(quotes, ({ one }) => ({
   user: one(users, {
     fields: [quotes.userId],
@@ -95,6 +114,8 @@ export const insertTemplateSchema = createInsertSchema(templates);
 export const selectTemplateSchema = createSelectSchema(templates);
 export const insertQuoteSchema = createInsertSchema(quotes);
 export const selectQuoteSchema = createSelectSchema(quotes);
+export const insertCategorySchema = createInsertSchema(categories);
+export const selectCategorySchema = createSelectSchema(categories);
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -105,3 +126,5 @@ export type Template = typeof templates.$inferSelect;
 export type NewTemplate = typeof templates.$inferInsert;
 export type Quote = typeof quotes.$inferSelect;
 export type NewQuote = typeof quotes.$inferInsert;
+export type Category = typeof categories.$inferSelect;
+export type NewCategory = typeof categories.$inferInsert;
