@@ -64,7 +64,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       categoryId: product?.categoryId?.toString() || "",
       basePrice: product?.basePrice?.toString() || "",
       cost: product?.cost?.toString() || "",
-      unit: product?.unit || "Square Foot",
+      unit: (product?.unit as ProductFormData["unit"]) || "Square Foot",
       isActive: product?.isActive ?? true,
     },
   });
@@ -151,8 +151,11 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category: any) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
+                  {categories.map((category: { id: number; name: string }) => (
+                    <SelectItem 
+                      key={category.id} 
+                      value={category.id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
