@@ -568,5 +568,51 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Quote Routes
+  app.post("/api/quotes", requireAuth, async (req, res) => {
+    try {
+      const { categoryId, templateId, items, total, status, customerInfo } = req.body;
+
+      // Validate quote data
+      if (!categoryId || !templateId) {
+        return res.status(400).json({ message: "Category and template are required" });
+      }
+
+      const [quote] = await db.insert(quotes)
+        .values({
+          categoryId,
+          templateId,
+          items,
+          total,
+          status: status || QuoteStatus.DRAFT,
+          customerInfo,
+          userId: req.user.id,
+        })
+        .returning();
+
+      res.json(quote);
+    } catch (error) {
+      console.error('Error creating quote:', error);
+      res.status(500).json({ message: "Server error creating quote" });
+    }
+  });
+
+  app.get("/api/quotes", requireAuth, async (req, res) => {
+    try {
+      const userQuotes = await db.query.quotes.findMany({
+        where: eq(quotes.userId, req.user.id),
+        with: {
+          category: true,
+          template: true,
+        },
+        orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
+      });
+      res.json(userQuotes);
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+      res.status(500).json({ message: "Server error fetching quotes" });
+    }
+  });
+
   return httpServer;
 }
