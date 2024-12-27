@@ -35,7 +35,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { QuoteStatus } from "@db/schema";
-import { Plus, MoreVertical } from "lucide-react";
+import { Plus, MoreVertical, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export function Quotes() {
@@ -82,6 +82,72 @@ export function Quotes() {
     }
   };
 
+  const handleExportPDF = async (quote: any) => {
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/export/pdf`, {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-${quote.number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Success",
+        description: "Quote exported to PDF successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const response = await fetch('/api/quotes/export/csv', {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'quotes.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Success",
+        description: "Quotes exported to CSV successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -92,19 +158,26 @@ export function Quotes() {
           </p>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> New Quote
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Quote</DialogTitle>
-            </DialogHeader>
-            <QuoteForm onSuccess={() => setOpen(false)} user={user} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" />
+            Export All (CSV)
+          </Button>
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" /> New Quote
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Create New Quote</DialogTitle>
+              </DialogHeader>
+              <QuoteForm onSuccess={() => setOpen(false)} user={user} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="border rounded-lg">
@@ -118,7 +191,7 @@ export function Quotes() {
               <TableHead>Down Payment</TableHead>
               <TableHead>Remaining</TableHead>
               <TableHead>Created</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -138,43 +211,53 @@ export function Quotes() {
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <DropdownMenuItem
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              setEditQuote(quote);
-                            }}
-                          >
-                            Edit
-                          </DropdownMenuItem>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                          <DialogHeader>
-                            <DialogTitle>Edit Quote</DialogTitle>
-                          </DialogHeader>
-                          <QuoteForm
-                            quote={editQuote}
-                            onSuccess={() => setEditQuote(null)}
-                            user={user}
-                          />
-                        </DialogContent>
-                      </Dialog>
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onSelect={() => setDeleteQuote(quote)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleExportPDF(quote)}
+                      title="Export as PDF"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <DropdownMenuItem
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                setEditQuote(quote);
+                              }}
+                            >
+                              Edit
+                            </DropdownMenuItem>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Edit Quote</DialogTitle>
+                            </DialogHeader>
+                            <QuoteForm
+                              quote={editQuote}
+                              onSuccess={() => setEditQuote(null)}
+                              user={user}
+                            />
+                          </DialogContent>
+                        </Dialog>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onSelect={() => setDeleteQuote(quote)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

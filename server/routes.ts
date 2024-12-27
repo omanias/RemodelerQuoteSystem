@@ -10,6 +10,9 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import PDFDocument from "pdfkit";
+import { createObjectCsvWriter } from "csv-writer";
+import { Readable } from "stream";
 
 const scryptAsync = promisify(scrypt);
 
@@ -861,6 +864,147 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Error bulk updating permissions:', error);
       res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Export quote as PDF
+  app.get("/api/quotes/:id/export/pdf", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const quote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, parseInt(id)),
+        with: {
+          category: true,
+          template: true,
+        },
+      });
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      const doc = new PDFDocument();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=quote-${quote.number}.pdf`);
+      doc.pipe(res);
+
+      // Add company header
+      doc.fontSize(20).text('QuoteBuilder', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(16).text(`Quote #${quote.number}`, { align: 'center' });
+      doc.moveDown();
+
+      // Add quote details
+      doc.fontSize(12);
+      doc.text(`Date: ${new Date(quote.createdAt).toLocaleDateString()}`);
+      doc.text(`Status: ${quote.status}`);
+      doc.moveDown();
+
+      // Client information
+      doc.fontSize(14).text('Client Information');
+      doc.fontSize(12);
+      doc.text(`Name: ${quote.clientName}`);
+      doc.text(`Email: ${quote.clientEmail}`);
+      if (quote.clientPhone) doc.text(`Phone: ${quote.clientPhone}`);
+      if (quote.clientAddress) doc.text(`Address: ${quote.clientAddress}`);
+      doc.moveDown();
+
+      // Products
+      doc.fontSize(14).text('Products');
+      doc.fontSize(12);
+      const products = quote.content.products;
+      products.forEach((product: any) => {
+        doc.text(`${product.name} - ${product.quantity} x $${product.price} = $${product.quantity * product.price}`);
+      });
+      doc.moveDown();
+
+      // Financial summary
+      doc.fontSize(14).text('Summary');
+      doc.fontSize(12);
+      doc.text(`Subtotal: $${quote.subtotal}`);
+      if (quote.discountValue) {
+        doc.text(`Discount: ${quote.discountType === 'percentage' ? quote.discountValue + '%' : '$' + quote.discountValue}`);
+      }
+      if (quote.taxRate) {
+        doc.text(`Tax Rate: ${quote.taxRate}%`);
+      }
+      doc.text(`Total: $${quote.total}`);
+      if (quote.downPaymentValue) {
+        doc.text(`Down Payment: ${quote.downPaymentType === 'percentage' ? quote.downPaymentValue + '%' : '$' + quote.downPaymentValue}`);
+        doc.text(`Remaining Balance: $${quote.remainingBalance}`);
+      }
+      doc.moveDown();
+
+      // Notes
+      if (quote.notes) {
+        doc.fontSize(14).text('Notes');
+        doc.fontSize(12).text(quote.notes);
+      }
+
+      doc.end();
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
+
+  // Export quotes as CSV
+  app.get("/api/quotes/export/csv", requireAuth, async (req, res) => {
+    try {
+      const quotes = await db.query.quotes.findMany({
+        where: eq(quotes.userId, req.user.id),
+        with: {
+          category: true,
+          template: true,
+        },
+        orderBy: (quotes, { desc }) => [desc(quotes.createdAt)],
+      });
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=quotes.csv');
+
+      const csvWriter = createObjectCsvWriter({
+        path: 'stdout',
+        header: [
+          { id: 'number', title: 'Quote Number' },
+          { id: 'clientName', title: 'Client Name' },
+          { id: 'clientEmail', title: 'Client Email' },
+          { id: 'status', title: 'Status' },
+          { id: 'total', title: 'Total' },
+          { id: 'category', title: 'Category' },
+          { id: 'createdAt', title: 'Created At' }
+        ]
+      });
+
+      const records = quotes.map(quote => ({
+        number: quote.number,
+        clientName: quote.clientName,
+        clientEmail: quote.clientEmail,
+        status: quote.status,
+        total: quote.total,
+        category: quote.category.name,
+        createdAt: new Date(quote.createdAt).toLocaleDateString()
+      }));
+
+      // Write to a buffer first since we're using stdout
+      const chunks: any[] = [];
+      const writableStream = new Readable();
+      writableStream._read = () => {};
+
+      await csvWriter.writeRecords(records)
+        .then(() => {
+          writableStream.push(null);
+        });
+
+      writableStream.on('data', chunk => chunks.push(chunk));
+      writableStream.on('end', () => {
+        const result = Buffer.concat(chunks).toString();
+        res.send(result);
+      });
+
+    } catch (error) {
+      console.error('Error generating CSV:', error);
+      res.status(500).json({ message: "Error generating CSV" });
     }
   });
 
