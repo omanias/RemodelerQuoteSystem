@@ -1,7 +1,7 @@
 import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
-import { users, quotes, products, templates, UserRole, QuoteStatus } from "@db/schema";
+import { users, quotes, products, templates, UserRole, QuoteStatus, UserStatus } from "@db/schema";
 import { eq, ilike } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -91,6 +91,7 @@ export function registerRoutes(app: Express) {
           password: hashedPassword,
           name: "Admin User",
           role: UserRole.ADMIN,
+          status: UserStatus.ACTIVE,
         })
         .returning();
 
@@ -107,7 +108,8 @@ export function registerRoutes(app: Express) {
         id: user.id, 
         email: user.email, 
         name: user.name, 
-        role: user.role 
+        role: user.role,
+        status: user.status
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -123,6 +125,86 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/auth/user", requireAuth, async (req, res) => {
     res.json(req.user);
+  });
+
+  // User Management Routes
+  app.get("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const allUsers = await db.query.users.findMany({
+        orderBy: (users, { asc }) => [asc(users.name)],
+      });
+
+      res.json(allUsers.map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        status: u.status
+      })));
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { email, password, name, role } = req.body;
+      const hashedPassword = await crypto.hash(password);
+      const [user] = await db.insert(users)
+        .values({
+          email,
+          password: hashedPassword,
+          name,
+          role,
+          status: UserStatus.ACTIVE,
+        })
+        .returning();
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status
+      });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { email, name, role, status } = req.body;
+      const [user] = await db.update(users)
+        .set({ email, name, role, status })
+        .where(eq(users.id, parseInt(id)))
+        .returning();
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status
+      });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(users).where(eq(users.id, parseInt(id)));
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
   });
 
   return httpServer;
