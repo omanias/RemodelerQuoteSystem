@@ -22,6 +22,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { Plus, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
+const variationSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  price: z.string().min(1, "Price is required"),
+});
 
 const productFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -30,9 +38,11 @@ const productFormSchema = z.object({
   cost: z.string().min(1, "Cost is required"),
   unit: z.enum(["Square Foot", "Linear Foot", "Unit", "Hours", "Days", "Piece"]),
   isActive: z.boolean(),
+  variations: z.array(variationSchema).optional(),
 });
 
 type ProductFormData = z.infer<typeof productFormSchema>;
+type VariationData = z.infer<typeof variationSchema>;
 
 interface Category {
   id: number;
@@ -49,12 +59,16 @@ interface ProductFormProps {
     cost: number;
     unit: string;
     isActive: boolean;
+    variations?: VariationData[];
   };
   onSuccess?: () => void;
 }
 
 export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [variations, setVariations] = useState<VariationData[]>(
+    product?.variations || []
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -71,6 +85,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       cost: product?.cost?.toString() || "",
       unit: (product?.unit as ProductFormData["unit"]) || "Square Foot",
       isActive: product?.isActive ?? true,
+      variations: product?.variations || [],
     },
   });
 
@@ -86,6 +101,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
             categoryId: parseInt(data.categoryId),
             basePrice: parseFloat(data.basePrice),
             cost: parseFloat(data.cost),
+            variations,
           }),
           credentials: "include",
         }
@@ -101,7 +117,9 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({
         title: `Product ${product ? "updated" : "created"} successfully`,
-        description: `The product has been ${product ? "updated" : "created"} in the system.`,
+        description: `The product has been ${
+          product ? "updated" : "created"
+        } in the system.`,
       });
       onSuccess?.();
     },
@@ -121,6 +139,20 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const addVariation = () => {
+    setVariations([...variations, { name: "", price: "" }]);
+  };
+
+  const removeVariation = (index: number) => {
+    setVariations(variations.filter((_, i) => i !== index));
+  };
+
+  const updateVariation = (index: number, field: keyof VariationData, value: string) => {
+    const newVariations = [...variations];
+    newVariations[index] = { ...newVariations[index], [field]: value };
+    setVariations(newVariations);
   };
 
   return (
@@ -146,21 +178,19 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Category</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-              >
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a category">
-                      {categories.find(c => c.id.toString() === field.value)?.name || "Select a category"}
+                      {categories.find((c) => c.id.toString() === field.value)
+                        ?.name || "Select a category"}
                     </SelectValue>
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem 
-                      key={category.id} 
+                    <SelectItem
+                      key={category.id}
                       value={category.id.toString()}
                     >
                       {category.name}
@@ -219,10 +249,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Unit</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-              >
+              <Select onValueChange={field.onChange} value={field.value}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a unit" />
@@ -251,14 +278,61 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                 <FormLabel>Active</FormLabel>
               </div>
               <FormControl>
-                <Switch
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
               </FormControl>
             </FormItem>
           )}
         />
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <Label>Variations</Label>
+            <Button type="button" variant="outline" size="sm" onClick={addVariation}>
+              <Plus className="h-4 w-4 mr-2" /> Add Variation
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {variations.map((variation, index) => (
+              <div
+                key={index}
+                className="flex items-end gap-2 border rounded-md p-2"
+              >
+                <div className="flex-1">
+                  <Label>Name</Label>
+                  <Input
+                    value={variation.name}
+                    onChange={(e) =>
+                      updateVariation(index, "name", e.target.value)
+                    }
+                    placeholder="Variation name"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Label>Price</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={variation.price}
+                    onChange={(e) =>
+                      updateVariation(index, "price", e.target.value)
+                    }
+                    placeholder="Variation price"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="mb-[2px]"
+                  onClick={() => removeVariation(index)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <Button type="submit" disabled={isLoading}>
           {isLoading ? "Saving..." : product ? "Update Product" : "Create Product"}
