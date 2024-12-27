@@ -1,6 +1,7 @@
 import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 // Enums
 export const UserRole = {
@@ -20,6 +21,42 @@ export const QuoteStatus = {
   ACCEPTED: 'ACCEPTED',
   REJECTED: 'REJECTED',
   REVISED: 'REVISED'
+} as const;
+
+// New enums for contacts
+export const LeadStatus = {
+  NEW: 'NEW',
+  CONTACTED: 'CONTACTED',
+  QUOTE_SENT: 'QUOTE_SENT',
+  PROJECT_STARTED: 'PROJECT_STARTED',
+  COMPLETED: 'COMPLETED',
+  LOST: 'LOST'
+} as const;
+
+export const LeadSource = {
+  WEBSITE: 'WEBSITE',
+  REFERRAL: 'REFERRAL',
+  SOCIAL_MEDIA: 'SOCIAL_MEDIA',
+  HOME_SHOW: 'HOME_SHOW',
+  ADVERTISEMENT: 'ADVERTISEMENT',
+  OTHER: 'OTHER'
+} as const;
+
+export const PropertyType = {
+  SINGLE_FAMILY: 'SINGLE_FAMILY',
+  MULTI_FAMILY: 'MULTI_FAMILY',
+  COMMERCIAL: 'COMMERCIAL'
+} as const;
+
+export const ContactFieldType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER',
+  DATE: 'DATE',
+  DROPDOWN: 'DROPDOWN',
+  MULTI_SELECT: 'MULTI_SELECT',
+  CHECKBOX: 'CHECKBOX',
+  CURRENCY: 'CURRENCY',
+  FILE: 'FILE'
 } as const;
 
 export const PaymentMethod = {
@@ -89,7 +126,6 @@ export const templates = pgTable("templates", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Table for storing table-specific permissions
 export const tablePermissions = pgTable("table_permissions", {
   id: serial("id").primaryKey(),
   tableName: text("table_name").notNull(),
@@ -101,6 +137,105 @@ export const tablePermissions = pgTable("table_permissions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// New tables for contact management
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  profileImage: text("profile_image"),
+  leadStatus: text("lead_status").notNull().$type<keyof typeof LeadStatus>(),
+  leadSource: text("lead_source").notNull().$type<keyof typeof LeadSource>(),
+  assignedUserId: integer("assigned_user_id").references(() => users.id),
+  propertyType: text("property_type").notNull().$type<keyof typeof PropertyType>(),
+
+  // Contact Details
+  primaryEmail: text("primary_email").notNull(),
+  secondaryEmail: text("secondary_email"),
+  primaryPhone: text("primary_phone").notNull(),
+  mobilePhone: text("mobile_phone"),
+  preferredContact: text("preferred_contact"),
+  bestTimeToContact: text("best_time_to_contact"),
+  communicationPreferences: jsonb("communication_preferences"),
+
+  // Property Information
+  primaryAddress: text("primary_address").notNull(),
+  projectAddress: text("project_address"),
+  propertyAge: integer("property_age"),
+  propertyStyle: text("property_style"),
+  squareFootage: integer("square_footage"),
+  numberOfStories: integer("number_of_stories"),
+  previousRenovations: jsonb("previous_renovations"),
+  propertyNotes: text("property_notes"),
+
+  // Project Interest
+  categoryId: integer("category_id").references(() => categories.id),
+  projectTimeline: text("project_timeline"),
+  budgetRangeMin: decimal("budget_range_min", { precision: 10, scale: 2 }),
+  budgetRangeMax: decimal("budget_range_max", { precision: 10, scale: 2 }),
+  projectPriority: text("project_priority"),
+  productInterests: text("product_interests").notNull(), // Store as JSON string
+  financingInterest: boolean("financing_interest").default(false),
+
+  // Additional Fields
+  customFields: jsonb("custom_fields"),
+  tags: text("tags").notNull(), // Store as JSON string
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contactCustomFields = pgTable("contact_custom_fields", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  type: text("type").notNull().$type<keyof typeof ContactFieldType>(),
+  required: boolean("required").default(false),
+  options: text("options"), // Store as JSON string
+  defaultValue: text("default_value"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contactNotes = pgTable("contact_notes", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  content: text("content").notNull(),
+  type: text("type").notNull(), 
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contactTasks = pgTable("contact_tasks", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const contactDocuments = pgTable("contact_documents", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull(),
+  url: text("url").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const contactPhotos = pgTable("contact_photos", {
+  id: serial("id").primaryKey(),
+  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  type: text("type").notNull(), 
+  url: text("url").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Update quotes table to include contactId
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
   number: text("number").notNull().unique(),
@@ -125,6 +260,7 @@ export const quotes = pgTable("quotes", {
   userId: integer("user_id").references(() => users.id).notNull(),
   templateId: integer("template_id").references(() => templates.id).notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
+  contactId: integer("contact_id").references(() => contacts.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -161,6 +297,62 @@ export const quotesRelations = relations(quotes, ({ one }) => ({
     fields: [quotes.categoryId],
     references: [categories.id],
   }),
+  contact: one(contacts, {
+    fields: [quotes.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  assignedUser: one(users, {
+    fields: [contacts.assignedUserId],
+    references: [users.id],
+  }),
+  category: one(categories, {
+    fields: [contacts.categoryId],
+    references: [categories.id],
+  }),
+  quotes: many(quotes),
+  notes: many(contactNotes),
+  tasks: many(contactTasks),
+  documents: many(contactDocuments),
+  photos: many(contactPhotos),
+}));
+
+export const contactNotesRelations = relations(contactNotes, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [contactNotes.contactId],
+    references: [contacts.id],
+  }),
+  user: one(users, {
+    fields: [contactNotes.userId],
+    references: [users.id],
+  }),
+}));
+
+export const contactTasksRelations = relations(contactTasks, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [contactTasks.contactId],
+    references: [contacts.id],
+  }),
+  user: one(users, {
+    fields: [contactTasks.userId],
+    references: [users.id],
+  }),
+}));
+
+export const contactDocumentsRelations = relations(contactDocuments, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [contactDocuments.contactId],
+    references: [contacts.id],
+  }),
+}));
+
+export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [contactPhotos.contactId],
+    references: [contacts.id],
+  }),
 }));
 
 export const templatesRelations = relations(templates, ({ one }) => ({
@@ -184,6 +376,19 @@ export const selectCategorySchema = createSelectSchema(categories);
 export const insertTablePermissionSchema = createInsertSchema(tablePermissions);
 export const selectTablePermissionSchema = createSelectSchema(tablePermissions);
 
+export const insertContactSchema = createInsertSchema(contacts);
+export const selectContactSchema = createSelectSchema(contacts);
+export const insertContactNoteSchema = createInsertSchema(contactNotes);
+export const selectContactNoteSchema = createSelectSchema(contactNotes);
+export const insertContactTaskSchema = createInsertSchema(contactTasks);
+export const selectContactTaskSchema = createSelectSchema(contactTasks);
+export const insertContactDocumentSchema = createInsertSchema(contactDocuments);
+export const selectContactDocumentSchema = createSelectSchema(contactDocuments);
+export const insertContactPhotoSchema = createInsertSchema(contactPhotos);
+export const selectContactPhotoSchema = createSelectSchema(contactPhotos);
+export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFields);
+export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -197,3 +402,16 @@ export type Category = typeof categories.$inferSelect;
 export type NewCategory = typeof categories.$inferInsert;
 export type TablePermission = typeof tablePermissions.$inferSelect;
 export type NewTablePermission = typeof tablePermissions.$inferInsert;
+
+export type Contact = typeof contacts.$inferSelect;
+export type NewContact = typeof contacts.$inferInsert;
+export type ContactNote = typeof contactNotes.$inferSelect;
+export type NewContactNote = typeof contactNotes.$inferInsert;
+export type ContactTask = typeof contactTasks.$inferSelect;
+export type NewContactTask = typeof contactTasks.$inferInsert;
+export type ContactDocument = typeof contactDocuments.$inferSelect;
+export type NewContactDocument = typeof contactDocuments.$inferInsert;
+export type ContactPhoto = typeof contactPhotos.$inferSelect;
+export type NewContactPhoto = typeof contactPhotos.$inferInsert;
+export type ContactCustomField = typeof contactCustomFields.$inferSelect;
+export type NewContactCustomField = typeof contactCustomFields.$inferInsert;

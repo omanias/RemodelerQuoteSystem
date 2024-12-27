@@ -1,0 +1,208 @@
+Create a Contact Management Hub specifically designed for home services and remodeling companies, integrating with the existing application categories and tables. The system should include:
+
+Contact List View:
+
+
+Advanced filtering system with:
+
+Quick filters
+Custom filter builder
+Saved filters
+Filter combinations (AND/OR logic)
+
+
+Table columns:
+
+Customizable column display
+Column sorting
+Column reordering
+Column width adjustment
+
+
+Bulk actions:
+
+Select multiple contacts
+Bulk edit properties
+Bulk delete
+Export selected
+
+
+
+
+Contact Profile Fields:
+Basic Information:
+
+
+First Name
+Last Name
+Profile Picture
+Lead Status (New, Contacted, Quote Sent, Project Started, Completed)
+Lead Source (Website, Referral, Social Media, Home Show, etc.)
+Assigned Sales Rep
+Property Type (Single Family, Multi-Family, Commercial)
+
+Contact Details:
+
+Primary Email
+Secondary Email
+Primary Phone
+Mobile Phone
+Preferred Contact Method
+Best Time to Contact
+Communication Preferences
+
+Property Information:
+
+Primary Address
+Project Address (if different)
+Property Age
+Property Style
+Square Footage
+Number of Stories
+Previous Renovations
+Property Notes
+
+Project Interest:
+
+Service Category (relationship to existing categories table)
+Project Timeline
+Budget Range
+Project Priority
+Specific Products Interest
+Financing Interest (Yes/No)
+
+Custom Fields:
+
+Field creation interface
+Field types:
+
+Text
+Number
+Date
+Dropdown
+Multi-select
+Checkbox
+Currency
+File attachment
+
+
+
+
+Contact Detail Page:
+
+
+Full-width layout (not modal)
+Tabbed interface:
+
+Overview
+Project History
+Quotes
+Documents
+Notes
+Tasks
+Photos
+Communications
+
+
+Sidebar with quick info
+Edit-in-place capability
+Project timeline
+Before/After photos
+Document management
+
+
+Relationship Management:
+
+
+Link to existing tables:
+
+Categories
+Products
+Quotes
+Projects
+Invoices
+
+
+Related contacts (spouse, property manager, etc.)
+Referral tracking
+Project team assignments
+
+
+Filtering System:
+
+
+Filter by:
+
+Any contact field
+Lead status
+Project type
+Budget range
+Timeline
+Location
+Assigned rep
+Quote status
+Last contact
+Service category
+Tags
+
+
+Filter operators:
+
+Contains
+Equals
+Does not equal
+Greater than
+Less than
+Between
+Is empty
+Is not empty
+Within radius (for location)
+
+
+
+
+Additional Features:
+
+
+Follow-up scheduler
+Appointment tracking
+Site visit notes
+Measurement records
+Material preferences
+Project phase tracking
+Warranty information
+Maintenance schedules
+Before/after photo management
+Document templates
+Quote history
+Communication logs
+
+URL Structure:
+Copy/contacts (list view)
+/contacts/new (create new)
+/contacts/:id (detail view)
+/contacts/:id/edit (edit view)
+/contacts/:id/quotes (quotes history)
+/contacts/:id/projects (projects history)
+/contacts/:id/documents (document management)
+/contacts/import (import interface)
+/contacts/settings (column/field settings)
+
+Integration Points:
+
+
+Link to existing quotes system
+Product catalog integration
+Calendar/scheduling system
+Document generation
+Photo gallery
+Mobile optimization for field visits
+
+The interface should focus on quick access to project-related information and seamless integration with existing quote and product systems while maintaining a clean, professional appearance.
+Data Migration:
+
+Import from existing contact systems
+CSV import/export
+Field mapping tool
+Data validation rules
+Duplicate detection

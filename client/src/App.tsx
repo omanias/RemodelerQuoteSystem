@@ -15,6 +15,7 @@ import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
+import { Contacts } from "@/pages/Contacts";
 import { useAuth } from "@/hooks/useAuth";
 
 function App() {
@@ -43,6 +44,7 @@ function App() {
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/quotes" component={Quotes} />
+          <Route path="/contacts" component={Contacts} />
           <Route path="/categories" component={Categories} />
           <Route path="/products" component={Products} />
           <Route path="/templates" component={Templates} />

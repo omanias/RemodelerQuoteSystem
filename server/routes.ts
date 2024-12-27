@@ -2,8 +2,9 @@ import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
 import { 
-  users, quotes, products, templates, permissions, rolePermissions, tablePermissions,
-  UserRole, QuoteStatus, UserStatus, categories, PermissionType 
+  users, quotes, products, templates, tablePermissions,
+  UserRole, QuoteStatus, UserStatus, categories, PermissionType, contacts, contactNotes, contactTasks, contactDocuments, contactPhotos, contactCustomFields,
+  insertContactSchema, insertContactCustomFieldSchema
 } from "@db/schema";
 import { eq, ilike, desc, and } from "drizzle-orm";
 import session from "express-session";
@@ -923,7 +924,7 @@ export function registerRoutes(app: Express) {
       doc.fontSize(12);
       doc.text(`Subtotal: $${quote.subtotal}`);
       if (quote.discountValue) {
-        doc.text(`Discount: ${quote.discountType === 'percentage' ? quote.discountValue + '%' : '$' + quote.discountValue}`);
+        doc.text(`Discount: ${quote.discountType === 'percentage' ? quote.discountValue + '%' : '$'+ quote.discountValue}`);
       }
       if (quote.taxRate) {
         doc.text(`Tax Rate: ${quote.taxRate}%`);
@@ -1005,6 +1006,175 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Error generating CSV:', error);
       res.status(500).json({ message: "Error generating CSV" });
+    }
+  });
+
+  // Contact Routes
+  app.get("/api/contacts", requireAuth, async (req, res) => {
+    try {
+      const allContacts = await db.query.contacts.findMany({
+        with: {
+          assignedUser: true,
+          category: true,
+        },
+        orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
+      });
+      res.json(allContacts);
+    } catch (error) {
+      console.error('Error fetching contacts:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/contacts", requireAuth, async (req, res) => {
+    try {
+      const result = insertContactSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid input", 
+          errors: result.error.issues 
+        });
+      }
+
+      // Convert arrays to JSON strings
+      const contactData = {
+        ...result.data,
+        productInterests: JSON.stringify(result.data.productInterests || []),
+        tags: JSON.stringify(result.data.tags || []),
+      };
+
+      const [contact] = await db.insert(contacts)
+        .values(contactData)
+        .returning();
+
+      res.json(contact);
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/contacts/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = insertContactSchema.partial().safeParse(req.body);
+
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid input", 
+          errors: result.error.issues 
+        });
+      }
+
+      // Convert arrays to JSON strings if they exist in the update
+      const updateData = {
+        ...result.data,
+        ...(result.data.productInterests && {
+          productInterests: JSON.stringify(result.data.productInterests)
+        }),
+        ...(result.data.tags && {
+          tags: JSON.stringify(result.data.tags)
+        }),
+      };
+
+      const [contact] = await db.update(contacts)
+        .set(updateData)
+        .where(eq(contacts.id, parseInt(id)))
+        .returning();
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      res.json(contact);
+    } catch (error) {
+      console.error('Error updating contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.delete("/api/contacts/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Check if contact exists
+      const contact = await db.query.contacts.findFirst({
+        where: eq(contacts.id, parseInt(id)),
+      });
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Check if contact has any quotes
+      const quoteWithContact = await db.query.quotes.findFirst({
+        where: eq(quotes.contactId, parseInt(id)),
+      });
+
+      if (quoteWithContact) {
+        return res.status(400).json({ 
+          message: "Cannot delete contact with associated quotes" 
+        });
+      }
+
+      // Delete related records first
+      await db.delete(contactNotes)
+        .where(eq(contactNotes.contactId, parseInt(id)));
+      await db.delete(contactTasks)
+        .where(eq(contactTasks.contactId, parseInt(id)));
+      await db.delete(contactDocuments)
+        .where(eq(contactDocuments.contactId, parseInt(id)));
+      await db.delete(contactPhotos)
+        .where(eq(contactPhotos.contactId, parseInt(id)));
+
+      // Delete the contact
+      await db.delete(contacts)
+        .where(eq(contacts.id, parseInt(id)));
+
+      res.json({ message: "Contact deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Custom fields management
+  app.get("/api/contact-custom-fields", requireAuth, async (req, res) => {
+    try {
+      const fields = await db.query.contactCustomFields.findMany({
+        orderBy: (fields, { asc }) => [asc(fields.name)],
+      });
+      res.json(fields);
+    } catch (error) {
+      console.error('Error fetching custom fields:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/contact-custom-fields", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+    try {
+      const result = insertContactCustomFieldSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid input", 
+          errors: result.error.issues 
+        });
+      }
+
+      // Convert options array to JSON string if present
+      const fieldData = {
+        ...result.data,
+        options: result.data.options ? JSON.stringify(result.data.options) : null,
+      };
+
+      const [field] = await db.insert(contactCustomFields)
+        .values(fieldData)
+        .returning();
+
+      res.json(field);
+    } catch (error) {
+      console.error('Error creating custom field:', error);
+      res.status(500).json({ message: "Server error" });
     }
   });
 
