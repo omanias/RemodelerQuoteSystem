@@ -201,22 +201,21 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
 
-      // Get default template
-      const defaultTemplate = templates.find((t: any) => t.isDefault) || templates[0];
-      if (!defaultTemplate) {
-        throw new Error("No template available");
-      }
-
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...data,
           categoryId: parseInt(data.categoryId),
           userId: user?.id,
-          templateId: parseInt(data.templateId), // Parse templateId to integer
+          templateId: parseInt(data.templateId || "0"),
+          customerInfo: {
+            name: data.clientName,
+            email: data.clientEmail,
+            phone: data.clientPhone,
+            address: data.clientAddress,
+          },
           subtotal: calculateSubtotal(),
           total,
           downPaymentValue: downPayment,
