@@ -20,9 +20,22 @@ import {
 } from "@/components/ui/dialog";
 import { Plus } from "lucide-react";
 
+interface Template {
+  id: number;
+  name: string;
+  category: {
+    id: number;
+    name: string;
+  };
+  termsAndConditions?: string;
+  imageUrls?: string[];
+  isDefault: boolean;
+  updatedAt: string;
+}
+
 export function Templates() {
   const [open, setOpen] = useState(false);
-  const { data: templates } = useQuery({
+  const { data: templates = [] } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
   });
 
@@ -65,10 +78,10 @@ export function Templates() {
             {templates?.map((template) => (
               <TableRow key={template.id}>
                 <TableCell>{template.name}</TableCell>
-                <TableCell>{template.category}</TableCell>
+                <TableCell>{template.category?.name || 'No Category'}</TableCell>
                 <TableCell>
                   {template.isDefault && (
-                    <Badge variant="success">Default</Badge>
+                    <Badge variant="default">Default</Badge>
                   )}
                 </TableCell>
                 <TableCell>
