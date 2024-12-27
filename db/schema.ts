@@ -42,10 +42,10 @@ export const ProductUnit = {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
-  password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role").notNull().$type<keyof typeof UserRole>(),
-  status: text("status").notNull().$type<keyof typeof UserStatus>().default(UserStatus.ACTIVE),
+  status: text("status").notNull().$type<keyof typeof UserStatus>().default('active'),
+  password: text("password").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -74,8 +74,10 @@ export const products = pgTable("products", {
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  category: text("category").notNull(),
+  categoryId: integer("category_id").references(() => categories.id).notNull(),
   content: jsonb("content").notNull(),
+  termsAndConditions: text("terms_and_conditions"),
+  imageUrls: jsonb("image_urls"),
   isDefault: boolean("is_default").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -127,6 +129,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
   quotes: many(quotes),
+  templates: many(templates),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -147,6 +150,13 @@ export const quotesRelations = relations(quotes, ({ one }) => ({
   }),
   category: one(categories, {
     fields: [quotes.categoryId],
+    references: [categories.id],
+  }),
+}));
+
+export const templatesRelations = relations(templates, ({ one }) => ({
+  category: one(categories, {
+    fields: [templates.categoryId],
     references: [categories.id],
   }),
 }));
