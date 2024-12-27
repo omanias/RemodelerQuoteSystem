@@ -30,6 +30,7 @@ interface Product {
   name: string;
   basePrice: number;
   unit: string;
+  categoryId: number; // Added categoryId to Product interface
   variations?: Array<{ name: string; price: string }>;
 }
 
@@ -75,7 +76,8 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
     unitPrice: number;
   }>>([]);
 
-  const { data: categories = [], isLoading: isLoadingCategories } = useQuery<Category[]>({
+  // Fetch all categories
+  const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
     queryKey: ["/api/categories"],
   });
 
@@ -99,10 +101,13 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
   });
 
   const selectedCategoryId = form.watch("categoryId");
-  const selectedCategory = categories.find(c => c.id.toString() === selectedCategoryId);
 
-  const { data: categoryProducts = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: ["/api/categories", selectedCategoryId, "products"],
+  // Fetch products for selected category
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery({
+    queryKey: ["/api/products"],
+    select: (data) => data.filter((product: Product) => 
+      product.categoryId.toString() === selectedCategoryId
+    ),
     enabled: !!selectedCategoryId,
   });
 
@@ -349,11 +354,11 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
                 <h3 className="font-semibold">Products</h3>
                 {isLoadingProducts ? (
                   <div className="text-center py-4">Loading products...</div>
-                ) : categoryProducts.length === 0 ? (
+                ) : products.length === 0 ? (
                   <div className="text-center py-4">No products found in this category</div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {categoryProducts.map((product) => (
+                    {products.map((product) => (
                       <Card key={product.id}>
                         <CardContent className="pt-6">
                           <div className="flex justify-between items-start">
@@ -400,7 +405,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => {
-                        const product = categoryProducts.find(p => p.id === item.productId);
+                        const product = products.find(p => p.id === item.productId);
                         return (
                           <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                             <div className="flex-1">
