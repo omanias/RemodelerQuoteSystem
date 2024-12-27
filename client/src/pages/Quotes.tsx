@@ -96,7 +96,7 @@ export function Quotes() {
               <Plus className="mr-2 h-4 w-4" /> New Quote
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Quote</DialogTitle>
             </DialogHeader>
@@ -154,7 +154,7 @@ export function Quotes() {
                             Edit
                           </DropdownMenuItem>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl">
+                        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>Edit Quote</DialogTitle>
                           </DialogHeader>

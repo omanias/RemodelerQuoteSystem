@@ -112,7 +112,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
 
     if (!discountValue) return 0;
 
-    return discountType === "percentage" 
+    return discountType === "percentage"
       ? (subtotal * discountValue) / 100
       : discountValue;
   };
@@ -140,7 +140,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
 
     if (!downPaymentValue) return 0;
 
-    return downPaymentType === "percentage" 
+    return downPaymentType === "percentage"
       ? (total * downPaymentValue) / 100
       : downPaymentValue;
   };
@@ -151,7 +151,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
 
   const addProduct = (product: Product, variationPrice?: string) => {
     setSelectedProducts(prev => [
-      ...prev, 
+      ...prev,
       {
         productId: product.id,
         quantity: 1,
@@ -162,8 +162,8 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
   };
 
   const updateQuantity = (index: number, value: number) => {
-    setSelectedProducts(prev => 
-      prev.map((item, i) => 
+    setSelectedProducts(prev =>
+      prev.map((item, i) =>
         i === index ? { ...item, quantity: Math.max(1, value) } : item
       )
     );
@@ -330,7 +330,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
               <div className="space-y-4">
                 <h3 className="font-semibold">Products</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  {category.products.map((product) => (
+                  {category.products?.map((product) => (
                     <Card key={product.id}>
                       <CardContent className="pt-6">
                         <div className="flex justify-between items-start">
@@ -460,7 +460,7 @@ export function QuoteForm({ onSuccess, user }: QuoteFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Discount Value 
+                  Discount Value
                   {form.watch("discountType") === "percentage" ? " (%)" : " ($)"}
                 </FormLabel>
                 <FormControl>
