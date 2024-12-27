@@ -20,10 +20,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X } from "lucide-react";
+import { Plus, Minus, X, UserPlus } from "lucide-react";
+import { Link } from "wouter";
 
 interface Product {
   id: number;
@@ -48,6 +56,7 @@ interface SelectedProduct {
 }
 
 const quoteFormSchema = z.object({
+  contactId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
   clientEmail: z.string().email("Invalid email address"),
   clientPhone: z.string().optional(),
@@ -87,6 +96,10 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     })) || []
   );
 
+  const { data: contacts = [] } = useQuery({
+    queryKey: ["/api/contacts"],
+  });
+
   const { data: categories = [] } = useQuery({
     queryKey: ["/api/categories"],
   });
@@ -98,6 +111,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
+      contactId: quote?.contactId?.toString() || "",
       clientName: quote?.clientName || "",
       clientEmail: quote?.clientEmail || "",
       clientPhone: quote?.clientPhone || "",
@@ -116,7 +130,20 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     },
   });
 
-  // Add these helper functions for numeric value handling
+  // Add watch for contactId to auto-fill contact details
+  const selectedContactId = form.watch("contactId");
+  useEffect(() => {
+    if (selectedContactId) {
+      const selectedContact = contacts.find((c: any) => c.id.toString() === selectedContactId);
+      if (selectedContact) {
+        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+        form.setValue("clientEmail", selectedContact.primaryEmail);
+        form.setValue("clientPhone", selectedContact.primaryPhone);
+        form.setValue("clientAddress", selectedContact.primaryAddress);
+      }
+    }
+  }, [selectedContactId, contacts, form]);
+
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
     return isNaN(parsed) ? 0 : parsed;
@@ -230,6 +257,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          contactId: parseInt(data.contactId || "0"), // Added contactId
           categoryId: parseInt(data.categoryId),
           templateId: parseInt(data.templateId || "0"),
           customerInfo: {
@@ -278,7 +306,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
         title: "Success",
         description: quote ? "Quote updated successfully" : "Quote created successfully",
       });
-      // Call the onSuccess callback to close the dialog
       onSuccess?.();
     },
     onError: (error: Error) => {
@@ -328,60 +355,100 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
           </Card>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="clientName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Name</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="clientEmail"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Email</FormLabel>
-                <FormControl>
-                  <Input type="email" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="clientPhone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Phone</FormLabel>
-                <FormControl>
-                  <Input type="tel" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="clientAddress"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Address</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+        {/* New Contact Selection Section */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold">Contact Information</h3>
+              <Link href="/contacts/new">
+                <Button variant="outline" size="sm">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Create New Contact
+                </Button>
+              </Link>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="contactId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select Contact</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a contact" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {contacts.map((contact: any) => (
+                        <SelectItem key={contact.id} value={contact.id.toString()}>
+                          {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <FormField
+                control={form.control}
+                name="clientName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="clientEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="clientPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Phone</FormLabel>
+                    <FormControl>
+                      <Input type="tel" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="clientAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Client Address</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         <FormField
           control={form.control}

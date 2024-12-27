@@ -1,7 +1,7 @@
 import { useParams, useLocation } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { LeadStatus, LeadSource, PropertyType } from "@db/schema";
+import { LeadStatus, LeadSource, PropertyType, QuoteStatus } from "@db/schema";
 import { useToast } from "@/hooks/use-toast";
 
 const contactFormSchema = z.object({
@@ -45,8 +45,14 @@ export function ContactDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: contact, isLoading } = useQuery({
+  const { data: contact, isLoading: isLoadingContact } = useQuery({
     queryKey: [`/api/contacts/${id}`],
+    enabled: !!id
+  });
+
+  // Fetch associated quotes for this contact
+  const { data: quotes = [], isLoading: isLoadingQuotes } = useQuery({
+    queryKey: [`/api/contacts/${id}/quotes`],
     enabled: !!id
   });
 
@@ -142,39 +148,49 @@ export function ContactDetail() {
     }
   };
 
-  if (isLoading) {
+  if (isLoadingContact) {
     return <div>Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/contacts">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
-          </h1>
-          <p className="text-muted-foreground">
-            {contact ? contact.primaryEmail : 'Create a new contact'}
-          </p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link href="/contacts">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
+            </h1>
+            <p className="text-muted-foreground">
+              {contact ? contact.primaryEmail : 'Create a new contact'}
+            </p>
+          </div>
         </div>
+        {id && (
+          <Link href={`/quotes/new?contactId=${id}`}>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Quote
+            </Button>
+          </Link>
+        )}
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="project-history">Project History</TabsTrigger>
           <TabsTrigger value="quotes">Quotes</TabsTrigger>
+          <TabsTrigger value="project-history">Project History</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="tasks">Tasks</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4">
+        <TabsContent value="overview">
           <Card>
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>
@@ -395,6 +411,51 @@ export function ContactDetail() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="quotes">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle>Quotes</CardTitle>
+              <Link href={`/quotes/new?contactId=${id}`}>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Quote
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardContent>
+              {isLoadingQuotes ? (
+                <div className="text-center py-4">Loading quotes...</div>
+              ) : quotes.length === 0 ? (
+                <div className="text-center py-4">No quotes available</div>
+              ) : (
+                <div className="space-y-4">
+                  {quotes.map((quote: any) => (
+                    <div
+                      key={quote.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div>
+                        <div className="font-medium">Quote #{quote.number}</div>
+                        <div className="text-sm text-muted-foreground">
+                          Status: {quote.status}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Total: ${parseFloat(quote.total).toFixed(2)}
+                        </div>
+                      </div>
+                      <Link href={`/quotes/${quote.id}`}>
+                        <Button variant="outline" size="sm">
+                          View Quote
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="project-history">
           <Card>
             <CardHeader>
@@ -404,20 +465,6 @@ export function ContactDetail() {
               <div className="space-y-8">
                 {/* Timeline component will go here */}
                 <p className="text-muted-foreground">No project history available</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="quotes">
-          <Card>
-            <CardHeader>
-              <CardTitle>Associated Quotes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Quotes table will go here */}
-                <p className="text-muted-foreground">No quotes available</p>
               </div>
             </CardContent>
           </Card>

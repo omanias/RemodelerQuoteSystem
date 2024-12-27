@@ -576,6 +576,24 @@ export function registerRoutes(app: Express) {
   });
 
   // Quote Routes
+  app.get("/api/contacts/:id/quotes", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const contactQuotes = await db.query.quotes.findMany({
+        where: eq(quotes.contactId, parseInt(id)),
+        with: {
+          category: true,
+          template: true,
+        },
+        orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
+      });
+      res.json(contactQuotes);
+    } catch (error) {
+      console.error('Error fetching contact quotes:', error);
+      res.status(500).json({ message: "Server error fetching contact quotes" });
+    }
+  });
+
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
       const {
@@ -591,7 +609,8 @@ export function registerRoutes(app: Express) {
         taxRate,
         subtotal,
         remainingBalance,
-        notes
+        notes,
+        contactId 
       } = req.body;
 
       console.log('Quote creation request:', {
@@ -599,7 +618,8 @@ export function registerRoutes(app: Express) {
         templateId,
         customerInfo,
         downPaymentValue,
-        total
+        total,
+        contactId 
       });
 
       // Validate quote data
@@ -634,6 +654,7 @@ export function registerRoutes(app: Express) {
           number: quoteNumber,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
+          contactId: contactId ? parseInt(contactId) : undefined, 
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
@@ -691,7 +712,8 @@ export function registerRoutes(app: Express) {
         subtotal,
         remainingBalance,
         notes,
-        status
+        status,
+        contactId 
       } = req.body;
 
       // Parse numeric values with fallbacks
@@ -706,10 +728,11 @@ export function registerRoutes(app: Express) {
         .set({
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
+          contactId: contactId ? parseInt(contactId) : undefined, 
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
-          clientAddress: customerInfo.address || null,
+          clientAddress: customer.address || null,
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
