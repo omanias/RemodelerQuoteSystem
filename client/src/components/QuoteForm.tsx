@@ -151,7 +151,6 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
     const subtotal = calculateSubtotal();
     const discount = calculateDiscount();
     const tax = calculateTax();
-
     return subtotal - discount + tax;
   };
 
@@ -168,7 +167,9 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
   };
 
   const calculateRemainingBalance = () => {
-    return calculateTotal() - calculateDownPayment();
+    const total = calculateTotal();
+    const downPayment = calculateDownPayment();
+    return total - downPayment;
   };
 
   const addProduct = (product: Product, variationPrice?: string) => {
@@ -200,6 +201,7 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
       const total = calculateTotal();
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
+      const subtotal = calculateSubtotal();
 
       const formattedProducts = selectedProducts.map(item => {
         const product = products.find(p => p.id === item.productId);
@@ -229,10 +231,19 @@ export function QuoteForm({ quote, onSuccess, user }: QuoteFormProps) {
             address: data.clientAddress,
           },
           selectedProducts: formattedProducts,
-          subtotal: calculateSubtotal(),
+          subtotal,
           total,
           downPaymentValue: downPayment,
           remainingBalance,
+          content: {
+            products: formattedProducts,
+            calculations: {
+              subtotal,
+              total,
+              downPayment,
+              remainingBalance,
+            },
+          },
         }),
         credentials: "include",
       });

@@ -571,7 +571,16 @@ export function registerRoutes(app: Express) {
   // Quote Routes
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
-      const { categoryId, templateId, customerInfo, selectedProducts = [], total, downPayment = 0 } = req.body;
+      const { 
+        categoryId, 
+        templateId, 
+        customerInfo, 
+        selectedProducts = [], 
+        total, 
+        downPaymentValue = 0,
+        subtotal,
+        remainingBalance 
+      } = req.body;
 
       console.log('Quote creation request:', {
         categoryId,
@@ -598,16 +607,6 @@ export function registerRoutes(app: Express) {
       const nextId = latestQuote ? latestQuote.id + 1 : 1;
       const quoteNumber = `QT-${nextId.toString().padStart(6, '0')}`;
 
-      const calculateSubtotal = () => {
-        if (!Array.isArray(selectedProducts)) return 0;
-        return selectedProducts.reduce((sum, product) => {
-          return sum + (product.quantity * product.price);
-        }, 0);
-      };
-
-      const subtotal = calculateSubtotal();
-      const remainingBalance = total - (downPayment || 0);
-
       const [quote] = await db.insert(quotes)
         .values({
           number: quoteNumber,
@@ -621,14 +620,14 @@ export function registerRoutes(app: Express) {
           userId: req.user.id,
           subtotal,
           total,
-          downPaymentValue: downPayment,
+          downPaymentValue,
           remainingBalance,
           content: {
             products: selectedProducts,
             calculations: {
               subtotal,
               total,
-              downPayment,
+              downPayment: downPaymentValue,
               remainingBalance,
             },
           },
@@ -639,6 +638,53 @@ export function registerRoutes(app: Express) {
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error creating quote" });
+    }
+  });
+
+  // Add PUT endpoint for updating quotes
+  app.put("/api/quotes/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { 
+        categoryId, 
+        templateId, 
+        customerInfo, 
+        selectedProducts = [], 
+        total, 
+        downPaymentValue = 0,
+        subtotal,
+        remainingBalance 
+      } = req.body;
+
+      const [quote] = await db.update(quotes)
+        .set({
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
+          clientName: customerInfo.name,
+          clientEmail: customerInfo.email || null,
+          clientPhone: customerInfo.phone || null,
+          clientAddress: customerInfo.address || null,
+          subtotal,
+          total,
+          downPaymentValue,
+          remainingBalance,
+          content: {
+            products: selectedProducts,
+            calculations: {
+              subtotal,
+              total,
+              downPayment: downPaymentValue,
+              remainingBalance,
+            },
+          },
+        })
+        .where(eq(quotes.id, parseInt(id)))
+        .returning();
+
+      res.json(quote);
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      res.status(500).json({ message: "Server error updating quote" });
     }
   });
 
