@@ -34,6 +34,12 @@ const productFormSchema = z.object({
 
 type ProductFormData = z.infer<typeof productFormSchema>;
 
+interface Category {
+  id: number;
+  name: string;
+  description?: string;
+}
+
 interface ProductFormProps {
   product?: {
     id: number;
@@ -52,8 +58,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // Fetch categories for the dropdown
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
@@ -143,15 +148,17 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
               <FormLabel>Category</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                defaultValue={field.value}
+                value={field.value}
               >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
+                    <SelectValue placeholder="Select a category">
+                      {categories.find(c => c.id.toString() === field.value)?.name || "Select a category"}
+                    </SelectValue>
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category: { id: number; name: string }) => (
+                  {categories.map((category) => (
                     <SelectItem 
                       key={category.id} 
                       value={category.id.toString()}
@@ -214,7 +221,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
               <FormLabel>Unit</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                defaultValue={field.value}
+                value={field.value}
               >
                 <FormControl>
                   <SelectTrigger>
