@@ -20,8 +20,8 @@ export const QuoteStatus = {
 // Tables
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  uid: text("uid").notNull().unique(), // Firebase UID
   email: text("email").notNull().unique(),
+  password: text("password").notNull(),
   name: text("name").notNull(),
   role: text("role", { enum: Object.values(UserRole) }).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -64,22 +64,12 @@ export const quotes = pgTable("quotes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const quoteProducts = pgTable("quote_products", {
-  id: serial("id").primaryKey(),
-  quoteId: integer("quote_id").references(() => quotes.id).notNull(),
-  productId: integer("product_id").references(() => products.id).notNull(),
-  quantity: integer("quantity").notNull(),
-  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
-  variations: jsonb("variations"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   quotes: many(quotes),
 }));
 
-export const quotesRelations = relations(quotes, ({ one, many }) => ({
+export const quotesRelations = relations(quotes, ({ one }) => ({
   user: one(users, {
     fields: [quotes.userId],
     references: [users.id],
@@ -87,18 +77,6 @@ export const quotesRelations = relations(quotes, ({ one, many }) => ({
   template: one(templates, {
     fields: [quotes.templateId],
     references: [templates.id],
-  }),
-  products: many(quoteProducts),
-}));
-
-export const quoteProductsRelations = relations(quoteProducts, ({ one }) => ({
-  quote: one(quotes, {
-    fields: [quoteProducts.quoteId],
-    references: [quotes.id],
-  }),
-  product: one(products, {
-    fields: [quoteProducts.productId],
-    references: [products.id],
   }),
 }));
 

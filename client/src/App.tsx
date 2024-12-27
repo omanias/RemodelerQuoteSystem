@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { Layout } from "@/components/Layout";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 
 // Pages
@@ -14,20 +12,10 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
+import { useAuth } from "@/hooks/useAuth";
 
 function App() {
-  const [loading, setLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("Auth state changed:", user?.email);
-      setAuthenticated(!!user);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -37,7 +25,7 @@ function App() {
     );
   }
 
-  if (!authenticated) {
+  if (!user) {
     return (
       <QueryClientProvider client={queryClient}>
         <Login />

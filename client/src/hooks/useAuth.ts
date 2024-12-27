@@ -1,68 +1,78 @@
-import { useQuery } from "@tanstack/react-query";
-import { auth } from "@/lib/firebase";
-import { useEffect, useState } from "react";
-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 
 export type AuthUser = {
   id: number;
-  uid: string;
   email: string;
   name: string;
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
 };
 
 export function useAuth() {
-  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("Firebase auth state changed:", user?.email);
-      setFirebaseUser(user);
-      setIsInitializing(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const { data: user, isLoading: isUserLoading } = useQuery({
+  const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      if (!firebaseUser) {
-        console.log("No firebase user, returning null");
-        return null;
+      const res = await fetch("/api/auth/user", {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          return null;
+        }
+        throw new Error(await res.text());
       }
 
-      try {
-        const token = await firebaseUser.getIdToken();
-        console.log("Got firebase token, fetching user data");
+      return res.json() as Promise<AuthUser>;
+    },
+  });
 
-        const res = await fetch("/api/auth/user", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+  const loginMutation = useMutation({
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials),
+        credentials: "include",
+      });
 
-        if (!res.ok) {
-          console.error("Failed to fetch user data:", await res.text());
-          throw new Error(await res.text());
-        }
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
 
-        const userData = await res.json() as AuthUser;
-        console.log("Got user data:", userData);
-        return userData;
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        throw error;
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setLocation("/");
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
       }
     },
-    enabled: !!firebaseUser,
-    retry: false,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setLocation("/login");
+    },
   });
 
   return {
     user,
-    loading: isInitializing || isUserLoading,
+    loading: isLoading,
+    login: loginMutation.mutateAsync,
+    logout: logoutMutation.mutateAsync,
     isAuthenticated: !!user,
   };
 }

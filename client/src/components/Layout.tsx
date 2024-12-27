@@ -6,10 +6,9 @@ import {
   LayoutDashboard, FileText, Package, FileEdit, 
   LogOut, Settings, Users 
 } from "lucide-react";
-import { auth } from "@/lib/firebase";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [location] = useLocation();
 
   if (!user) return null;
@@ -65,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => auth.signOut()}
+                onClick={() => logout()}
                 className="ml-2"
               >
                 <LogOut className="h-5 w-5" />
