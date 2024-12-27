@@ -63,14 +63,14 @@ export function Products() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products?.map((product) => (
+            {products?.map((product: any) => (
               <TableRow key={product.id}>
                 <TableCell>{product.name}</TableCell>
-                <TableCell>{product.category}</TableCell>
+                <TableCell>{product.category.name}</TableCell>
                 <TableCell>${product.basePrice}</TableCell>
                 <TableCell>{product.unit}</TableCell>
                 <TableCell>
-                  <Badge variant={product.isActive ? "success" : "secondary"}>
+                  <Badge variant={product.isActive ? "default" : "secondary"}>
                     {product.isActive ? "Active" : "Inactive"}
                   </Badge>
                 </TableCell>
