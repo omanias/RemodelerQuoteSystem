@@ -578,6 +578,10 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Category and template are required" });
       }
 
+      if (!customerInfo?.name) {
+        return res.status(400).json({ message: "Client name is required" });
+      }
+
       // Generate quote number
       const currentYear = new Date().getFullYear();
       const latestQuote = await db.query.quotes.findFirst({
@@ -601,7 +605,10 @@ export function registerRoutes(app: Express) {
           items,
           total,
           status: status || QuoteStatus.DRAFT,
-          customerInfo,
+          clientName: customerInfo.name,
+          clientEmail: customerInfo.email,
+          clientPhone: customerInfo.phone,
+          clientAddress: customerInfo.address,
           userId: req.user.id,
         })
         .returning();
