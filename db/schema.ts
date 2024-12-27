@@ -22,6 +22,15 @@ export const QuoteStatus = {
   REVISED: 'REVISED'
 } as const;
 
+export const ProductUnit = {
+  SQUARE_FOOT: 'Square Foot',
+  LINEAR_FOOT: 'Linear Foot',
+  UNIT: 'Unit',
+  HOURS: 'Hours',
+  DAYS: 'Days',
+  PIECE: 'Piece'
+} as const;
+
 // Tables
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -47,7 +56,8 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
-  unit: text("unit").notNull(),
+  cost: decimal("cost", { precision: 10, scale: 2 }).notNull(),
+  unit: text("unit", { enum: Object.values(ProductUnit) }).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   variations: jsonb("variations"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
