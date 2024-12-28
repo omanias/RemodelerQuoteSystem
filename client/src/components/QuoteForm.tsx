@@ -538,6 +538,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           steps={QUOTE_STEPS}
           currentStep={currentStep}
           completedSteps={completedSteps}
+          onStepClick={setCurrentStep}
         />
 
         {/* User Info Card */}

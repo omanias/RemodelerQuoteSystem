@@ -1,5 +1,6 @@
 import { Check, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "./button";
 
 interface Step {
   id: string;
@@ -11,9 +12,10 @@ interface ProgressStepsProps {
   steps: Step[];
   currentStep: number;
   completedSteps: string[];
+  onStepClick?: (index: number) => void;
 }
 
-export function ProgressSteps({ steps, currentStep, completedSteps }: ProgressStepsProps) {
+export function ProgressSteps({ steps, currentStep, completedSteps, onStepClick }: ProgressStepsProps) {
   return (
     <nav aria-label="Progress" className="mb-8">
       <ol role="list" className="space-y-4 md:flex md:space-x-8 md:space-y-0">
@@ -21,13 +23,20 @@ export function ProgressSteps({ steps, currentStep, completedSteps }: ProgressSt
           const Icon = step.icon;
           const isCompleted = completedSteps.includes(step.id);
           const isCurrent = currentStep === index;
+          const canNavigate = isCompleted || index === currentStep || (index === currentStep + 1 && completedSteps.includes(steps[currentStep].id));
 
           return (
             <li key={step.name} className="md:flex-1">
-              <div className={cn(
-                "group flex flex-col border-l-4 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4",
-                isCompleted ? "border-primary" : isCurrent ? "border-primary/50" : "border-border"
-              )}>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "group relative flex w-full select-none flex-col border-l-4 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4",
+                  isCompleted ? "border-primary" : isCurrent ? "border-primary/50" : "border-border",
+                  canNavigate ? "cursor-pointer hover:bg-accent" : "cursor-not-allowed opacity-50"
+                )}
+                onClick={() => canNavigate && onStepClick?.(index)}
+                disabled={!canNavigate}
+              >
                 <span className="text-sm font-medium">
                   <span className="flex items-center gap-3">
                     <span className={cn(
@@ -53,7 +62,7 @@ export function ProgressSteps({ steps, currentStep, completedSteps }: ProgressSt
                     </span>
                   </span>
                 </span>
-              </div>
+              </Button>
             </li>
           );
         })}
