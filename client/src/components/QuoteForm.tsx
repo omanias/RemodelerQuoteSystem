@@ -83,6 +83,7 @@ interface SelectedProduct {
   variation?: string;
   unitPrice: number;
   description?: string;
+  unit?: string;
 }
 
 interface Category {
@@ -95,6 +96,7 @@ interface Template {
   name: string;
   contractText: string;
   categoryId: number;
+  isDefault?: boolean;
 }
 
 
@@ -122,6 +124,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         variation: p.variation,
         unitPrice: parseFloat(p.price) || 0,
         description: p.description || "",
+        unit: p.unit || "",
       }));
     }
     return [];
@@ -149,7 +152,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   });
 
   const selectedCategoryId = form.watch("categoryId");
-  const selectedTemplateId = form.watch("templateId");
 
   // Load products based on selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
@@ -159,10 +161,24 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     enabled: !!selectedCategoryId,
   });
 
+  // Auto-select default template when category changes
+  useEffect(() => {
+    if (selectedCategoryId && templates?.length > 0) {
+      const categoryTemplates = templates.filter(
+        (t) => t.categoryId.toString() === selectedCategoryId
+      );
+      const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
+
+      if (defaultTemplate) {
+        form.setValue("templateId", defaultTemplate.id.toString());
+      }
+    }
+  }, [selectedCategoryId, templates, form]);
+
   // Load selected template details
   const { data: selectedTemplate } = useQuery<Template>({
-    queryKey: ["/api/templates", selectedTemplateId],
-    enabled: !!selectedTemplateId,
+    queryKey: ["/api/templates", form.watch("templateId")],
+    enabled: !!form.watch("templateId"),
   });
 
   const parseNumber = (value: any): number => {
@@ -218,6 +234,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         price: parseFloat(item.unitPrice.toString()),
         description: item.description,
         variation: item.variation,
+        unit: item.unit,
       }));
 
       setIsAutoSaving(true);
@@ -300,6 +317,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           quantity: 1,
           unitPrice: product.basePrice,
           description: product.name,
+          unit: product.unit,
         }
       ]);
     } else {
@@ -310,6 +328,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           quantity: 1,
           unitPrice: 0,
           description: "",
+          unit: "",
         }
       ]);
     }
@@ -347,6 +366,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         price: parseFloat(item.unitPrice.toString()),
         description: item.description,
         variation: item.variation,
+        unit: item.unit,
       }));
 
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
@@ -408,8 +428,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <Input 
-                      {...field} 
+                    <Input
+                      {...field}
                       className="text-2xl font-semibold border-none px-0 focus-visible:ring-0"
                       placeholder="Enter Job Title"
                     />
@@ -441,60 +461,32 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </div>
         </div>
 
-        {/* Category and Template Selection */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="categoryId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id.toString()}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        {/* Category Selection */}
+        <FormField
+          control={form.control}
+          name="categoryId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Category</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id.toString()}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-          <FormField
-            control={form.control}
-            name="templateId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Template</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a template" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {templates
-                      .filter(t => !selectedCategoryId || t.categoryId.toString() === selectedCategoryId)
-                      .map((template) => (
-                        <SelectItem key={template.id} value={template.id.toString()}>
-                          {template.name}
-                        </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
 
         {/* Client Info */}
         <div className="grid grid-cols-2 gap-4">
@@ -544,7 +536,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       <SelectContent>
                         {products.map((product) => (
                           <SelectItem key={product.id} value={product.id.toString()}>
-                            {product.name}
+                            {product.name} (${product.basePrice}/{product.unit})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -573,13 +565,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       />
                     </div>
                     <div className="col-span-2">
-                      <Input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
-                        className="text-right"
-                      />
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
+                          className="text-right"
+                        />
+                        <span className="text-muted-foreground text-sm whitespace-nowrap">
+                          {item.unit}
+                        </span>
+                      </div>
                     </div>
                     <div className="col-span-2">
                       <Input
@@ -688,14 +685,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           )}
         />
 
-        {/* Contract Preview (from template) */}
-        {selectedTemplate && (
+        {/* Contract text without heading */}
+        {selectedTemplate?.contractText && (
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="h-4 w-4" />
-                <h3 className="font-semibold">Contract from Template</h3>
-              </div>
               <div className="text-sm text-muted-foreground">
                 {selectedTemplate.contractText}
               </div>
