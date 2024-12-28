@@ -14,6 +14,7 @@ import { promisify } from "util";
 import PDFDocument from "pdfkit";
 import { createObjectCsvWriter } from "csv-writer";
 import { Readable } from "stream";
+import { contacts, quotes, users, companies } from "@db/schema";
 
 const scryptAsync = promisify(scrypt);
 
@@ -85,6 +86,22 @@ const requireRole = (allowedRoles: string[]) => async (req: any, res: any, next:
     res.status(500).json({ message: "Server error" });
   }
 };
+
+async function getUserCompany(req: any) {
+  const userId = req.session.userId;
+  if (!userId) return null;
+
+  const [companyUser] = await db
+    .select({
+      companyId: companies.id,
+    })
+    .from(companies)
+    .innerJoin(companyUsers, eq(companyUsers.companyId, companies.id))
+    .where(eq(companyUsers.userId, userId))
+    .limit(1);
+
+  return companyUser?.companyId;
+}
 
 export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
@@ -598,8 +615,16 @@ export function registerRoutes(app: Express) {
   app.get("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      const companyId = await getUserCompany(req);
+      if (!companyId) {
+        return res.status(403).json({ message: "No company access" });
+      }
+
       const quote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, parseInt(id)),
+        where: and(
+          eq(quotes.id, parseInt(id)),
+          eq(quotes.companyId, companyId)
+        ),
         with: {
           category: true,
           template: true,
@@ -611,6 +636,7 @@ export function registerRoutes(app: Express) {
         return res.status(404).json({ message: "Quote not found" });
       }
 
+      console.log('Fetched quote:', quote);
       res.json(quote);
     } catch (error) {
       console.error('Error fetching quote:', error);
@@ -620,6 +646,11 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
+      const companyId = await getUserCompany(req);
+      if (!companyId) {
+        return res.status(403).json({ message: "No company access" });
+      }
+
       const {
         categoryId,
         templateId,
@@ -641,31 +672,24 @@ export function registerRoutes(app: Express) {
         categoryId,
         templateId,
         customerInfo,
+        companyId,
         downPaymentValue,
         total,
         contactId 
       });
 
-      // Validate quote data
-      if (!categoryId || !templateId) {
-        return res.status(400).json({ message: "Category and template are required" });
-      }
-
-      if (!customerInfo?.name) {
-        return res.status(400).json({ message: "Client name is required" });
-      }
-
-      // Generate quote number before insertion
+      // Generate quote number
       const [latestQuote] = await db
         .select({ id: quotes.id })
         .from(quotes)
+        .where(eq(quotes.companyId, companyId))
         .orderBy(desc(quotes.id))
         .limit(1);
 
       const nextId = latestQuote ? latestQuote.id + 1 : 1;
       const quoteNumber = `QT-${nextId.toString().padStart(6, '0')}`;
 
-      // Parse numeric values with fallbacks
+      // Parse numeric values
       const parsedTotal = parseFloat(total?.toString() || '0') || 0;
       const parsedDownPayment = parseFloat(downPaymentValue?.toString() || '0') || 0;
       const parsedSubtotal = parseFloat(subtotal?.toString() || '0') || 0;
@@ -678,13 +702,14 @@ export function registerRoutes(app: Express) {
           number: quoteNumber,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : undefined, 
+          contactId: contactId ? parseInt(contactId) : undefined,
+          companyId,
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
           clientAddress: customerInfo.address || null,
           status: QuoteStatus.DRAFT,
-          userId: req.user.id,
+          userId: req.session.userId,
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -695,7 +720,7 @@ export function registerRoutes(app: Express) {
           remainingBalance: parsedRemainingBalance,
           notes: notes || '',
           content: {
-            products: selectedProducts.map(product => ({
+            products: selectedProducts.map((product: any) => ({
               ...product,
               price: parseFloat(product.price?.toString() || '0') || 0,
               quantity: parseInt(product.quantity?.toString() || '1') || 1
@@ -712,6 +737,7 @@ export function registerRoutes(app: Express) {
         })
         .returning();
 
+      console.log('Created quote:', quote);
       res.json(quote);
     } catch (error) {
       console.error('Error creating quote:', error);
@@ -756,7 +782,7 @@ export function registerRoutes(app: Express) {
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
-          clientAddress: customer.address || null,
+          clientAddress: customerInfo.address || null,
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -902,7 +928,7 @@ export function registerRoutes(app: Express) {
               eq(tablePermissions.tableName, tableName),
               eq(tablePermissions.roleId, roleId),
               eq(tablePermissions.permissionType, permissionType)
-            ))
+                        ))
             .returning();
           return permission;
         })
@@ -1071,24 +1097,30 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/contacts", requireAuth, async (req, res) => {
     try {
-      const contact = req.body;
+      const companyId = await getUserCompany(req);
+      if (!companyId) {
+        return res.status(403).json({ message: "No company access" });
+      }
 
-      // Convert arrays to JSON strings
-      contact.productInterests = JSON.stringify(contact.productInterests || []);
-      contact.tags = JSON.stringify(contact.tags || []);
+      const result = insertContactSchema.safeParse({ ...req.body, companyId });
+      if (!result.success) {
+        return res.status(400).json({ 
+          message: "Invalid input",
+          errors: result.error.errors 
+        });
+      }
 
-      const [newContact] = await db.insert(contacts)
+      const [contact] = await db.insert(contacts)
         .values({
-          ...contact,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          ...result.data,
+          companyId,
         })
         .returning();
 
-      res.json(newContact);
+      res.json(contact);
     } catch (error) {
       console.error('Error creating contact:', error);
-      res.status(500).json({ message: "Server error creating contact" });
+      res.status(500).json({ message: "Server error" });
     }
   });
 
