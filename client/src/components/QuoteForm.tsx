@@ -25,11 +25,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, Save } from "lucide-react";
+import { Plus, Minus, X, Save, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Update the validation schema to match the API requirements
 const quoteFormSchema = z.object({
+  jobTitle: z.string().min(1, "Job title is required"),
   contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
   clientEmail: z.string().email("Invalid email address"),
@@ -43,7 +44,6 @@ const quoteFormSchema = z.object({
   discountCode: z.string().optional(),
   taxRate: z.string().optional(),
   notes: z.string().optional(),
-  clientMessage: z.string().optional(),
   templateId: z.string().min(1, "Template is required"),
 });
 
@@ -85,11 +85,33 @@ interface SelectedProduct {
   description?: string;
 }
 
+interface Category {
+  id: number;
+  name: string;
+}
+
+interface Template {
+  id: number;
+  name: string;
+  contractText: string;
+  categoryId: number;
+}
+
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  // Load categories and products
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: templates = [] } = useQuery<Template[]>({
+    queryKey: ["/api/templates"],
+  });
 
   // Initialize selected products from quote data if it exists
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
@@ -108,6 +130,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
+      jobTitle: quote?.jobTitle || "",
       contactId: quote?.contactId?.toString() || defaultContactId || "",
       clientName: quote?.clientName || "",
       clientEmail: quote?.clientEmail || "",
@@ -121,9 +144,25 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       discountCode: quote?.discountCode || "",
       taxRate: quote?.taxRate?.toString() || "0",
       notes: quote?.notes || "",
-      clientMessage: quote?.clientMessage || "",
       templateId: quote?.templateId?.toString() || "",
     },
+  });
+
+  const selectedCategoryId = form.watch("categoryId");
+  const selectedTemplateId = form.watch("templateId");
+
+  // Load products based on selected category
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    select: (data) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    enabled: !!selectedCategoryId,
+  });
+
+  // Load selected template details
+  const { data: selectedTemplate } = useQuery<Template>({
+    queryKey: ["/api/templates", selectedTemplateId],
+    enabled: !!selectedTemplateId,
   });
 
   const parseNumber = (value: any): number => {
@@ -252,16 +291,28 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return () => subscription.unsubscribe();
   }, [form, quote?.id, debouncedAutoSave]);
 
-  const addProduct = () => {
-    setSelectedProducts(prev => [
-      ...prev,
-      {
-        productId: 0,
-        quantity: 1,
-        unitPrice: 0,
-        description: "",
-      }
-    ]);
+  const addProduct = (product?: Product) => {
+    if (product) {
+      setSelectedProducts(prev => [
+        ...prev,
+        {
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.basePrice,
+          description: product.name,
+        }
+      ]);
+    } else {
+      setSelectedProducts(prev => [
+        ...prev,
+        {
+          productId: 0,
+          quantity: 1,
+          unitPrice: 0,
+          description: "",
+        }
+      ]);
+    }
   };
 
   const updateProduct = (index: number, field: keyof SelectedProduct, value: any) => {
@@ -351,13 +402,26 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">
-              Quote for {form.watch("clientName") || "Client Name"}
-            </h1>
+            <FormField
+              control={form.control}
+              name="jobTitle"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      className="text-2xl font-semibold border-none px-0 focus-visible:ring-0"
+                      placeholder="Enter Job Title"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
             <p className="text-sm text-muted-foreground">
               Quote #{quote?.number || "New Quote"}
             </p>
           </div>
+          {/* Auto-save indicator */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {isAutoSaving ? (
               <>
@@ -375,6 +439,61 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               </>
             ) : null}
           </div>
+        </div>
+
+        {/* Category and Template Selection */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="categoryId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="templateId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Template</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a template" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {templates
+                      .filter(t => !selectedCategoryId || t.categoryId.toString() === selectedCategoryId)
+                      .map((template) => (
+                        <SelectItem key={template.id} value={template.id.toString()}>
+                          {template.name}
+                        </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
         {/* Client Info */}
@@ -412,16 +531,35 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           <CardContent className="pt-6">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="font-semibold">Product / Service</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addProduct}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Line Item
-                </Button>
+                <h3 className="font-semibold">Products & Services</h3>
+                <div className="flex gap-2">
+                  {selectedCategoryId && (
+                    <Select onValueChange={(productId) => {
+                      const product = products.find(p => p.id.toString() === productId);
+                      if (product) addProduct(product);
+                    }}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select a product" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {products.map((product) => (
+                          <SelectItem key={product.id} value={product.id.toString()}>
+                            {product.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addProduct()}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Custom Item
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -531,46 +669,17 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Client Message */}
-        <FormField
-          control={form.control}
-          name="clientMessage"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Client Message</FormLabel>
-              <FormControl>
-                <Textarea
-                  {...field}
-                  placeholder="Enter a message for your client..."
-                  className="min-h-[100px]"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Contract/Disclaimer */}
-        <Card>
-          <CardContent className="pt-6">
-            <h3 className="font-semibold mb-2">Contract / Disclaimer</h3>
-            <p className="text-sm text-muted-foreground">
-              This quote is valid for the next 30 days, after which values may be subject to change.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Internal Notes */}
+        {/* Notes to Quote */}
         <FormField
           control={form.control}
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Internal Notes</FormLabel>
+              <FormLabel>Notes to Quote</FormLabel>
               <FormControl>
                 <Textarea
                   {...field}
-                  placeholder="Internal notes will only be seen by your team"
+                  placeholder="Enter notes for this quote..."
                   className="min-h-[100px]"
                 />
               </FormControl>
@@ -578,6 +687,21 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             </FormItem>
           )}
         />
+
+        {/* Contract Preview (from template) */}
+        {selectedTemplate && (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4" />
+                <h3 className="font-semibold">Contract from Template</h3>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {selectedTemplate.contractText}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Action Buttons */}
         <div className="flex justify-end gap-4">
