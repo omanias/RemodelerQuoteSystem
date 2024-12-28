@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import {
   Form,
   FormControl,
@@ -23,7 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, UserPlus } from "lucide-react";
+import { Plus, Minus, X, UserPlus, Save } from "lucide-react";
 import { Link } from "wouter";
 
 // Update the validation schema to match the API requirements
@@ -92,6 +93,8 @@ interface SelectedProduct {
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   // Initialize selected products from quote data if it exists
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
@@ -143,7 +146,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Update form when contact data is available
   useEffect(() => {
     if (contact) {
-      console.log("Setting contact data:", contact);
       form.setValue("contactId", contact.id.toString());
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
       form.setValue("clientEmail", contact.primaryEmail);
@@ -158,7 +160,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     if (selectedContactId && !contact) {
       const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
       if (selectedContact) {
-        console.log("Auto-filling contact details:", selectedContact);
         form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
         form.setValue("clientEmail", selectedContact.primaryEmail);
         form.setValue("clientPhone", selectedContact.primaryPhone);
@@ -172,7 +173,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Set initial category ID from quote if available
   useEffect(() => {
     if (quote?.categoryId && !selectedCategoryId) {
-      console.log("Setting initial category ID:", quote.categoryId);
       form.setValue("categoryId", quote.categoryId.toString());
     }
   }, [quote, form, selectedCategoryId]);
@@ -192,7 +192,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
 
       if (defaultTemplate) {
-        console.log("Setting default template:", defaultTemplate);
         form.setValue("templateId", defaultTemplate.id.toString());
       }
     }
@@ -279,8 +278,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const mutation = useMutation({
     mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
-      console.log("Submitting form data:", data);
-
       const total = calculateTotal();
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
@@ -341,7 +338,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("API Error:", errorText);
         throw new Error(errorText);
       }
 
@@ -356,7 +352,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
-      console.error("Mutation error:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -374,9 +369,114 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       });
       return;
     }
-    console.log("Form submission data:", data);
     mutation.mutate(data);
   };
+
+  // Auto-save mutation
+  const autoSaveMutation = useMutation({
+    mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
+      if (!quote?.id) return; // Only auto-save existing quotes
+
+      const total = calculateTotal();
+      const downPayment = calculateDownPayment();
+      const remainingBalance = calculateRemainingBalance();
+      const subtotal = calculateSubtotal();
+
+      const formattedProducts = selectedProducts.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: parseFloat(item.unitPrice.toString()),
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
+
+      setIsAutoSaving(true);
+
+      const response = await fetch(`/api/quotes/${quote.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contactId: parseInt(data.contactId),
+          categoryId: parseInt(data.categoryId),
+          templateId: parseInt(data.templateId),
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientPhone: data.clientPhone,
+          clientAddress: data.clientAddress,
+          selectedProducts: formattedProducts,
+          subtotal,
+          total,
+          downPaymentValue: downPayment,
+          remainingBalance,
+          discountType: data.discountType,
+          discountValue: parseFloat(data.discountValue || "0"),
+          discountCode: data.discountCode,
+          taxRate: parseFloat(data.taxRate || "0"),
+          status: data.status,
+          paymentMethod: data.paymentMethod,
+          downPaymentType: data.downPaymentType,
+          notes: data.notes,
+          content: {
+            products: formattedProducts,
+            calculations: {
+              subtotal,
+              total,
+              downPayment,
+              remainingBalance,
+              discount: calculateDiscount(),
+              tax: calculateTax()
+            },
+          },
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      setLastSaved(new Date());
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+    },
+    onError: (error: Error) => {
+      console.error("Auto-save error:", error);
+      toast({
+        title: "Auto-save failed",
+        description: "Changes couldn't be saved automatically. Please save manually.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsAutoSaving(false);
+    },
+  });
+
+  // Debounced auto-save function
+  const debouncedAutoSave = useDebouncedCallback((data: z.infer<typeof quoteFormSchema>) => {
+    if (quote?.id) {
+      autoSaveMutation.mutate(data);
+    }
+  }, 2000); // Auto-save after 2 seconds of no changes
+
+  // Watch for form changes and trigger auto-save
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      if (quote?.id && Object.keys(form.formState.dirtyFields).length > 0) {
+        debouncedAutoSave(value as z.infer<typeof quoteFormSchema>);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, quote?.id, debouncedAutoSave]);
 
   return (
     <Form {...form}>
@@ -857,6 +957,27 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             </div>
           </CardContent>
         </Card>
+
+        {/* Auto-save status indicator */}
+        {quote?.id && (
+          <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+            {isAutoSaving ? (
+              <>
+                <Save className="h-4 w-4 animate-spin" />
+                <span>Saving changes...</span>
+              </>
+            ) : lastSaved ? (
+              <>
+                <Save className="h-4 w-4" />
+                <span>Last saved {new Intl.DateTimeFormat('en-US', {
+                  hour: 'numeric',
+                  minute: 'numeric',
+                  second: 'numeric'
+                }).format(lastSaved)}</span>
+              </>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex justify-end">
           <Button type="submit" disabled={mutation.isPending}>
