@@ -623,7 +623,10 @@ export function registerRoutes(app: Express) {
       const {
         categoryId,
         templateId,
-        customerInfo,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
         selectedProducts = [],
         total,
         downPaymentValue,
@@ -640,7 +643,9 @@ export function registerRoutes(app: Express) {
       console.log('Quote creation request:', {
         categoryId,
         templateId,
-        customerInfo,
+        clientName,
+        clientEmail,
+        clientAddress,
         downPaymentValue,
         total,
         contactId 
@@ -651,7 +656,7 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ message: "Category and template are required" });
       }
 
-      if (!customerInfo?.name) {
+      if (!clientName) {
         return res.status(400).json({ message: "Client name is required" });
       }
 
@@ -678,11 +683,11 @@ export function registerRoutes(app: Express) {
           number: quoteNumber,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : undefined, 
-          clientName: customerInfo.name,
-          clientEmail: customerInfo.email || null,
-          clientPhone: customerInfo.phone || null,
-          clientAddress: customerInfo.address || null,
+          contactId: contactId ? parseInt(contactId) : undefined,
+          clientName,
+          clientEmail: clientEmail || null,
+          clientPhone: clientPhone || null,
+          clientAddress: clientAddress || null,
           status: QuoteStatus.DRAFT,
           userId: req.user.id,
           subtotal: parsedSubtotal,
@@ -695,7 +700,7 @@ export function registerRoutes(app: Express) {
           remainingBalance: parsedRemainingBalance,
           notes: notes || '',
           content: {
-            products: selectedProducts.map(product => ({
+            products: selectedProducts.map((product: any) => ({
               ...product,
               price: parseFloat(product.price?.toString() || '0') || 0,
               quantity: parseInt(product.quantity?.toString() || '1') || 1
