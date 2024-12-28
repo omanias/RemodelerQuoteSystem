@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { QuoteStatus } from "@db/schema";
-import { Plus, MoreVertical, FileText, Download, ArrowLeft } from "lucide-react";
+import { Plus, MoreVertical, FileText, Download, ArrowLeft, FileEdit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Quote {
@@ -219,6 +219,13 @@ export function Quotes() {
             <Download className="mr-2 h-4 w-4" />
             Export All (CSV)
           </Button>
+
+          <Link href="/templates">
+            <Button variant="outline">
+              <FileEdit className="mr-2 h-4 w-4" />
+              Templates
+            </Button>
+          </Link>
 
           <Link href="/quotes/new">
             <Button>

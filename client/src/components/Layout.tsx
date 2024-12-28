@@ -3,8 +3,8 @@ import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { 
-  LayoutDashboard, FileText, Package, FileEdit, 
-  LogOut, Settings, Users, FolderTree, UserCircle2
+  LayoutDashboard, FileText, Package,
+  LogOut, Settings, Users, UserCircle2
 } from "lucide-react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -17,9 +17,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Quotes", href: "/quotes", icon: FileText },
     { name: "Contacts", href: "/contacts", icon: UserCircle2 },
-    { name: "Categories", href: "/categories", icon: FolderTree },
     { name: "Products", href: "/products", icon: Package },
-    { name: "Templates", href: "/templates", icon: FileEdit },
   ];
 
   if (user.role === "ADMIN") {
