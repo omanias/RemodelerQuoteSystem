@@ -24,8 +24,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, UserPlus, Save } from "lucide-react";
+import { Plus, Minus, X, UserPlus, Save, Users, Folder, Calculator, Settings } from "lucide-react";
 import { Link } from "wouter";
+import { ProgressSteps } from "@/components/ui/progress-steps";
 
 // Update the validation schema to match the API requirements
 const quoteFormSchema = z.object({
@@ -90,11 +91,20 @@ interface SelectedProduct {
   unitPrice: number;
 }
 
+const QUOTE_STEPS = [
+  { id: 'contact', name: 'Contact Information', icon: Users },
+  { id: 'category', name: 'Category & Template', icon: Folder },
+  { id: 'products', name: 'Products Selection', icon: Calculator },
+  { id: 'settings', name: 'Quote Settings', icon: Settings },
+];
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
 
   // Initialize selected products from quote data if it exists
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
@@ -478,9 +488,59 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return () => subscription.unsubscribe();
   }, [form, quote?.id, debouncedAutoSave]);
 
+  // Update completed steps when form fields are filled
+  useEffect(() => {
+    const newCompletedSteps: string[] = [];
+
+    // Contact step
+    if (form.watch("contactId") && form.watch("clientName") && form.watch("clientEmail")) {
+      newCompletedSteps.push('contact');
+    }
+
+    // Category step
+    if (form.watch("categoryId") && form.watch("templateId")) {
+      newCompletedSteps.push('category');
+    }
+
+    // Products step
+    if (selectedProducts.length > 0) {
+      newCompletedSteps.push('products');
+    }
+
+    // Settings step
+    if (
+      form.watch("status") &&
+      form.watch("paymentMethod") &&
+      (!form.watch("discountValue") || form.watch("discountType")) &&
+      (!form.watch("downPaymentValue") || form.watch("downPaymentType"))
+    ) {
+      newCompletedSteps.push('settings');
+    }
+
+    setCompletedSteps(newCompletedSteps);
+  }, [form.watch, selectedProducts]);
+
+  // Auto-advance to next step when current step is completed
+  useEffect(() => {
+    const currentStepId = QUOTE_STEPS[currentStep].id;
+    if (completedSteps.includes(currentStepId) && currentStep < QUOTE_STEPS.length - 1) {
+      // Only auto-advance if we're creating a new quote
+      if (!quote) {
+        setCurrentStep(prev => prev + 1);
+      }
+    }
+  }, [completedSteps, currentStep, quote]);
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <ProgressSteps
+          steps={QUOTE_STEPS}
+          currentStep={currentStep}
+          completedSteps={completedSteps}
+        />
+
+        {/* User Info Card */}
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -493,35 +553,361 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Contact Selection Section */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold">Contact Information</h3>
-              <Link href="/contacts/new">
-                <Button variant="outline" size="sm">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Create New Contact
-                </Button>
-              </Link>
-            </div>
+        {/* Contact Information - Step 1 */}
+        <div className={currentStep === 0 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold">Contact Information</h3>
+                <Link href="/contacts/new">
+                  <Button variant="outline" size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Create New Contact
+                  </Button>
+                </Link>
+              </div>
 
+              <FormField
+                control={form.control}
+                name="contactId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Select Contact</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a contact" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {contacts.map((contact) => (
+                          <SelectItem key={contact.id} value={contact.id.toString()}>
+                            {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="clientName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="clientEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="clientPhone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Phone</FormLabel>
+                      <FormControl>
+                        <Input type="tel" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="clientAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Address</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Category Selection - Step 2 */}
+        <div className={currentStep === 1 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <FormField
+            control={form.control}
+            name="categoryId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="templateId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Template</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a template" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {templates
+                      .filter((t) => t.categoryId.toString() === selectedCategoryId)
+                      .map((template) => (
+                        <SelectItem key={template.id} value={template.id.toString()}>
+                          {template.name} {template.isDefault && "(Default)"}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Products Selection - Step 3 */}
+        <div className={currentStep === 2 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          {selectedCategoryId && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Products</h3>
+                  {isLoadingProducts ? (
+                    <div className="text-center py-4">Loading products...</div>
+                  ) : products.length === 0 ? (
+                    <div className="text-center py-4">No products found in this category</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {products.map((product) => (
+                        <Card key={product.id}>
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-medium">{product.name}</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  Base Price: ${product.basePrice}/{product.unit}
+                                </p>
+                              </div>
+                              {product.variations ? (
+                                <Select onValueChange={(value) => addProduct(product, value)}>
+                                  <FormControl>
+                                    <SelectTrigger className="w-[140px]">
+                                      <SelectValue placeholder="Select variant" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {product.variations.map((variation) => (
+                                      <SelectItem key={variation.name} value={variation.price}>
+                                        {variation.name} - ${variation.price}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addProduct(product)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedProducts.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Selected Products</h4>
+                      <div className="space-y-2">
+                        {selectedProducts.map((item, index) => {
+                          const product = products.find(p => p.id === item.productId);
+                          return (
+                            <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
+                              <div className="flex-1">
+                                <p className="font-medium">
+                                  {product?.name}
+                                  {item.variation && ` - ${item.variation}`}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  ${item.unitPrice}/{product?.unit}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateQuantity(index, item.quantity - 1)}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <Input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
+                                  className="w-20 text-center"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateQuantity(index, item.quantity + 1)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeProduct(index)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Quote Settings - Step 4 */}
+        <div className={currentStep === 3 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
-              name="contactId"
+              name="discountType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Select Contact</FormLabel>
+                  <FormLabel>Discount Type</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a contact" />
+                        <SelectValue placeholder="Select discount type" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {contacts.map((contact) => (
-                        <SelectItem key={contact.id} value={contact.id.toString()}>
-                          {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="discountValue"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Discount Value
+                    {form.watch("discountType") === "percentage" ? " (%)" : " ($)"}
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="discountCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discount Code</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="taxRate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tax Rate (%)</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="paymentMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Method</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.values(PaymentMethod).map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {method}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -531,274 +917,75 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4 mt-4">
-              <FormField
-                control={form.control}
-                name="clientName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Name</FormLabel>
+            <FormField
+              control={form.control}
+              name="downPaymentType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Down Payment Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <Input {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select down payment type" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="clientEmail"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Email</FormLabel>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <Input type="email" {...field} />
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="clientPhone"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Phone</FormLabel>
-                    <FormControl>
-                      <Input type="tel" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="clientAddress"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Client Address</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </CardContent>
-        </Card>
+                    <SelectContent>
+                      {Object.values(QuoteStatus).map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-        <FormField
-          control={form.control}
-          name="categoryId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="templateId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Template</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a template" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {templates
-                    .filter((t) => t.categoryId.toString() === selectedCategoryId)
-                    .map((template) => (
-                      <SelectItem key={template.id} value={template.id.toString()}>
-                        {template.name} {template.isDefault && "(Default)"}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {selectedCategoryId && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="space-y-4">
-                <h3 className="font-semibold">Products</h3>
-                {isLoadingProducts ? (
-                  <div className="text-center py-4">Loading products...</div>
-                ) : products.length === 0 ? (
-                  <div className="text-center py-4">No products found in this category</div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {products.map((product) => (
-                      <Card key={product.id}>
-                        <CardContent className="pt-6">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-medium">{product.name}</h4>
-                              <p className="text-sm text-muted-foreground">
-                                Base Price: ${product.basePrice}/{product.unit}
-                              </p>
-                            </div>
-                            {product.variations ? (
-                              <Select onValueChange={(value) => addProduct(product, value)}>
-                                <FormControl>
-                                  <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Select variant" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {product.variations.map((variation) => (
-                                    <SelectItem key={variation.name} value={variation.price}>
-                                      {variation.name} - ${variation.price}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addProduct(product)}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-
-                {selectedProducts.length > 0 && (
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Selected Products</h4>
-                    <div className="space-y-2">
-                      {selectedProducts.map((item, index) => {
-                        const product = products.find(p => p.id === item.productId);
-                        return (
-                          <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
-                            <div className="flex-1">
-                              <p className="font-medium">
-                                {product?.name}
-                                {item.variation && ` - ${item.variation}`}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                ${item.unitPrice}/{product?.unit}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => updateQuantity(index, item.quantity - 1)}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <Input
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
-                                className="w-20 text-center"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => updateQuantity(index, item.quantity + 1)}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeProduct(index)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="discountType"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Discount Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+            <FormField
+              control={form.control}
+              name="downPaymentValue"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Down Payment Value
+                    {form.watch("downPaymentType") === "percentage" ? " (%)" : " ($)"}
+                  </FormLabel>
                   <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select discount type" />
-                    </SelectTrigger>
+                    <Input type="number" step="0.01" {...field} />
                   </FormControl>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentage</SelectItem>
-                    <SelectItem value="fixed">Fixed Amount</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           <FormField
             control={form.control}
-            name="discountValue"
+            name="notes"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>
-                  Discount Value
-                  {form.watch("discountType") === "percentage" ? " (%)" : " ($)"}
-                </FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="discountCode"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Discount Code</FormLabel>
+                <FormLabel>Notes</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -806,127 +993,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               </FormItem>
             )}
           />
-
-          <FormField
-            control={form.control}
-            name="taxRate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tax Rate (%)</FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="paymentMethod"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Method</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Object.values(PaymentMethod).map((method) => (
-                      <SelectItem key={method} value={method}>
-                        {method}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="downPaymentType"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Down Payment Type</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select down payment type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="percentage">Percentage</SelectItem>
-                    <SelectItem value="fixed">Fixed Amount</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {Object.values(QuoteStatus).map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="downPaymentValue"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Down Payment Value
-                  {form.watch("downPaymentType") === "percentage" ? " (%)" : " ($)"}
-                </FormLabel>
-                <FormControl>
-                  <Input type="number" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
+        {/* Calculations Card */}
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-2">
@@ -958,31 +1027,53 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Auto-save status indicator */}
-        {quote?.id && (
-          <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
-            {isAutoSaving ? (
-              <>
-                <Save className="h-4 w-4 animate-spin" />
-                <span>Saving changes...</span>
-              </>
-            ) : lastSaved ? (
-              <>
-                <Save className="h-4 w-4" />
-                <span>Last saved {new Intl.DateTimeFormat('en-US', {
-                  hour: 'numeric',
-                  minute: 'numeric',
-                  second: 'numeric'
-                }).format(lastSaved)}</span>
-              </>
-            ) : null}
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (quote ? "Updating..." : "Creating...") : (quote ? "Update Quote" : "Create Quote")}
+        {/* Navigation Buttons */}
+        <div className="flex justify-between items-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
+            disabled={currentStep === 0}
+          >
+            Previous
           </Button>
+
+          <div className="flex items-center gap-4">
+            {/* Auto-save status indicator */}
+            {quote?.id && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {isAutoSaving ? (
+                  <>
+                    <Save className="h-4 w-4 animate-spin" />
+                    <span>Saving changes...</span>
+                  </>
+                ) : lastSaved ? (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Last saved {new Intl.DateTimeFormat('en-US', {
+                      hour: 'numeric',
+                      minute: 'numeric',
+                      second: 'numeric'
+                    }).format(lastSaved)}</span>
+                  </>
+                ) : null}
+              </div>
+            )}
+
+            {currentStep < QUOTE_STEPS.length - 1 ? (
+              <Button
+                type="button"
+                onClick={() => setCurrentStep(prev => Math.min(QUOTE_STEPS.length - 1, prev + 1))}
+                disabled={!completedSteps.includes(QUOTE_STEPS[currentStep].id)}
+              >
+                Next
+              </Button>
+            ) : (
+              <Button type="submit" disabled={mutation.isPending || completedSteps.length !== QUOTE_STEPS.length}>
+                {mutation.isPending ? (quote ? "Updating..." : "Creating...") : (quote ? "Update Quote" : "Create Quote")}
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </Form>
