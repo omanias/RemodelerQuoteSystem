@@ -28,13 +28,19 @@ export function ProgressSteps({ steps, currentStep, completedSteps, onStepClick 
           return (
             <li key={step.name} className="md:flex-1">
               <Button
+                type="button"
                 variant="ghost"
                 className={cn(
                   "group relative flex w-full select-none flex-col border-l-4 py-2 pl-4 md:border-l-0 md:border-t-4 md:pb-0 md:pl-0 md:pt-4",
                   isCompleted ? "border-primary" : isCurrent ? "border-primary/50" : "border-border",
                   canNavigate ? "cursor-pointer hover:bg-accent" : "cursor-not-allowed opacity-50"
                 )}
-                onClick={() => canNavigate && onStepClick?.(index)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (canNavigate && onStepClick) {
+                    onStepClick(index);
+                  }
+                }}
                 disabled={!canNavigate}
               >
                 <span className="text-sm font-medium">
