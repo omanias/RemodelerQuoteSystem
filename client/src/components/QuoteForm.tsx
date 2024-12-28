@@ -21,18 +21,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, X, Save, UserPlus } from "lucide-react";
+import { Plus, Minus, X, UserPlus, Save, Users, Folder, Calculator, Settings } from "lucide-react";
 import { Link } from "wouter";
-import { cn } from "@/lib/utils";
+import { ProgressSteps } from "@/components/ui/progress-steps";
 
 // Update the validation schema to match the API requirements
 const quoteFormSchema = z.object({
-  clientName: z.string().min(1, "Client name is required"),
   contactId: z.string().min(1, "Contact is required"),
+  clientName: z.string().min(1, "Client name is required"),
   clientEmail: z.string().email("Invalid email address"),
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
@@ -43,6 +42,8 @@ const quoteFormSchema = z.object({
   discountValue: z.string().optional(),
   discountCode: z.string().optional(),
   taxRate: z.string().optional(),
+  downPaymentType: z.enum(["percentage", "fixed"]).optional(),
+  downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
   templateId: z.string().min(1, "Template is required"),
 });
@@ -77,57 +78,33 @@ interface Product {
   variations?: Array<{ name: string; price: string }>;
 }
 
+interface Category {
+  id: number;
+  name: string;
+  products: Product[];
+}
+
 interface SelectedProduct {
   productId: number;
   quantity: number;
   variation?: string;
   unitPrice: number;
-  description?: string;
-  unit?: string;
 }
 
-interface Category {
-  id: number;
-  name: string;
-}
-
-interface Template {
-  id: number;
-  name: string;
-  contractText: string;
-  categoryId: number;
-  isDefault?: boolean;
-}
+const QUOTE_STEPS = [
+  { id: 'contact', name: 'Contact Information', icon: Users },
+  { id: 'category', name: 'Category & Template', icon: Folder },
+  { id: 'products', name: 'Products Selection', icon: Calculator },
+  { id: 'settings', name: 'Quote Settings', icon: Settings },
+];
 
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-
-  // Load categories and products
-  const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ["/api/categories"],
-  });
-
-  const { data: templates = [] } = useQuery<Template[]>({
-    queryKey: ["/api/templates"],
-  });
-
-  // Load contacts with search
-  const { data: contacts = [] } = useQuery<Contact[]>({
-    queryKey: ["/api/contacts", searchTerm],
-    select: (data) => {
-      if (!searchTerm) return data;
-      const search = searchTerm.toLowerCase();
-      return data.filter(
-        contact =>
-          `${contact.firstName} ${contact.lastName}`.toLowerCase().includes(search) ||
-          contact.primaryEmail.toLowerCase().includes(search)
-      );
-    }
-  });
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<string[]>([]);
 
   // Initialize selected products from quote data if it exists
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
@@ -137,18 +114,28 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         quantity: p.quantity || 1,
         variation: p.variation,
         unitPrice: parseFloat(p.price) || 0,
-        description: p.description || "",
-        unit: p.unit || "",
       }));
     }
     return [];
   });
 
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: templates = [] } = useQuery<any[]>({
+    queryKey: ["/api/templates"],
+  });
+
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      clientName: quote?.clientName || "",
       contactId: quote?.contactId?.toString() || defaultContactId || "",
+      clientName: quote?.clientName || "",
       clientEmail: quote?.clientEmail || "",
       clientPhone: quote?.clientPhone || "",
       clientAddress: quote?.clientAddress || "",
@@ -159,26 +146,59 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       discountValue: quote?.discountValue?.toString() || "0",
       discountCode: quote?.discountCode || "",
       taxRate: quote?.taxRate?.toString() || "0",
+      downPaymentType: quote?.downPaymentType || "percentage",
+      downPaymentValue: quote?.downPaymentValue?.toString() || "0",
       notes: quote?.notes || "",
       templateId: quote?.templateId?.toString() || "",
     },
   });
 
-  const selectedCategoryId = form.watch("categoryId");
-  const selectedTemplateId = form.watch("templateId");
+  // Update form when contact data is available
+  useEffect(() => {
+    if (contact) {
+      form.setValue("contactId", contact.id.toString());
+      form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
+      form.setValue("clientEmail", contact.primaryEmail);
+      form.setValue("clientPhone", contact.primaryPhone);
+      form.setValue("clientAddress", contact.primaryAddress);
+    }
+  }, [contact, form]);
 
-  // Load products based on selected template
-  const { data: templateProducts = [] } = useQuery<Product[]>({
-    queryKey: ["/api/templates", selectedTemplateId, "products"],
-    enabled: !!selectedTemplateId,
+  // Watch for contactId changes to auto-fill contact details
+  const selectedContactId = form.watch("contactId");
+  useEffect(() => {
+    if (selectedContactId && !contact) {
+      const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
+      if (selectedContact) {
+        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+        form.setValue("clientEmail", selectedContact.primaryEmail);
+        form.setValue("clientPhone", selectedContact.primaryPhone);
+        form.setValue("clientAddress", selectedContact.primaryAddress);
+      }
+    }
+  }, [selectedContactId, contacts, form, contact]);
+
+  const selectedCategoryId = form.watch("categoryId");
+
+  // Set initial category ID from quote if available
+  useEffect(() => {
+    if (quote?.categoryId && !selectedCategoryId) {
+      form.setValue("categoryId", quote.categoryId.toString());
+    }
+  }, [quote, form, selectedCategoryId]);
+
+  // Load products based on selected category
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    select: (data) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    enabled: !!selectedCategoryId,
   });
 
-  // Auto-select default template when category changes
+  // Update templates when category changes
   useEffect(() => {
     if (selectedCategoryId && templates?.length > 0) {
-      const categoryTemplates = templates.filter(
-        (t) => t.categoryId.toString() === selectedCategoryId
-      );
+      const categoryTemplates = templates.filter((t) => t.categoryId.toString() === selectedCategoryId);
       const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
 
       if (defaultTemplate) {
@@ -186,24 +206,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       }
     }
   }, [selectedCategoryId, templates, form]);
-
-  // Update contact details when a contact is selected
-  const handleContactSelect = (contactId: string) => {
-    const selectedContact = contacts.find(c => c.id.toString() === contactId);
-    if (selectedContact) {
-      form.setValue("contactId", contactId);
-      form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
-      form.setValue("clientEmail", selectedContact.primaryEmail);
-      form.setValue("clientPhone", selectedContact.primaryPhone);
-      form.setValue("clientAddress", selectedContact.primaryAddress);
-    }
-  };
-
-  // Load selected template details
-  const { data: selectedTemplate } = useQuery<Template>({
-    queryKey: ["/api/templates", form.watch("templateId")],
-    enabled: !!form.watch("templateId"),
-  });
 
   const parseNumber = (value: any): number => {
     const parsed = parseFloat(value?.toString() || "0");
@@ -244,22 +246,163 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return subtotal - discount + tax;
   };
 
+  const calculateDownPayment = () => {
+    const total = calculateTotal();
+    const downPaymentType = form.watch("downPaymentType");
+    const downPaymentValue = parseNumber(form.watch("downPaymentValue"));
+
+    return downPaymentType === "percentage"
+      ? (total * downPaymentValue) / 100
+      : downPaymentValue;
+  };
+
+  const calculateRemainingBalance = () => {
+    const total = calculateTotal();
+    const downPayment = calculateDownPayment();
+    return total - downPayment;
+  };
+
+  const addProduct = (product: Product, variationPrice?: string) => {
+    setSelectedProducts(prev => [
+      ...prev,
+      {
+        productId: product.id,
+        quantity: 1,
+        variation: variationPrice ? product.variations?.find(v => v.price === variationPrice)?.name : undefined,
+        unitPrice: variationPrice ? parseFloat(variationPrice) : product.basePrice,
+      }
+    ]);
+  };
+
+  const updateQuantity = (index: number, value: number) => {
+    setSelectedProducts(prev =>
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: Math.max(1, value) } : item
+      )
+    );
+  };
+
+  const removeProduct = (index: number) => {
+    setSelectedProducts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const mutation = useMutation({
+    mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
+      const total = calculateTotal();
+      const downPayment = calculateDownPayment();
+      const remainingBalance = calculateRemainingBalance();
+      const subtotal = calculateSubtotal();
+
+      const formattedProducts = selectedProducts.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: parseFloat(item.unitPrice.toString()),
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
+
+      const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
+        method: quote ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contactId: parseInt(data.contactId),
+          categoryId: parseInt(data.categoryId),
+          templateId: parseInt(data.templateId),
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientPhone: data.clientPhone,
+          clientAddress: data.clientAddress,
+          selectedProducts: formattedProducts,
+          subtotal,
+          total,
+          downPaymentValue: downPayment,
+          remainingBalance,
+          discountType: data.discountType,
+          discountValue: parseFloat(data.discountValue || "0"),
+          discountCode: data.discountCode,
+          taxRate: parseFloat(data.taxRate || "0"),
+          status: data.status,
+          paymentMethod: data.paymentMethod,
+          downPaymentType: data.downPaymentType,
+          notes: data.notes,
+          content: {
+            products: formattedProducts,
+            calculations: {
+              subtotal,
+              total,
+              downPayment,
+              remainingBalance,
+              discount: calculateDiscount(),
+              tax: calculateTax()
+            },
+          },
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({
+        title: "Success",
+        description: quote ? "Quote updated successfully" : "Quote created successfully",
+      });
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: z.infer<typeof quoteFormSchema>) => {
+    if (selectedProducts.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one product to the quote",
+        variant: "destructive",
+      });
+      return;
+    }
+    mutation.mutate(data);
+  };
+
   // Auto-save mutation
   const autoSaveMutation = useMutation({
     mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
-      if (!quote?.id) return;
+      if (!quote?.id) return; // Only auto-save existing quotes
 
       const total = calculateTotal();
+      const downPayment = calculateDownPayment();
+      const remainingBalance = calculateRemainingBalance();
       const subtotal = calculateSubtotal();
 
-      const formattedProducts = selectedProducts.map(item => ({
-        id: item.productId,
-        quantity: item.quantity,
-        price: parseFloat(item.unitPrice.toString()),
-        description: item.description,
-        variation: item.variation,
-        unit: item.unit,
-      }));
+      const formattedProducts = selectedProducts.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: parseFloat(item.unitPrice.toString()),
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
 
       setIsAutoSaving(true);
 
@@ -269,20 +412,33 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...data,
           contactId: parseInt(data.contactId),
           categoryId: parseInt(data.categoryId),
           templateId: parseInt(data.templateId),
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientPhone: data.clientPhone,
+          clientAddress: data.clientAddress,
           selectedProducts: formattedProducts,
           subtotal,
           total,
+          downPaymentValue: downPayment,
+          remainingBalance,
+          discountType: data.discountType,
           discountValue: parseFloat(data.discountValue || "0"),
+          discountCode: data.discountCode,
           taxRate: parseFloat(data.taxRate || "0"),
+          status: data.status,
+          paymentMethod: data.paymentMethod,
+          downPaymentType: data.downPaymentType,
+          notes: data.notes,
           content: {
             products: formattedProducts,
             calculations: {
               subtotal,
               total,
+              downPayment,
+              remainingBalance,
               discount: calculateDiscount(),
               tax: calculateTax()
             },
@@ -320,7 +476,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     if (quote?.id) {
       autoSaveMutation.mutate(data);
     }
-  }, 2000);
+  }, 2000); // Auto-save after 2 seconds of no changes
 
   // Watch for form changes and trigger auto-save
   useEffect(() => {
@@ -332,204 +488,131 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return () => subscription.unsubscribe();
   }, [form, quote?.id, debouncedAutoSave]);
 
-  const addProduct = (product?: Product) => {
-    if (product) {
-      setSelectedProducts(prev => [
-        ...prev,
-        {
-          productId: product.id,
-          quantity: 1,
-          unitPrice: product.basePrice,
-          description: product.name,
-          unit: product.unit,
-        }
-      ]);
-    } else {
-      setSelectedProducts(prev => [
-        ...prev,
-        {
-          productId: 0,
-          quantity: 1,
-          unitPrice: 0,
-          description: "",
-          unit: "",
-        }
-      ]);
-    }
-  };
+  // Update completed steps when form fields are filled
+  useEffect(() => {
+    const newCompletedSteps: string[] = [];
 
-  const updateProduct = (index: number, field: keyof SelectedProduct, value: any) => {
-    setSelectedProducts(prev =>
-      prev.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      )
-    );
-  };
-
-  const removeProduct = (index: number) => {
-    setSelectedProducts(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const onSubmit = async (data: z.infer<typeof quoteFormSchema>) => {
-    if (selectedProducts.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one product or service to the quote",
-        variant: "destructive",
-      });
-      return;
+    // Contact step
+    if (form.watch("contactId") && form.watch("clientName") && form.watch("clientEmail")) {
+      newCompletedSteps.push('contact');
     }
 
-    try {
-      const total = calculateTotal();
-      const subtotal = calculateSubtotal();
+    // Category step
+    if (form.watch("categoryId") && form.watch("templateId")) {
+      newCompletedSteps.push('category');
+    }
 
-      const formattedProducts = selectedProducts.map(item => ({
-        id: item.productId,
-        quantity: item.quantity,
-        price: parseFloat(item.unitPrice.toString()),
-        description: item.description,
-        variation: item.variation,
-        unit: item.unit,
-      }));
+    // Products step
+    if (selectedProducts.length > 0) {
+      newCompletedSteps.push('products');
+    }
 
-      const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
-        method: quote ? "PUT" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...data,
-          contactId: parseInt(data.contactId),
-          categoryId: parseInt(data.categoryId),
-          templateId: parseInt(data.templateId),
-          selectedProducts: formattedProducts,
-          subtotal,
-          total,
-          discountValue: parseFloat(data.discountValue || "0"),
-          taxRate: parseFloat(data.taxRate || "0"),
-          content: {
-            products: formattedProducts,
-            calculations: {
-              subtotal,
-              total,
-              discount: calculateDiscount(),
-              tax: calculateTax()
-            },
-          },
-        }),
-        credentials: "include",
-      });
+    // Settings step
+    if (
+      form.watch("status") &&
+      form.watch("paymentMethod") &&
+      (!form.watch("discountValue") || form.watch("discountType")) &&
+      (!form.watch("downPaymentValue") || form.watch("downPaymentType"))
+    ) {
+      newCompletedSteps.push('settings');
+    }
 
-      if (!response.ok) {
-        throw new Error(await response.text());
+    setCompletedSteps(newCompletedSteps);
+  }, [form.watch, selectedProducts]);
+
+  // Auto-advance to next step when current step is completed
+  useEffect(() => {
+    const currentStepId = QUOTE_STEPS[currentStep].id;
+    if (completedSteps.includes(currentStepId) && currentStep < QUOTE_STEPS.length - 1) {
+      // Only auto-advance if we're creating a new quote
+      if (!quote) {
+        setCurrentStep(prev => prev + 1);
       }
-
-      toast({
-        title: "Success",
-        description: quote ? "Quote updated successfully" : "Quote created successfully",
-      });
-
-      onSuccess?.();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      });
     }
-  };
+  }, [completedSteps, currentStep, quote]);
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <FormField
-              control={form.control}
-              name="clientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      className="text-2xl font-semibold border-none px-0 focus-visible:ring-0"
-                      placeholder="Enter Client Name"
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-            <p className="text-sm text-muted-foreground">
-              Quote #{quote?.number || "New Quote"}
-            </p>
-          </div>
-          {/* Auto-save indicator */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {isAutoSaving ? (
-              <>
-                <Save className="h-4 w-4 animate-spin" />
-                <span>Saving changes...</span>
-              </>
-            ) : lastSaved ? (
-              <>
-                <Save className="h-4 w-4" />
-                <span>Last saved {new Intl.DateTimeFormat('en-US', {
-                  hour: 'numeric',
-                  minute: 'numeric',
-                  second: 'numeric'
-                }).format(lastSaved)}</span>
-              </>
-            ) : null}
-          </div>
-        </div>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <ProgressSteps
+          steps={QUOTE_STEPS}
+          currentStep={currentStep}
+          completedSteps={completedSteps}
+          onStepClick={setCurrentStep}
+        />
 
-        {/* Contact Search and Selection */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-semibold">Contact Information</h3>
-              <Link href="/contacts/new">
-                <Button variant="outline" size="sm">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Create New Contact
-                </Button>
-              </Link>
-            </div>
+        {/* User Info Card */}
+        {user && (
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-2">Sales Representative</h3>
+              <div className="text-sm text-muted-foreground">
+                <p>Name: {user.name}</p>
+                <p>Email: {user.email}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <div className="space-y-4">
-              <Input
-                type="text"
-                placeholder="Search contacts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="mb-2"
+        {/* Contact Information - Step 1 */}
+        <div className={currentStep === 0 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold">Contact Information</h3>
+                <Link href="/contacts/new">
+                  <Button variant="outline" size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Create New Contact
+                  </Button>
+                </Link>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="contactId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Select Contact</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a contact" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {contacts.map((contact) => (
+                          <SelectItem key={contact.id} value={contact.id.toString()}>
+                            {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
 
-              <Select 
-                value={form.watch("contactId")} 
-                onValueChange={handleContactSelect}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a contact" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map((contact) => (
-                    <SelectItem key={contact.id} value={contact.id.toString()}>
-                      {contact.firstName} {contact.lastName} - {contact.primaryEmail}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="clientName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="clientEmail"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>Client Email</FormLabel>
                       <FormControl>
                         <Input type="email" {...field} />
                       </FormControl>
@@ -542,7 +625,20 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   name="clientPhone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone</FormLabel>
+                      <FormLabel>Client Phone</FormLabel>
+                      <FormControl>
+                        <Input type="tel" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="clientAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Client Address</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -551,236 +647,434 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   )}
                 />
               </div>
-
-              <FormField
-                control={form.control}
-                name="clientAddress"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Address</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Category Selection */}
-        <FormField
-          control={form.control}
-          name="categoryId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Products/Services */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold">Products & Services</h3>
-                <div className="flex gap-2">
-                  {selectedTemplateId && templateProducts.length > 0 && (
-                    <Select onValueChange={(productId) => {
-                      const product = templateProducts.find(p => p.id.toString() === productId);
-                      if (product) addProduct(product);
-                    }}>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Select a product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {templateProducts.map((product) => (
-                          <SelectItem key={product.id} value={product.id.toString()}>
-                            {product.name} (${product.basePrice}/{product.unit})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addProduct()}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Custom Item
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {selectedProducts.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-4 items-start">
-                    <div className="col-span-5">
-                      <Input
-                        placeholder="Description"
-                        value={item.description}
-                        onChange={(e) => updateProduct(index, 'description', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <div className="flex items-center gap-1">
-                        <Input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateProduct(index, 'quantity', parseInt(e.target.value) || 1)}
-                          className="text-right"
-                        />
-                        <span className="text-muted-foreground text-sm whitespace-nowrap">
-                          {item.unit}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-span-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={item.unitPrice}
-                        onChange={(e) => updateProduct(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                        className="text-right"
-                        placeholder="$0.00"
-                      />
-                    </div>
-                    <div className="col-span-2 text-right">
-                      ${(item.quantity * item.unitPrice).toFixed(2)}
-                    </div>
-                    <div className="col-span-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeProduct(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Calculations */}
-              <div className="border-t pt-4 mt-6">
-                <div className="space-y-2 max-w-xs ml-auto">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>${calculateSubtotal().toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center gap-4">
-                    <span>Discount</span>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={form.watch("discountType")}
-                        onValueChange={(value) => form.setValue("discountType", value as "percentage" | "fixed")}
-                      >
-                        <SelectTrigger className="w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percentage">%</SelectItem>
-                          <SelectItem value="fixed">$</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="w-24 text-right"
-                        {...form.register("discountValue")}
-                      />
-                      <span className="w-20 text-right">
-                        ${calculateDiscount().toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center gap-4">
-                    <span>Tax</span>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        className="w-24 text-right"
-                        {...form.register("taxRate")}
-                      />
-                      <span>%</span>
-                      <span className="w-20 text-right">
-                        ${calculateTax().toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between font-semibold border-t pt-2">
-                    <span>Total</span>
-                    <span>${calculateTotal().toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Notes to Quote */}
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notes to Quote</FormLabel>
-              <FormControl>
-                <Textarea
-                  {...field}
-                  placeholder="Enter notes for this quote..."
-                  className="min-h-[100px]"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Contract text without heading */}
-        {selectedTemplate?.contractText && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-sm text-muted-foreground">
-                {selectedTemplate.contractText}
-              </div>
             </CardContent>
           </Card>
-        )}
+        </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-end gap-4">
+        {/* Category Selection - Step 2 */}
+        <div className={currentStep === 1 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <FormField
+            control={form.control}
+            name="categoryId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="templateId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Template</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a template" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {templates
+                      .filter((t) => t.categoryId.toString() === selectedCategoryId)
+                      .map((template) => (
+                        <SelectItem key={template.id} value={template.id.toString()}>
+                          {template.name} {template.isDefault && "(Default)"}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Products Selection - Step 3 */}
+        <div className={currentStep === 2 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          {selectedCategoryId && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Products</h3>
+                  {isLoadingProducts ? (
+                    <div className="text-center py-4">Loading products...</div>
+                  ) : products.length === 0 ? (
+                    <div className="text-center py-4">No products found in this category</div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      {products.map((product) => (
+                        <Card key={product.id}>
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-medium">{product.name}</h4>
+                                <p className="text-sm text-muted-foreground">
+                                  Base Price: ${product.basePrice}/{product.unit}
+                                </p>
+                              </div>
+                              {product.variations ? (
+                                <Select onValueChange={(value) => addProduct(product, value)}>
+                                  <FormControl>
+                                    <SelectTrigger className="w-[140px]">
+                                      <SelectValue placeholder="Select variant" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    {product.variations.map((variation) => (
+                                      <SelectItem key={variation.name} value={variation.price}>
+                                        {variation.name} - ${variation.price}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addProduct(product)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedProducts.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Selected Products</h4>
+                      <div className="space-y-2">
+                        {selectedProducts.map((item, index) => {
+                          const product = products.find(p => p.id === item.productId);
+                          return (
+                            <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
+                              <div className="flex-1">
+                                <p className="font-medium">
+                                  {product?.name}
+                                  {item.variation && ` - ${item.variation}`}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  ${item.unitPrice}/{product?.unit}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateQuantity(index, item.quantity - 1)}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <Input
+                                  type="number"
+                                  value={item.quantity}
+                                  onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
+                                  className="w-20 text-center"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateQuantity(index, item.quantity + 1)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeProduct(index)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Quote Settings - Step 4 */}
+        <div className={currentStep === 3 ? 'animate-in slide-in-from-right' : 'hidden'}>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="discountType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discount Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select discount type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="discountValue"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Discount Value
+                    {form.watch("discountType") === "percentage" ? " (%)" : " ($)"}
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="discountCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discount Code</FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="taxRate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tax Rate (%)</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="paymentMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Method</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.values(PaymentMethod).map((method) => (
+                        <SelectItem key={method} value={method}>
+                          {method}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="downPaymentType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Down Payment Type</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select down payment type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="percentage">Percentage</SelectItem>
+                      <SelectItem value="fixed">Fixed Amount</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.values(QuoteStatus).map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="downPaymentValue"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Down Payment Value
+                    {form.watch("downPaymentType") === "percentage" ? " (%)" : " ($)"}
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <FormField
+            control={form.control}
+            name="notes"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Notes</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Calculations Card */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>${calculateSubtotal().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount:</span>
+                <span>-${calculateDiscount().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Tax:</span>
+                <span>${calculateTax().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Total:</span>
+                <span>${calculateTotal().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Down Payment:</span>
+                <span>${calculateDownPayment().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Remaining Balance:</span>
+                <span>${calculateRemainingBalance().toFixed(2)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between items-center">
           <Button
-            type="submit"
-            disabled={isAutoSaving}
+            type="button"
+            variant="outline"
+            onClick={() => setCurrentStep(prev => Math.max(0, prev - 1))}
+            disabled={currentStep === 0}
           >
-            {isAutoSaving ? "Saving..." : (quote ? "Update Quote" : "Create Quote")}
+            Previous
           </Button>
+
+          <div className="flex items-center gap-4">
+            {/* Auto-save status indicator */}
+            {quote?.id && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {isAutoSaving ? (
+                  <>
+                    <Save className="h-4 w-4 animate-spin" />
+                    <span>Saving changes...</span>
+                  </>
+                ) : lastSaved ? (
+                  <>
+                    <Save className="h-4 w-4" />
+                    <span>Last saved {new Intl.DateTimeFormat('en-US', {
+                      hour: 'numeric',
+                      minute: 'numeric',
+                      second: 'numeric'
+                    }).format(lastSaved)}</span>
+                  </>
+                ) : null}
+              </div>
+            )}
+
+            {currentStep < QUOTE_STEPS.length - 1 ? (
+              <Button
+                type="button"
+                onClick={() => setCurrentStep(prev => Math.min(QUOTE_STEPS.length - 1, prev + 1))}
+                disabled={!completedSteps.includes(QUOTE_STEPS[currentStep].id)}
+              >
+                Next
+              </Button>
+            ) : (
+              <Button type="submit" disabled={mutation.isPending || completedSteps.length !== QUOTE_STEPS.length}>
+                {mutation.isPending ? (quote ? "Updating..." : "Creating...") : (quote ? "Update Quote" : "Create Quote")}
+              </Button>
+            )}
+          </div>
         </div>
       </form>
     </Form>
