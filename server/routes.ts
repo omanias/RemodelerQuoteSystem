@@ -637,7 +637,14 @@ export function registerRoutes(app: Express) {
         contactId 
       } = req.body;
 
-      console.log('Quote creation request:', req.body);
+      console.log('Quote creation request:', {
+        categoryId,
+        templateId,
+        customerInfo,
+        downPaymentValue,
+        total,
+        contactId 
+      });
 
       // Validate quote data
       if (!categoryId || !templateId) {
@@ -671,7 +678,7 @@ export function registerRoutes(app: Express) {
           number: quoteNumber,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : null,
+          contactId: contactId ? parseInt(contactId) : undefined, 
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
@@ -705,17 +712,7 @@ export function registerRoutes(app: Express) {
         })
         .returning();
 
-      // Fetch the complete quote with relationships
-      const completeQuote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, quote.id),
-        with: {
-          category: true,
-          template: true,
-          contact: true,
-        },
-      });
-
-      res.json(completeQuote);
+      res.json(quote);
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error creating quote" });
@@ -743,8 +740,6 @@ export function registerRoutes(app: Express) {
         contactId 
       } = req.body;
 
-      console.log('Quote update request:', req.body);
-
       // Parse numeric values with fallbacks
       const parsedTotal = parseFloat(total?.toString() || '0') || 0;
       const parsedDownPayment = parseFloat(downPaymentValue?.toString() || '0') || 0;
@@ -757,11 +752,11 @@ export function registerRoutes(app: Express) {
         .set({
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : null,
+          contactId: contactId ? parseInt(contactId) : undefined, 
           clientName: customerInfo.name,
           clientEmail: customerInfo.email || null,
           clientPhone: customerInfo.phone || null,
-          clientAddress: customerInfo.address || null,
+          clientAddress: customer.address || null,
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -791,17 +786,7 @@ export function registerRoutes(app: Express) {
         .where(eq(quotes.id, parseInt(id)))
         .returning();
 
-      // Fetch the complete quote with relationships
-      const completeQuote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, quote.id),
-        with: {
-          category: true,
-          template: true,
-          contact: true,
-        },
-      });
-
-      res.json(completeQuote);
+      res.json(quote);
     } catch (error) {
       console.error('Error updating quote:', error);
       res.status(500).json({ message: "Server error updating quote" });
@@ -932,7 +917,7 @@ export function registerRoutes(app: Express) {
 
   // Export quote as PDF
   app.get("/api/quotes/:id/export/pdf", requireAuth, async (req, res) => {
-        try {
+    try {
       const { id } = req.params;
       const quote = await db.query.quotes.findFirst({
         where: eq(quotes.id, parseInt(id)),
