@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Plus, Search } from "lucide-react";
+import { MoreVertical, Plus, Search, ArrowLeft } from "lucide-react";
 import { CategoryForm } from "@/components/CategoryForm";
+import { Link } from "wouter";
 
 export function Categories() {
   const [search, setSearch] = useState("");
@@ -41,7 +42,15 @@ export function Categories() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Categories</h1>
+        <div className="flex items-center gap-4">
+          <Link href="/products">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Products
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-bold">Categories</h1>
+        </div>
         <Dialog>
           <DialogTrigger asChild>
             <Button>
