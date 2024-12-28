@@ -30,9 +30,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { UserPlus, MoreVertical, Search } from "lucide-react";
+import { UserPlus, MoreVertical, Search, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserForm } from "@/components/UserForm";
+import { Link } from "wouter";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -71,20 +72,28 @@ export function Users() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Users</h1>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add User
+        <div className="flex gap-2">
+          <Link href="/permissions">
+            <Button variant="outline">
+              <Shield className="mr-2 h-4 w-4" />
+              Permissions
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
-            </DialogHeader>
-            <UserForm />
-          </DialogContent>
-        </Dialog>
+          </Link>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New User</DialogTitle>
+              </DialogHeader>
+              <UserForm />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -157,7 +166,7 @@ export function Users() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.status === "active" ? "success" : "destructive"}
+                      variant={user.status === "active" ? "default" : "destructive"}
                     >
                       {user.status}
                     </Badge>
