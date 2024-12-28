@@ -176,10 +176,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     }
   }, [quote, form, selectedCategoryId]);
 
+  // Load products based on selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    select: (data) =>
-      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    queryKey: [`/api/products?categoryId=${selectedCategoryId}`],
     enabled: !!selectedCategoryId,
   });
 
