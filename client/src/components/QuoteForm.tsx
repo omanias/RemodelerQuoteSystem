@@ -88,9 +88,6 @@ interface SelectedProduct {
   quantity: number;
   variation?: string;
   unitPrice: number;
-  name?: string;
-  unit?: string;
-  isCustom?: boolean;
 }
 
 
@@ -176,9 +173,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     }
   }, [quote, form, selectedCategoryId]);
 
-  // Load products based on selected category
   const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: [`/api/products?categoryId=${selectedCategoryId}`],
+    queryKey: ["/api/products"],
+    select: (data) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
     enabled: !!selectedCategoryId,
   });
 
@@ -272,35 +270,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     setSelectedProducts(prev => prev.filter((_, i) => i !== index));
   };
 
-  const [customItemForm, setCustomItemForm] = useState({
-    name: '',
-    price: '',
-    quantity: '1',
-    unit: 'item'
-  });
-
-  const addCustomItem = () => {
-    if (!customItemForm.name || !customItemForm.price) return;
-
-    setSelectedProducts(prev => [...prev, {
-      productId: -1, // Use negative ID to identify custom items
-      quantity: parseInt(customItemForm.quantity) || 1,
-      unitPrice: parseFloat(customItemForm.price),
-      name: customItemForm.name,
-      unit: customItemForm.unit,
-      isCustom: true
-    }]);
-
-    // Reset form
-    setCustomItemForm({
-      name: '',
-      price: '',
-      quantity: '1',
-      unit: 'item'
-    });
-  };
-
-
   const mutation = useMutation({
     mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
       const total = calculateTotal();
@@ -309,16 +278,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const subtotal = calculateSubtotal();
 
       const formattedProducts = selectedProducts.map(item => {
-        if (item.isCustom) {
-          return {
-            id: -1,
-            quantity: item.quantity,
-            name: item.name,
-            price: parseFloat(item.unitPrice.toString()),
-            unit: item.unit,
-            isCustom: true
-          };
-        }
         const product = products.find(p => p.id === item.productId);
         return {
           id: item.productId,
@@ -418,16 +377,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const subtotal = calculateSubtotal();
 
       const formattedProducts = selectedProducts.map(item => {
-        if (item.isCustom) {
-          return {
-            id: -1,
-            quantity: item.quantity,
-            name: item.name,
-            price: parseFloat(item.unitPrice.toString()),
-            unit: item.unit,
-            isCustom: true
-          };
-        }
         const product = products.find(p => p.id === item.productId);
         return {
           id: item.productId,
@@ -520,7 +469,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     });
     return () => subscription.unsubscribe();
   }, [form, quote?.id, debouncedAutoSave]);
-
 
 
   return (
@@ -748,71 +696,21 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </div>
                 )}
 
-                {/* Custom Line Item */}
-                <div className="space-y-4 pt-4 border-t">
-                  <h4 className="font-medium">Add Custom Line Item</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <Input
-                        placeholder="Item name"
-                        value={customItemForm.name}
-                        onChange={(e) => setCustomItemForm(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="Price per unit"
-                        value={customItemForm.price}
-                        onChange={(e) => setCustomItemForm(prev => ({ ...prev, price: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Input
-                        type="number"
-                        min="1"
-                        placeholder="Quantity"
-                        value={customItemForm.quantity}
-                        onChange={(e) => setCustomItemForm(prev => ({ ...prev, quantity: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Input
-                        placeholder="Unit (e.g., hours, pieces)"
-                        value={customItemForm.unit}
-                        onChange={(e) => setCustomItemForm(prev => ({ ...prev, unit: e.target.value }))}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Button
-                        type="button"
-                        className="w-full"
-                        onClick={addCustomItem}
-                        disabled={!customItemForm.name || !customItemForm.price}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Custom Item
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
                 {selectedProducts.length > 0 && (
                   <div className="space-y-4">
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => {
-                        const product = item.isCustom ? item : products.find(p => p.id === item.productId);
+                        const product = products.find(p => p.id === item.productId);
                         return (
                           <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                             <div className="flex-1">
                               <p className="font-medium">
-                                {item.isCustom ? item.name : product?.name}
-                                {!item.isCustom && item.variation && ` - ${item.variation}`}
+                                {product?.name}
+                                {item.variation && ` - ${item.variation}`}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                ${item.unitPrice}/{item.isCustom ? item.unit : product?.unit}
+                                ${item.unitPrice}/{product?.unit}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
