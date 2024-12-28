@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation, useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { QuoteForm } from "@/components/QuoteForm";
@@ -13,12 +13,12 @@ export function QuoteDetail() {
   const contactId = searchParams.get("contactId");
   const id = params.id;
 
-  const { data: quote, isLoading: isLoadingQuote } = useQuery<Quote>({
+  const { data: quote, isLoading: isLoadingQuote, error: quoteError } = useQuery<Quote>({
     queryKey: [`/api/quotes/${id}`],
     enabled: !!id,
   });
 
-  const { data: contact } = useQuery<Contact>({
+  const { data: contact, isLoading: isLoadingContact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId,
   });
@@ -31,6 +31,11 @@ export function QuoteDetail() {
     return <div>Loading quote...</div>;
   }
 
+  if (quoteError) {
+    console.error('Error loading quote:', quoteError);
+    return <div>Error loading quote. Please try again.</div>;
+  }
+
   return (
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center mb-6">
@@ -41,7 +46,7 @@ export function QuoteDetail() {
           </Button>
         </Link>
         <h1 className="text-2xl font-bold">
-          {id ? "Edit Quote" : "New Quote"}
+          {id ? `Edit Quote ${quote?.number || ''}` : "New Quote"}
         </h1>
       </div>
 
