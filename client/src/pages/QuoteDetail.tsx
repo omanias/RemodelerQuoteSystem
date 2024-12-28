@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { QuoteForm } from "@/components/QuoteForm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { type Quote, type User } from "@db/schema";
+import { type Quote, type User, type Contact } from "@db/schema";
 
 export function QuoteDetail() {
   const [, setLocation] = useLocation();
@@ -18,7 +18,7 @@ export function QuoteDetail() {
     enabled: !!id,
   });
 
-  const { data: contact } = useQuery({
+  const { data: contact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId,
   });
