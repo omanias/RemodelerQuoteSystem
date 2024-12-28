@@ -595,6 +595,29 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.get("/api/quotes/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const quote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, parseInt(id)),
+        with: {
+          category: true,
+          template: true,
+          contact: true,
+        },
+      });
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      res.json(quote);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      res.status(500).json({ message: "Server error fetching quote" });
+    }
+  });
+
   app.post("/api/quotes", requireAuth, async (req, res) => {
     try {
       const {
