@@ -142,6 +142,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Update form when contact data is available
   useEffect(() => {
     if (contact) {
+      console.log("Setting contact data:", contact);
       form.setValue("contactId", contact.id.toString());
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
       form.setValue("clientEmail", contact.primaryEmail);
@@ -156,6 +157,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     if (selectedContactId && !contact) {
       const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
       if (selectedContact) {
+        console.log("Auto-filling contact details:", selectedContact);
         form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
         form.setValue("clientEmail", selectedContact.primaryEmail);
         form.setValue("clientPhone", selectedContact.primaryPhone);
@@ -169,6 +171,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   // Set initial category ID from quote if available
   useEffect(() => {
     if (quote?.categoryId && !selectedCategoryId) {
+      console.log("Setting initial category ID:", quote.categoryId);
       form.setValue("categoryId", quote.categoryId.toString());
     }
   }, [quote, form, selectedCategoryId]);
@@ -188,6 +191,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
 
       if (defaultTemplate) {
+        console.log("Setting default template:", defaultTemplate);
         form.setValue("templateId", defaultTemplate.id.toString());
       }
     }
@@ -274,6 +278,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const mutation = useMutation({
     mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
+      console.log("Submitting form data:", data);
+
       const total = calculateTotal();
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
@@ -334,6 +340,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
       if (!response.ok) {
         const errorText = await response.text();
+        console.error("API Error:", errorText);
         throw new Error(errorText);
       }
 
@@ -348,6 +355,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
+      console.error("Mutation error:", error);
       toast({
         title: "Error",
         description: error.message,
@@ -365,6 +373,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       });
       return;
     }
+    console.log("Form submission data:", data);
     mutation.mutate(data);
   };
 
