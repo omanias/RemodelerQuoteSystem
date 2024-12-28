@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, Save, UserPlus } from "lucide-react";
+import { Plus, X, Save, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
@@ -165,13 +165,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   });
 
   const selectedCategoryId = form.watch("categoryId");
+  const selectedTemplateId = form.watch("templateId");
 
-  // Load products based on selected category
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    select: (data) =>
-      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
-    enabled: !!selectedCategoryId,
+  // Load products based on selected template
+  const { data: templateProducts = [] } = useQuery<Product[]>({
+    queryKey: ["/api/templates", selectedTemplateId, "products"],
+    enabled: !!selectedTemplateId,
   });
 
   // Auto-select default template when category changes
@@ -603,16 +602,16 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               <div className="flex justify-between items-center">
                 <h3 className="font-semibold">Products & Services</h3>
                 <div className="flex gap-2">
-                  {selectedCategoryId && products.length > 0 && (
+                  {selectedTemplateId && templateProducts.length > 0 && (
                     <Select onValueChange={(productId) => {
-                      const product = products.find(p => p.id.toString() === productId);
+                      const product = templateProducts.find(p => p.id.toString() === productId);
                       if (product) addProduct(product);
                     }}>
                       <SelectTrigger className="w-[200px]">
                         <SelectValue placeholder="Select a product" />
                       </SelectTrigger>
                       <SelectContent>
-                        {products.map((product) => (
+                        {templateProducts.map((product) => (
                           <SelectItem key={product.id} value={product.id.toString()}>
                             {product.name} (${product.basePrice}/{product.unit})
                           </SelectItem>

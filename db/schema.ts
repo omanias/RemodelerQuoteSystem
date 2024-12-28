@@ -23,7 +23,6 @@ export const QuoteStatus = {
   REVISED: 'REVISED'
 } as const;
 
-// New enums for contacts
 export const LeadStatus = {
   NEW: 'NEW',
   CONTACTED: 'CONTACTED',
@@ -119,7 +118,7 @@ export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
-  termsAndConditions: text("terms_and_conditions"),
+  contractText: text("terms_and_conditions"),
   imageUrls: jsonb("image_urls"),
   isDefault: boolean("is_default").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -137,7 +136,6 @@ export const tablePermissions = pgTable("table_permissions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// New tables for contact management
 export const contacts = pgTable("contacts", {
   id: serial("id").primaryKey(),
   firstName: text("first_name").notNull(),
@@ -200,7 +198,7 @@ export const contactNotes = pgTable("contact_notes", {
   contactId: integer("contact_id").references(() => contacts.id).notNull(),
   userId: integer("user_id").references(() => users.id).notNull(),
   content: text("content").notNull(),
-  type: text("type").notNull(), 
+  type: text("type").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -229,13 +227,12 @@ export const contactDocuments = pgTable("contact_documents", {
 export const contactPhotos = pgTable("contact_photos", {
   id: serial("id").primaryKey(),
   contactId: integer("contact_id").references(() => contacts.id).notNull(),
-  type: text("type").notNull(), 
+  type: text("type").notNull(),
   url: text("url").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Update quotes table to include contactId
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
   number: text("number").notNull().unique(),
@@ -277,11 +274,19 @@ export const categoriesRelations = relations(categories, ({ many }) => ({
   templates: many(templates),
 }));
 
-export const productsRelations = relations(products, ({ one }) => ({
+export const templateProducts = pgTable("template_products", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").references(() => templates.id).notNull(),
+  productId: integer("product_id").references(() => products.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],
   }),
+  templates: many(templateProducts),
 }));
 
 export const quotesRelations = relations(quotes, ({ one }) => ({
@@ -355,12 +360,26 @@ export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   }),
 }));
 
-export const templatesRelations = relations(templates, ({ one }) => ({
+export const templatesRelations = relations(templates, ({ one, many }) => ({
   category: one(categories, {
     fields: [templates.categoryId],
     references: [categories.id],
   }),
+  products: many(templateProducts),
+  quotes: many(quotes),
 }));
+
+export const templateProductsRelations = relations(templateProducts, ({ one }) => ({
+  template: one(templates, {
+    fields: [templateProducts.templateId],
+    references: [templates.id],
+  }),
+  product: one(products, {
+    fields: [templateProducts.productId],
+    references: [products.id],
+  }),
+}));
+
 
 // Schemas
 export const insertUserSchema = createInsertSchema(users);
@@ -389,6 +408,9 @@ export const selectContactPhotoSchema = createSelectSchema(contactPhotos);
 export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFields);
 export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
 
+export const insertTemplateProductSchema = createInsertSchema(templateProducts);
+export const selectTemplateProductSchema = createSelectSchema(templateProducts);
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -415,3 +437,6 @@ export type ContactPhoto = typeof contactPhotos.$inferSelect;
 export type NewContactPhoto = typeof contactPhotos.$inferInsert;
 export type ContactCustomField = typeof contactCustomFields.$inferSelect;
 export type NewContactCustomField = typeof contactCustomFields.$inferInsert;
+
+export type TemplateProduct = typeof templateProducts.$inferSelect;
+export type NewTemplateProduct = typeof templateProducts.$inferInsert;

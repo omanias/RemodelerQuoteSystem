@@ -575,6 +575,28 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  app.get("/api/templates/:id/products", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get template with its associated products
+      const result = await db.query.templateProducts.findMany({
+        where: eq(templateProducts.templateId, parseInt(id)),
+        with: {
+          product: true,
+        },
+      });
+
+      // Map to return just the products
+      const products = result.map(tp => tp.product);
+      res.json(products);
+    } catch (error) {
+      console.error('Error fetching template products:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+
   // Quote Routes
   app.get("/api/contacts/:id/quotes", requireAuth, async (req, res) => {
     try {
