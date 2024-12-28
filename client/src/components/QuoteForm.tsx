@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
 
+// Update the validation schema to match the API requirements
 const quoteFormSchema = z.object({
   contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
