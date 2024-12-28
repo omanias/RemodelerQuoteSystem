@@ -730,7 +730,10 @@ export function registerRoutes(app: Express) {
       const {
         categoryId,
         templateId,
-        customerInfo,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
         selectedProducts = [],
         total,
         downPaymentValue,
@@ -757,11 +760,11 @@ export function registerRoutes(app: Express) {
         .set({
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : undefined, 
-          clientName: customerInfo.name,
-          clientEmail: customerInfo.email || null,
-          clientPhone: customerInfo.phone || null,
-          clientAddress: customer.address || null,
+          contactId: contactId ? parseInt(contactId) : undefined,
+          clientName,
+          clientEmail: clientEmail || null,
+          clientPhone: clientPhone || null,
+          clientAddress: clientAddress || null,
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -773,7 +776,7 @@ export function registerRoutes(app: Express) {
           notes: notes || '',
           status: status || QuoteStatus.DRAFT,
           content: {
-            products: selectedProducts.map(product => ({
+            products: selectedProducts.map((product: any) => ({
               ...product,
               price: parseFloat(product.price?.toString() || '0') || 0,
               quantity: parseInt(product.quantity?.toString() || '1') || 1
