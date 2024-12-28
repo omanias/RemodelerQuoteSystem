@@ -25,14 +25,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Minus, X, Save, FileText } from "lucide-react";
+import { Plus, Minus, X, Save, UserPlus } from "lucide-react";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 // Update the validation schema to match the API requirements
 const quoteFormSchema = z.object({
-  jobTitle: z.string().min(1, "Job title is required"),
-  contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
+  contactId: z.string().min(1, "Contact is required"),
   clientEmail: z.string().email("Invalid email address"),
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
@@ -99,12 +99,12 @@ interface Template {
   isDefault?: boolean;
 }
 
-
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // Load categories and products
   const { data: categories = [] } = useQuery<Category[]>({
@@ -113,6 +113,20 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const { data: templates = [] } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
+  });
+
+  // Load contacts with search
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts", searchTerm],
+    select: (data) => {
+      if (!searchTerm) return data;
+      const search = searchTerm.toLowerCase();
+      return data.filter(
+        contact =>
+          `${contact.firstName} ${contact.lastName}`.toLowerCase().includes(search) ||
+          contact.primaryEmail.toLowerCase().includes(search)
+      );
+    }
   });
 
   // Initialize selected products from quote data if it exists
@@ -133,9 +147,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const form = useForm({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      jobTitle: quote?.jobTitle || "",
-      contactId: quote?.contactId?.toString() || defaultContactId || "",
       clientName: quote?.clientName || "",
+      contactId: quote?.contactId?.toString() || defaultContactId || "",
       clientEmail: quote?.clientEmail || "",
       clientPhone: quote?.clientPhone || "",
       clientAddress: quote?.clientAddress || "",
@@ -154,7 +167,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const selectedCategoryId = form.watch("categoryId");
 
   // Load products based on selected category
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+  const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     select: (data) =>
       data.filter((product) => product.categoryId.toString() === selectedCategoryId),
@@ -174,6 +187,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       }
     }
   }, [selectedCategoryId, templates, form]);
+
+  // Update contact details when a contact is selected
+  const handleContactSelect = (contactId: string) => {
+    const selectedContact = contacts.find(c => c.id.toString() === contactId);
+    if (selectedContact) {
+      form.setValue("contactId", contactId);
+      form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+      form.setValue("clientEmail", selectedContact.primaryEmail);
+      form.setValue("clientPhone", selectedContact.primaryPhone);
+      form.setValue("clientAddress", selectedContact.primaryAddress);
+    }
+  };
 
   // Load selected template details
   const { data: selectedTemplate } = useQuery<Template>({
@@ -420,18 +445,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-center">
           <div>
             <FormField
               control={form.control}
-              name="jobTitle"
+              name="clientName"
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
                     <Input
                       {...field}
                       className="text-2xl font-semibold border-none px-0 focus-visible:ring-0"
-                      placeholder="Enter Job Title"
+                      placeholder="Enter Client Name"
                     />
                   </FormControl>
                 </FormItem>
@@ -461,6 +486,90 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </div>
         </div>
 
+        {/* Contact Search and Selection */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold">Contact Information</h3>
+              <Link href="/contacts/new">
+                <Button variant="outline" size="sm">
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Create New Contact
+                </Button>
+              </Link>
+            </div>
+
+            <div className="space-y-4">
+              <Input
+                type="text"
+                placeholder="Search contacts..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="mb-2"
+              />
+
+              <Select 
+                value={form.watch("contactId")} 
+                onValueChange={handleContactSelect}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a contact" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contacts.map((contact) => (
+                    <SelectItem key={contact.id} value={contact.id.toString()}>
+                      {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="clientEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="clientPhone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="clientAddress"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Category Selection */}
         <FormField
           control={form.control}
@@ -487,37 +596,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           )}
         />
 
-
-        {/* Client Info */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="clientName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Name</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="clientEmail"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Client Email</FormLabel>
-                <FormControl>
-                  <Input type="email" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
         {/* Products/Services */}
         <Card>
           <CardContent className="pt-6">
@@ -525,7 +603,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               <div className="flex justify-between items-center">
                 <h3 className="font-semibold">Products & Services</h3>
                 <div className="flex gap-2">
-                  {selectedCategoryId && (
+                  {selectedCategoryId && products.length > 0 && (
                     <Select onValueChange={(productId) => {
                       const product = products.find(p => p.id.toString() === productId);
                       if (product) addProduct(product);
