@@ -9,6 +9,7 @@ export type AuthUser = {
   name: string;
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
   companyId: number;
+  status: 'active' | 'inactive';
 };
 
 export function useAuth() {

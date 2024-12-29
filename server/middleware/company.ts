@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "@db";
-import { companies, type Company, type User } from "@db/schema";
+import { companies, type Company, type User, users } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 declare global {
@@ -17,14 +17,14 @@ export async function companyMiddleware(
   res: Response,
   next: NextFunction
 ) {
-  const subdomain = req.hostname.split(".")[0];
-
-  // Skip middleware for www and localhost
-  if (subdomain === "www" || subdomain === "localhost") {
-    return next();
-  }
-
   try {
+    const hostname = req.hostname;
+    // Skip middleware for www and localhost
+    if (hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.')) {
+      return next();
+    }
+
+    const subdomain = hostname.split('.')[0];
     const [company] = await db
       .select()
       .from(companies)
@@ -32,14 +32,48 @@ export async function companyMiddleware(
       .limit(1);
 
     if (!company) {
-      return res.status(404).send("Company not found");
+      return res.status(404).json({ message: "Company not found" });
     }
 
     req.company = company;
     next();
   } catch (error) {
+    console.error('Company middleware error:', error);
     next(error);
   }
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+  next();
+}
+
+export function requireRole(roles: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user || !roles.includes(user.role)) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      console.error('Role check error:', error);
+      next(error);
+    }
+  };
 }
 
 export function requireCompany(req: Request, res: Response, next: NextFunction) {

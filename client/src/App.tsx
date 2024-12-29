@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { Switch, Route } from "wouter";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { queryClient } from "./lib/queryClient";
-import { Toaster } from "@/components/ui/toaster";
-import { Layout } from "@/components/Layout";
 import { Loader2 } from "lucide-react";
+import { Layout } from "@/components/Layout";
+import { useAuth } from "@/hooks/useAuth";
 import { useCompany } from "@/contexts/CompanyContext";
 import { CompanySelector } from "@/components/ui/company-selector";
+import { Login } from "@/pages/Login";
 
 // Pages
-import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
 import { QuoteDetail } from "@/pages/QuoteDetail";
@@ -20,7 +18,6 @@ import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
-import { useAuth } from "@/hooks/useAuth";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
