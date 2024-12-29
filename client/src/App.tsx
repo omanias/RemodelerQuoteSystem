@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +21,7 @@ import { ContactDetail } from "@/pages/ContactDetail";
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
+  const [location] = useLocation();
 
   // Handle company error in subdomain mode
   useEffect(() => {
@@ -45,20 +46,22 @@ function App() {
     if (isSubdomainMode && error) {
       return <CompanySelector showError={true} />;
     }
-    // In non-subdomain mode without company, show company selector
-    if (!isSubdomainMode && !company) {
+
+    // In non-subdomain mode:
+    if (!isSubdomainMode) {
+      // If on login page and company selected, show login form
+      if (location === "/login" && company) {
+        return <Login />;
+      }
+      // Otherwise show company selector
       return <CompanySelector />;
     }
-    // Otherwise show login page
+
+    // Show login form for subdomain mode
     return <Login />;
   }
 
-  // After login, ensure company is selected in non-subdomain mode
-  if (!isSubdomainMode && !company) {
-    return <CompanySelector />;
-  }
-
-  // Show main application once authenticated and company is selected
+  // Show main application once authenticated
   return (
     <Layout>
       <Switch>

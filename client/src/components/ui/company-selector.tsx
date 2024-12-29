@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, AlertCircle, Search } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface CompanySelectorProps {
   showError?: boolean;
@@ -18,6 +19,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
   const [searchResults, setSearchResults] = useState<Array<{ id: number; name: string; subdomain: string }>>([]);
   const { setCompany } = useCompany();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const handleSearch = async (term: string) => {
     if (!term.trim()) {
@@ -46,6 +48,51 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     }
   };
 
+  const fetchCompanyDetails = async (id: number) => {
+    const response = await fetch(`/api/companies/${id}`, {
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    return response.json();
+  };
+
+  const handleCompanySelect = async (company: { id: number; name: string }) => {
+    setIsLoading(true);
+    try {
+      const selectedCompany = await fetchCompanyDetails(company.id);
+
+      // Update company in context first
+      setCompany(selectedCompany);
+
+      // Clear the form state
+      setCompanyId("");
+      setSearchResults([]);
+      setSearchTerm("");
+
+      // Show success message
+      toast({
+        title: "Success",
+        description: `Connected to ${selectedCompany.name}`,
+      });
+
+      // Redirect to login page
+      setLocation("/login");
+    } catch (error) {
+      console.error('Company selection error:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to find company",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
@@ -58,43 +105,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       return;
     }
 
-    setIsLoading(true);
-
-    try {
-      const response = await fetch(`/api/companies/${companyId}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const company = await response.json();
-
-      // Important: Set company state first
-      setCompany(company);
-
-      // Clear the form state
-      setCompanyId("");
-      setSearchResults([]);
-      setSearchTerm("");
-
-      // Show success message
-      toast({
-        title: "Success",
-        description: `Connected to ${company.name}`,
-      });
-
-    } catch (error) {
-      console.error('Company selection error:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to find company",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    await handleCompanySelect({ id: parseInt(companyId), name: "" });
   };
 
   const content = (
@@ -120,11 +131,9 @@ export function CompanySelector({ showError = false, embedded = false }: Company
             {searchResults.map((company) => (
               <button
                 key={company.id}
-                onClick={() => {
-                  setCompanyId(company.id.toString());
-                  handleSubmit(new Event('submit') as any);
-                }}
+                onClick={() => handleCompanySelect(company)}
                 className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                disabled={isLoading}
               >
                 <span className="font-medium">{company.name}</span>
                 <span className="text-muted-foreground">ID: {company.id}</span>
