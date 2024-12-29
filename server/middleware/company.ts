@@ -23,33 +23,29 @@ export async function companyMiddleware(
   try {
     const hostname = req.hostname;
 
-    // Skip middleware for:
-    // 1. Local development
-    // 2. Non-subdomain routes
-    // 3. Public API endpoints
-    if (
-      hostname === 'localhost' || 
-      hostname.includes('.') || // This catches www and other non-subdomain URLs
-      req.path.startsWith('/api/companies') || // Allow all company-related routes
-      req.path === '/api/auth/login' ||
-      req.path === '/api/auth/logout' ||
-      req.path === '/api/auth/user'
-    ) {
+    // Skip middleware for public API endpoints
+    if (req.path === '/api/auth/login' ||
+        req.path === '/api/auth/logout' ||
+        req.path === '/api/auth/user' ||
+        req.path.startsWith('/api/companies')) {
       return next();
     }
 
-    // At this point, we're in subdomain mode and need to verify the company
-    const [company] = await db
-      .select()
-      .from(companies)
-      .where(eq(companies.subdomain, hostname))
-      .limit(1);
+    // In subdomain mode, verify the company
+    if (hostname !== 'localhost' && !hostname.includes('.')) {
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.subdomain, hostname))
+        .limit(1);
 
-    if (!company) {
-      return res.status(404).json({ message: "Company not found" });
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      req.company = company;
     }
 
-    req.company = company;
     next();
   } catch (error) {
     console.error('Company middleware error:', error);

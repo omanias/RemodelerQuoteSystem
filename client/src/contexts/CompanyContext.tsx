@@ -24,7 +24,19 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [company, setCompanyState] = useState<Company | null>(null);
+  const [company, setCompanyState] = useState<Company | null>(() => {
+    // Try to load from localStorage on mount
+    const stored = localStorage.getItem('selectedCompany');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (error) {
+        localStorage.removeItem('selectedCompany');
+      }
+    }
+    return null;
+  });
+
   const { toast } = useToast();
 
   // Parse subdomain from hostname

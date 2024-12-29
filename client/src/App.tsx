@@ -30,23 +30,22 @@ function App() {
     );
   }
 
-  // Handle unauthenticated state
-  if (!user) {
-    // Show error page in subdomain mode with error
-    if (isSubdomainMode && error) {
-      return <CompanySelector showError={true} />;
-    }
+  // Show error page in subdomain mode with error
+  if (isSubdomainMode && error) {
+    return <CompanySelector showError={true} />;
+  }
 
-    // If we have a company (either from subdomain or selection), show login
-    if (company) {
-      return <Login />;
-    }
-
-    // No company selected yet, show company selector
+  // If no company selected, show company selector
+  if (!company) {
     return <CompanySelector />;
   }
 
-  // Show main application once authenticated
+  // If we have a company but no authenticated user, show login
+  if (!user) {
+    return <Login />;
+  }
+
+  // Show main application once authenticated with company
   return (
     <Layout>
       <Switch>

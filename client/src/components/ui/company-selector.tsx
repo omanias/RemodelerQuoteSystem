@@ -59,6 +59,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       }
 
       const selectedCompany = await response.json();
+
+      // Update company in context and localStorage
       setCompany(selectedCompany);
 
       // Clear form state
