@@ -15,9 +15,10 @@ import { Loader2 } from "lucide-react";
 
 interface LoginProps {
   embedded?: boolean;
+  onSuccess?: () => void;
 }
 
-export function Login({ embedded = false }: LoginProps) {
+export function Login({ embedded = false, onSuccess }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,7 @@ export function Login({ embedded = false }: LoginProps) {
 
     try {
       await login({ email, password });
+      onSuccess?.(); // Call onSuccess callback if provided
     } catch (error: any) {
       toast({
         title: "Login Error",

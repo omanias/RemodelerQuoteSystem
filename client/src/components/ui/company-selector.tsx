@@ -222,7 +222,12 @@ export function CompanySelector({ showError = false, embedded = false }: Company
               Please enter your credentials to access your company workspace.
             </DialogDescription>
           </DialogHeader>
-          <Login embedded={true} />
+          <Login 
+            embedded={true} 
+            onSuccess={() => {
+              setShowLoginModal(false);
+            }} 
+          />
         </DialogContent>
       </Dialog>
     </>
