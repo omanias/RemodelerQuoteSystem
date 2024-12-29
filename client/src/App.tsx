@@ -49,12 +49,16 @@ function CompanyLoginRoute() {
     }
   }, [params.companyId, company, setCompany, setLocation]);
 
-  return <Login />;
-}
+  // Don't render login form until company is loaded
+  if (!company) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
 
-// Standalone company selector route
-function CompanySelectorRoute() {
-  return <CompanySelector />;
+  return <Login />;
 }
 
 function App() {
@@ -97,18 +101,28 @@ function App() {
       return <CompanySelector showError={true} />;
     }
 
-    // Show company selector by default in non-subdomain mode
-    if (!isSubdomainMode && !company && location === "/") {
-      return <CompanySelector />;
+    // In non-subdomain mode:
+    if (!isSubdomainMode) {
+      // If we're on a company login page, show the login component
+      if (location.startsWith('/companies/') && location.endsWith('/login')) {
+        return <Switch>
+          <Route path="/companies/:companyId/login" component={CompanyLoginRoute} />
+        </Switch>;
+      }
+
+      // If we have no company selected and we're on the root, show company selector
+      if (!company && location === '/') {
+        return <CompanySelector />;
+      }
+
+      // For all other cases in non-subdomain mode without a company, redirect to selector
+      if (!company) {
+        return <CompanySelector />;
+      }
     }
 
-    // Show login form for subdomain mode or when company is selected
-    return (
-      <Switch>
-        <Route path="/companies/:companyId/login" component={CompanyLoginRoute} />
-        <Route component={CompanySelectorRoute} />
-      </Switch>
-    );
+    // For subdomain mode or when company is selected, show login
+    return <Login />;
   }
 
   // Show main application once authenticated

@@ -73,6 +73,14 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     setIsSettingCompany(true);
     try {
       console.log("Setting company:", newCompany?.name || 'null');
+
+      // Store company in localStorage for persistence
+      if (newCompany) {
+        localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
+      } else {
+        localStorage.removeItem('selectedCompany');
+      }
+
       setCompanyState(newCompany);
 
       // Wait for state to update
@@ -88,8 +96,25 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Load company from localStorage on mount
+  useEffect(() => {
+    if (!isSubdomainMode && !company) {
+      const storedCompany = localStorage.getItem('selectedCompany');
+      if (storedCompany) {
+        try {
+          const parsedCompany = JSON.parse(storedCompany);
+          setCompanyState(parsedCompany);
+        } catch (error) {
+          console.error('Error parsing stored company:', error);
+          localStorage.removeItem('selectedCompany');
+        }
+      }
+    }
+  }, [isSubdomainMode, company]);
+
   const clearCompany = () => {
     console.log("Clearing company");
+    localStorage.removeItem('selectedCompany');
     setCompanyState(null);
   };
 
