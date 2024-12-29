@@ -27,17 +27,6 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      // In non-subdomain mode, require company selection before login
-      if (!isSubdomainMode && !company) {
-        toast({
-          title: "Company Required",
-          description: "Please select a company before logging in",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
-      }
-
       await login({ email, password });
     } catch (error: any) {
       toast({
@@ -51,13 +40,8 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-[400px] shadow-lg">
-        {!isSubdomainMode && !company && (
-          <div className="mb-4 px-6 pt-6">
-            <CompanySelector embedded />
-          </div>
-        )}
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold">QuoteBuilder</CardTitle>
           {company && (
@@ -70,21 +54,25 @@ export function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Show company selector only in non-subdomain mode */}
           {!isSubdomainMode && (
-            <div className="mb-6">
-              <CompanySelector embedded />
-              <div className="relative my-8">
+            <>
+              <div className="mb-6">
+                <CompanySelector embedded />
+              </div>
+              <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-background px-2 text-muted-foreground">
-                    Login to your account
+                    Sign in to your account
                   </span>
                 </div>
               </div>
-            </div>
+            </>
           )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <Input

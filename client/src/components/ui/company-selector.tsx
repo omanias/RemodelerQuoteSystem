@@ -125,11 +125,12 @@ export function CompanySelector({ showError = false, embedded = false }: Company
   const content = (
     <div className="space-y-4">
       <div className="space-y-2">
+        {/* Search field with icon */}
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search companies by name"
+            placeholder="Search companies..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -139,91 +140,72 @@ export function CompanySelector({ showError = false, embedded = false }: Company
             disabled={isLoading}
           />
         </div>
+
+        {/* Search results */}
         {searchResults.length > 0 && (
-          <div className="border rounded-md mt-2 divide-y">
+          <div className="border rounded-md mt-2 divide-y max-h-48 overflow-y-auto bg-background shadow-sm">
             {searchResults.map((company) => (
               <button
                 key={company.id}
                 onClick={() => selectCompany(company)}
-                className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between"
+                className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
               >
-                <span>{company.name}</span>
-                <span className="text-sm text-muted-foreground">ID: {company.id}</span>
+                <span className="font-medium">{company.name}</span>
+                <span className="text-muted-foreground">ID: {company.id}</span>
               </button>
             ))}
           </div>
         )}
       </div>
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">Or enter company ID</span>
-        </div>
-      </div>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Input
-            type="number"
-            placeholder="Enter your company ID"
-            value={companyId}
-            onChange={(e) => setCompanyId(e.target.value)}
-            required
-            min="1"
-            className="flex-1"
-            disabled={isLoading}
-            aria-label="Company ID"
-          />
-        </div>
-        <Button 
-          type="submit" 
-          className="w-full" 
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Accessing...
-            </>
-          ) : (
-            "Access Company"
-          )}
-        </Button>
-      </form>
+
+      {/* Only show the manual ID entry in full page mode */}
+      {!embedded && (
+        <>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or enter company ID
+              </span>
+            </div>
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              type="number"
+              placeholder="Enter company ID"
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              min="1"
+              required
+              disabled={isLoading}
+            />
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Accessing...
+                </>
+              ) : (
+                "Access Company"
+              )}
+            </Button>
+          </form>
+        </>
+      )}
     </div>
   );
 
-  // If embedded, return minimal UI
+  // If embedded (used in login form), return minimal UI
   if (embedded) {
     return (
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Input
-            type="text"
-            placeholder="Search companies..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              handleSearch(e.target.value);
-            }}
-            className="flex-1"
-          />
-          {searchResults.length > 0 && (
-            <div className="border rounded-md p-2 space-y-2">
-              {searchResults.map((company) => (
-                <Button
-                  key={company.id}
-                  variant="ghost"
-                  className="w-full justify-start"
-                  onClick={() => selectCompany(company)}
-                >
-                  {company.name}
-                </Button>
-              ))}
-            </div>
-          )}
+      <div className="rounded-lg bg-muted/50 p-4 border">
+        <div className="flex items-center gap-2 mb-4">
+          <Building2 className="h-5 w-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Select Your Company</h2>
         </div>
+        {content}
       </div>
     );
   }

@@ -1,17 +1,15 @@
 import type { Express } from "express";
 import { db } from "@db";
 import { 
-  users, quotes, products, templates, tablePermissions, companies, contacts, contactNotes,
-  contactTasks, contactDocuments, contactPhotos, contactCustomFields, categories,
-  UserRole, QuoteStatus, UserStatus, PermissionType
+  users, companies
 } from "@db/schema";
-import { eq, ilike, desc, and } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { createServer } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { companyMiddleware, requireAuth, requireRole } from "./middleware/company";
+import { companyMiddleware, requireAuth } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -54,7 +52,7 @@ export function registerRoutes(app: Express) {
     })
   );
 
-  // Public company search and lookup routes (no auth or company middleware required)
+  // Public company search and lookup routes (no auth required)
   app.get("/api/companies/search", async (req, res) => {
     try {
       const { q } = req.query;
@@ -207,37 +205,4 @@ export function registerRoutes(app: Express) {
   });
 
   return httpServer;
-}
-
-// Helper function to check if a user has permission for an action
-export async function hasPermission(
-  userId: number,
-  tableName: string,
-  permissionType: keyof typeof PermissionType
-): Promise<boolean> {
-  try {
-    // Get user's role
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, userId),
-    });
-
-    if (!user) return false;
-
-    // Admin always has all permissions
-    if (user.role === UserRole.ADMIN) return true;
-
-    // Check specific permission
-    const permission = await db.query.tablePermissions.findFirst({
-      where: and(
-        eq(tablePermissions.tableName, tableName),
-        eq(tablePermissions.roleId, user.role),
-        eq(tablePermissions.permissionType, permissionType)
-      ),
-    });
-
-    return permission?.isAllowed ?? false;
-  } catch (error) {
-    console.error('Error checking permission:', error);
-    return false;
-  }
 }

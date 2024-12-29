@@ -23,16 +23,21 @@ export async function companyMiddleware(
   try {
     const hostname = req.hostname;
 
+    // Public routes that don't require company context
+    const publicPaths = [
+      '/api/companies/search',
+      '/api/companies/',
+      '/api/auth/login',
+      '/api/auth/logout',
+      '/api/auth/user'
+    ];
+
     // Skip middleware for development URLs, direct company access routes, and public API routes
     if (
       hostname === 'localhost' || 
       hostname === 'www' || 
       hostname.startsWith('.') || 
-      req.path === '/api/companies/search' ||
-      req.path.startsWith('/api/companies/') ||
-      req.path === '/api/auth/login' ||
-      req.path === '/api/auth/logout' ||
-      req.path === '/api/auth/user'
+      publicPaths.some(path => req.path.startsWith(path))
     ) {
       return next();
     }

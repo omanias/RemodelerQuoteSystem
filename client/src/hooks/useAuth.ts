@@ -9,12 +9,12 @@ export type AuthUser = {
   name: string;
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
   companyId: number;
-  status: 'active' | 'inactive';
+  status: 'ACTIVE' | 'INACTIVE';
 };
 
 export function useAuth() {
   const [, setLocation] = useLocation();
-  const { company, subdomain } = useCompany();
+  const { company, subdomain, isSubdomainMode } = useCompany();
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -36,10 +36,15 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
+      // In non-subdomain mode, require company selection before login
+      if (!isSubdomainMode && !company) {
+        throw new Error("Please select a company before logging in");
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...credentials, subdomain }),
+        body: JSON.stringify(credentials),
         credentials: "include",
       });
 
@@ -65,6 +70,8 @@ export function useAuth() {
       if (!res.ok) {
         throw new Error(await res.text());
       }
+
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
@@ -77,6 +84,9 @@ export function useAuth() {
     loading: isLoading,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
-    isAuthenticated: !!user && (!subdomain || (company && user.companyId === company.id)),
+    // Only consider user authenticated if:
+    // 1. User exists AND
+    // 2. Either not in subdomain mode OR company matches user's company
+    isAuthenticated: !!user && (!isSubdomainMode || (company && user.companyId === company.id)),
   };
 }
