@@ -1,27 +1,13 @@
-import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal, unique, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 // Enums
 export const UserRole = {
-  SUPER_ADMIN: 'SUPER_ADMIN',
-  MULTI_ADMIN: 'MULTI_ADMIN',
-  COMPANY_ADMIN: 'COMPANY_ADMIN',
+  ADMIN: 'ADMIN',
   MANAGER: 'MANAGER',
   SALES_REP: 'SALES_REP'
-} as const;
-
-export const SubscriptionPlan = {
-  FREE: 'FREE',
-  BASIC: 'BASIC',
-  PRO: 'PRO',
-  ENTERPRISE: 'ENTERPRISE'
-} as const;
-
-export const BillingCycle = {
-  MONTHLY: 'MONTHLY',
-  ANNUAL: 'ANNUAL'
 } as const;
 
 export const UserStatus = {
@@ -37,6 +23,7 @@ export const QuoteStatus = {
   REVISED: 'REVISED'
 } as const;
 
+// New enums for contacts
 export const LeadStatus = {
   NEW: 'NEW',
   CONTACTED: 'CONTACTED',
@@ -109,19 +96,14 @@ export const users = pgTable("users", {
 
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
-  name: text("name").notNull(),
+  name: text("name").notNull().unique(),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  // Ensure name is unique per company
-  unq: unique().on(table.companyId, table.name),
-}));
+});
 
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
   name: text("name").notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
@@ -135,7 +117,6 @@ export const products = pgTable("products", {
 
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
   name: text("name").notNull(),
   categoryId: integer("category_id").references(() => categories.id).notNull(),
   termsAndConditions: text("terms_and_conditions"),
@@ -156,9 +137,9 @@ export const tablePermissions = pgTable("table_permissions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// New tables for contact management
 export const contacts = pgTable("contacts", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   profileImage: text("profile_image"),
@@ -219,7 +200,7 @@ export const contactNotes = pgTable("contact_notes", {
   contactId: integer("contact_id").references(() => contacts.id).notNull(),
   userId: integer("user_id").references(() => users.id).notNull(),
   content: text("content").notNull(),
-  type: text("type").notNull(),
+  type: text("type").notNull(), 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -248,15 +229,15 @@ export const contactDocuments = pgTable("contact_documents", {
 export const contactPhotos = pgTable("contact_photos", {
   id: serial("id").primaryKey(),
   contactId: integer("contact_id").references(() => contacts.id).notNull(),
-  type: text("type").notNull(),
+  type: text("type").notNull(), 
   url: text("url").notNull(),
   description: text("description"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Update quotes table to include contactId
 export const quotes = pgTable("quotes", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
   number: text("number").notNull().unique(),
   clientName: text("client_name").notNull(),
   clientEmail: text("client_email").notNull(),
@@ -284,44 +265,8 @@ export const quotes = pgTable("quotes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-
-// New tables for multi-tenancy
-export const companies = pgTable("companies", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  subdomain: text("subdomain").notNull().unique(),
-  logo: text("logo"),
-  subscriptionPlanId: integer("subscription_plan_id").references(() => subscriptionPlans.id),
-  timezone: text("timezone").default('UTC').notNull(),
-  settings: jsonb("settings"),
-  active: boolean("active").default(true).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const subscriptionPlans = pgTable("subscription_plans", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull().$type<keyof typeof SubscriptionPlan>(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  billingCycle: text("billing_cycle").notNull().$type<keyof typeof BillingCycle>(),
-  features: jsonb("features").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const companyUsers = pgTable("company_users", {
-  companyId: integer("company_id").references(() => companies.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  role: text("role").notNull().$type<keyof typeof UserRole>(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => ({
-  pk: primaryKey(table.companyId, table.userId),
-}));
-
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
-  companies: many(companyUsers),
   quotes: many(quotes),
   createdPermissions: many(tablePermissions, { relationName: "createdPermissions" }),
 }));
@@ -330,28 +275,12 @@ export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
   quotes: many(quotes),
   templates: many(templates),
-  contacts: many(contacts),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
   category: one(categories, {
     fields: [products.categoryId],
     references: [categories.id],
-  }),
-  company: one(companies, {
-    fields: [products.companyId],
-    references: [companies.id],
-  }),
-}));
-
-export const templatesRelations = relations(templates, ({ one }) => ({
-  category: one(categories, {
-    fields: [templates.categoryId],
-    references: [templates.id],
-  }),
-  company: one(companies, {
-    fields: [templates.companyId],
-    references: [companies.id],
   }),
 }));
 
@@ -372,10 +301,6 @@ export const quotesRelations = relations(quotes, ({ one }) => ({
     fields: [quotes.contactId],
     references: [contacts.id],
   }),
-  company: one(companies, {
-    fields: [quotes.companyId],
-    references: [companies.id],
-  }),
 }));
 
 export const contactsRelations = relations(contacts, ({ one, many }) => ({
@@ -386,10 +311,6 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
   category: one(categories, {
     fields: [contacts.categoryId],
     references: [categories.id],
-  }),
-  company: one(companies, {
-    fields: [contacts.companyId],
-    references: [companies.id],
   }),
   quotes: many(quotes),
   notes: many(contactNotes),
@@ -434,32 +355,10 @@ export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   }),
 }));
 
-
-export const companiesRelations = relations(companies, ({ many, one }) => ({
-  subscriptionPlan: one(subscriptionPlans, {
-    fields: [companies.subscriptionPlanId],
-    references: [subscriptionPlans.id],
-  }),
-  users: many(companyUsers),
-  categories: many(categories),
-  products: many(products),
-  templates: many(templates),
-  quotes: many(quotes),
-  contacts: many(contacts),
-}));
-
-export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
-  companies: many(companies),
-}));
-
-export const companyUsersRelations = relations(companyUsers, ({ one }) => ({
-  company: one(companies, {
-    fields: [companyUsers.companyId],
-    references: [companies.id],
-  }),
-  user: one(users, {
-    fields: [companyUsers.userId],
-    references: [users.id],
+export const templatesRelations = relations(templates, ({ one }) => ({
+  category: one(categories, {
+    fields: [templates.categoryId],
+    references: [categories.id],
   }),
 }));
 
@@ -490,13 +389,6 @@ export const selectContactPhotoSchema = createSelectSchema(contactPhotos);
 export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFields);
 export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
 
-export const insertCompanySchema = createInsertSchema(companies);
-export const selectCompanySchema = createSelectSchema(companies);
-export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans);
-export const selectSubscriptionPlanSchema = createSelectSchema(subscriptionPlans);
-export const insertCompanyUserSchema = createInsertSchema(companyUsers);
-export const selectCompanyUserSchema = createSelectSchema(companyUsers);
-
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -523,10 +415,3 @@ export type ContactPhoto = typeof contactPhotos.$inferSelect;
 export type NewContactPhoto = typeof contactPhotos.$inferInsert;
 export type ContactCustomField = typeof contactCustomFields.$inferSelect;
 export type NewContactCustomField = typeof contactCustomFields.$inferInsert;
-
-export type Company = typeof companies.$inferSelect;
-export type NewCompany = typeof companies.$inferInsert;
-export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
-export type NewSubscriptionPlan = typeof subscriptionPlans.$inferInsert;
-export type CompanyUser = typeof companyUsers.$inferSelect;
-export type NewCompanyUser = typeof companyUsers.$inferInsert;
