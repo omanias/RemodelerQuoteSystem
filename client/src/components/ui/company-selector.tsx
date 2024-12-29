@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, AlertCircle, Search } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface CompanySelectorProps {
   showError?: boolean;
@@ -18,6 +19,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
   const [searchResults, setSearchResults] = useState<Array<{ id: number; name: string; subdomain: string }>>([]);
   const { setCompany } = useCompany();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const handleSearch = async (term: string) => {
     if (!term.trim()) {
@@ -68,7 +70,10 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       setSearchResults([]);
       setSearchTerm("");
 
-      // Show success message
+      // Force navigation to trigger App re-render
+      setLocation("/");
+
+      // Show success message after navigation
       toast({
         title: "Success",
         description: `Connected to ${selectedCompany.name}`,
