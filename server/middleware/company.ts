@@ -27,16 +27,18 @@ export async function companyMiddleware(
     if (req.path === '/api/auth/login' ||
         req.path === '/api/auth/logout' ||
         req.path === '/api/auth/user' ||
-        req.path.startsWith('/api/companies')) {
+        req.path.startsWith('/api/companies/search')) {
       return next();
     }
 
     // In subdomain mode, verify the company
-    if (hostname !== 'localhost' && !hostname.includes('.')) {
+    if (hostname !== 'localhost' && !hostname.includes('.replit.dev')) {
+      const subdomain = hostname.split('.')[0];
+
       const [company] = await db
         .select()
         .from(companies)
-        .where(eq(companies.subdomain, hostname))
+        .where(eq(companies.subdomain, subdomain))
         .limit(1);
 
       if (!company) {

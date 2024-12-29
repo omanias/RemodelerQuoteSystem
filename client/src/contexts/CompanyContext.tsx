@@ -41,8 +41,9 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   // Parse subdomain from hostname
   const hostname = window.location.hostname;
-  const isLocalOrWWW = hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.');
-  const subdomain = isLocalOrWWW ? null : hostname.split('.')[0];
+  const isReplit = hostname.includes('.replit.dev');
+  const isLocalOrReplit = hostname === 'localhost' || isReplit;
+  const subdomain = isLocalOrReplit ? null : hostname.split('.')[0];
   const isSubdomainMode = !!subdomain;
 
   // Only fetch company data if we're in subdomain mode
