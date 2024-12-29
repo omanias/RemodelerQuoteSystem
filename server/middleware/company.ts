@@ -9,6 +9,9 @@ declare global {
       company?: Company;
       user?: User;
     }
+    interface Session {
+      userId?: number;
+    }
   }
 }
 
@@ -78,14 +81,14 @@ export function requireRole(roles: string[]) {
 
 export function requireCompany(req: Request, res: Response, next: NextFunction) {
   if (!req.company) {
-    return res.status(403).send("Company access required");
+    return res.status(403).json({ message: "Company access required" });
   }
   next();
 }
 
 export function requireSameCompany(req: Request, res: Response, next: NextFunction) {
   if (!req.user || !req.company || req.user.companyId !== req.company.id) {
-    return res.status(403).send("Invalid company access");
+    return res.status(403).json({ message: "Invalid company access" });
   }
   next();
 }

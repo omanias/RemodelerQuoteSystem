@@ -7,12 +7,7 @@ import { CompanyProvider } from "@/contexts/CompanyContext";
 import App from './App';
 import "./index.css";
 
-const root = document.getElementById("root");
-if (!root) {
-  throw new Error("Root element not found. Make sure there is a div with id 'root' in your HTML.");
-}
-
-createRoot(root).render(
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <CompanyProvider>

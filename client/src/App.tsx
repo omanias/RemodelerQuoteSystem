@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Layout } from "@/components/Layout";
@@ -20,8 +20,16 @@ import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 
 function App() {
-  const { user, loading: authLoading } = useAuth();
-  const { company, isSubdomainMode, loading: companyLoading, error } = useCompany();
+  const { user, loading: authLoading, logout } = useAuth();
+  const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
+
+  // Logout and clear company if in subdomain mode and company error occurs
+  useEffect(() => {
+    if (isSubdomainMode && error) {
+      logout();
+      clearCompany();
+    }
+  }, [isSubdomainMode, error, logout, clearCompany]);
 
   // Show loading state while checking auth and company status
   if (authLoading || (isSubdomainMode && companyLoading)) {
@@ -40,7 +48,7 @@ function App() {
   // Show company selector if:
   // 1. Not in subdomain mode and no company selected
   // 2. In subdomain mode but company not found (error state)
-  if (!isSubdomainMode && !company || (isSubdomainMode && error)) {
+  if ((!isSubdomainMode && !company) || (isSubdomainMode && error)) {
     return <CompanySelector showError={isSubdomainMode && error !== null} />;
   }
 

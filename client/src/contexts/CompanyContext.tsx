@@ -6,6 +6,7 @@ export type Company = {
   id: number;
   name: string;
   subdomain: string;
+  settings?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 };
@@ -17,6 +18,7 @@ interface CompanyContextType {
   isSubdomainMode: boolean;
   loading: boolean;
   error: Error | null;
+  clearCompany: () => void;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -29,11 +31,32 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const subdomain = isLocalOrWWW ? null : hostname.split('.')[0];
   const isSubdomainMode = !!subdomain;
 
-  const { data: companyData, isLoading, error } = useQuery<Company, Error>({
+  const { data: companyData, isLoading, error } = useQuery({
     queryKey: ['/api/companies/current'],
-    enabled: !!subdomain && subdomain !== 'www' && subdomain !== 'localhost',
+    queryFn: async () => {
+      const response = await fetch('/api/companies/current', {
+        credentials: 'include'
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text);
+      }
+      return response.json() as Promise<Company>;
+    },
+    enabled: !!subdomain,
     retry: false,
   });
+
+  // Show errors only in subdomain mode
+  useEffect(() => {
+    if (isSubdomainMode && error) {
+      toast({
+        title: "Company Error",
+        description: error instanceof Error ? error.message : "Failed to load company",
+        variant: "destructive",
+      });
+    }
+  }, [isSubdomainMode, error, toast]);
 
   // Update company state when data changes
   useEffect(() => {
@@ -42,13 +65,18 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [companyData]);
 
-  const value = {
+  const clearCompany = () => {
+    setCompany(null);
+  };
+
+  const value: CompanyContextType = {
     company,
     setCompany,
     subdomain,
     isSubdomainMode,
     loading: isLoading,
-    error: error || null
+    error: error instanceof Error ? error : null,
+    clearCompany
   };
 
   return (
