@@ -54,7 +54,24 @@ export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
   setupSession(app);
 
-  // Direct company lookup by ID (no auth required)
+  // Company search and lookup routes (no auth or company middleware required)
+  app.get("/api/companies/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      const searchTerm = q ? String(q) : '';
+
+      const results = await db.query.companies.findMany({
+        where: searchTerm ? ilike(companies.name, `%${searchTerm}%`) : undefined,
+        limit: 10,
+      });
+
+      res.json(results);
+    } catch (error) {
+      console.error('Error searching companies:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/companies/:id", async (req, res) => {
     try {
       const companyId = parseInt(req.params.id);
@@ -80,51 +97,20 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Company search route (no auth required)
-  app.get("/api/companies/search", async (req, res) => {
-    try {
-      const { q } = req.query;
-      const searchTerm = q ? String(q) : '';
-
-      const results = await db.query.companies.findMany({
-        where: searchTerm ? ilike(companies.name, `%${searchTerm}%`) : undefined,
-        limit: 10,
-      });
-
-      res.json(results);
-    } catch (error) {
-      console.error('Error searching companies:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Company routes
-  app.get("/api/companies/current", requireAuth, async (req, res) => {
-    try {
-      if (!req.company) {
-        return res.status(404).json({ message: "Company not found" });
-      }
-      res.json(req.company);
-    } catch (error) {
-      console.error('Error fetching current company:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Add company middleware globally after company routes
+  // Add company middleware after company lookup routes
   app.use(companyMiddleware);
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password, subdomain } = req.body;
+    const { email, password } = req.body;
 
     try {
-      console.log(`Login attempt for email: ${email}`);
-
-      // Find user and check company association if subdomain is provided
-      const user = await db.query.users.findFirst({
-        where: eq(users.email, email)
-      });
+      // Find user
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
 
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
@@ -136,11 +122,9 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // If subdomain is provided, verify user has access to the company
-      if (subdomain && req.company) {
-        if (user.companyId !== req.company.id) {
-          return res.status(403).json({ message: "You don't have access to this company" });
-        }
+      // If in subdomain mode, verify user has access to the company
+      if (req.company && user.companyId !== req.company.id) {
+        return res.status(403).json({ message: "You don't have access to this company" });
       }
 
       req.session.userId = user.id;
@@ -190,6 +174,18 @@ export function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error('Error fetching user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/companies/current", requireAuth, async (req, res) => {
+    try {
+      if (!req.company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+      res.json(req.company);
+    } catch (error) {
+      console.error('Error fetching current company:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
