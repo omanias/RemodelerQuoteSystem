@@ -28,6 +28,7 @@ export async function companyMiddleware(
       hostname === 'localhost' || 
       hostname === 'www' || 
       hostname.startsWith('.') || 
+      req.path === '/api/companies/search' ||
       req.path.startsWith('/api/companies/') ||
       req.path === '/api/auth/login' ||
       req.path === '/api/auth/logout' ||

@@ -123,7 +123,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
   };
 
   const content = (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${embedded ? 'mb-6' : ''}`}>
       <div className="space-y-2">
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -140,7 +140,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
           />
         </div>
         {searchResults.length > 0 && (
-          <div className="border rounded-md mt-2 divide-y">
+          <div className="border rounded-md mt-2 divide-y max-h-48 overflow-y-auto">
             {searchResults.map((company) => (
               <button
                 key={company.id}
@@ -154,14 +154,16 @@ export function CompanySelector({ showError = false, embedded = false }: Company
           </div>
         )}
       </div>
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+      {embedded ? (
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">Or enter company ID</span>
+          </div>
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">Or enter company ID</span>
-        </div>
-      </div>
+      ) : null}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Input
@@ -194,9 +196,17 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     </div>
   );
 
-  // If embedded, return just the content
+  // If embedded, return just the content with a title
   if (embedded) {
-    return content;
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Building2 className="h-5 w-5" />
+          <h2 className="text-lg font-semibold">Select Your Company</h2>
+        </div>
+        {content}
+      </div>
+    );
   }
 
   // Otherwise, return the full-page layout

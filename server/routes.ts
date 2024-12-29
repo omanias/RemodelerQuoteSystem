@@ -38,17 +38,19 @@ const crypto = {
 export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
 
-  // Setup session before any middleware or routes
+  // Setup session middleware before any routes
   app.use(
     session({
       secret: process.env.REPL_ID || "quote-builder-secret",
       resave: false,
       saveUninitialized: false,
-      store: new MemoryStore({ checkPeriod: 86400000 }), // Prune expired entries every 24h
+      store: new MemoryStore({
+        checkPeriod: 86400000 // Prune expired entries every 24h
+      }),
       cookie: {
         secure: app.get("env") === "production",
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      },
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      }
     })
   );
 
@@ -153,7 +155,11 @@ export function registerRoutes(app: Express) {
       return res.status(200).json({ message: "Already logged out" });
     }
 
-    req.session.destroy(() => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Logout error:', err);
+        return res.status(500).json({ message: "Error during logout" });
+      }
       res.json({ message: "Logged out successfully" });
     });
   });
