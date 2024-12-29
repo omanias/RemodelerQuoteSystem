@@ -55,6 +55,7 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: () => {
+      // Invalidate user query first
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
   });
@@ -88,13 +89,12 @@ export function useAuth() {
     loading: isLoading,
     login: async (credentials: { email: string; password: string }) => {
       await loginMutation.mutateAsync(credentials);
+      // Wait for query invalidation to complete
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       // After successful login and user data refresh, navigate to dashboard
       setLocation("/");
     },
     logout: logoutMutation.mutateAsync,
-    // Only consider user authenticated if:
-    // 1. User exists AND
-    // 2. Either not in subdomain mode OR company matches user's company
     isAuthenticated: !!user && (!isSubdomainMode || (company && user.companyId === company.id)),
   };
 }

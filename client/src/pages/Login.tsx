@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 interface LoginProps {
   embedded?: boolean;
@@ -25,6 +26,7 @@ export function Login({ embedded = false, onSuccess }: LoginProps) {
   const { login } = useAuth();
   const { toast } = useToast();
   const { company } = useCompany();
+  const [, setLocation] = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +34,14 @@ export function Login({ embedded = false, onSuccess }: LoginProps) {
 
     try {
       await login({ email, password });
-      onSuccess?.(); // Call onSuccess callback if provided
+
+      // If we're in embedded mode, call onSuccess first
+      if (embedded) {
+        onSuccess?.();
+      }
+
+      // Always navigate to dashboard after successful login
+      setLocation("/");
     } catch (error: any) {
       toast({
         title: "Login Error",
