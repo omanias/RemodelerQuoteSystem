@@ -5,6 +5,8 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { Layout } from "@/components/Layout";
 import { Loader2 } from "lucide-react";
+import { useCompany } from "@/contexts/CompanyContext";
+import { CompanySelector } from "@/components/ui/company-selector";
 
 // Pages
 import { Login } from "@/pages/Login";
@@ -22,12 +24,23 @@ import { useAuth } from "@/hooks/useAuth";
 
 function App() {
   const { user, loading } = useAuth();
+  const { company, isSubdomainMode } = useCompany();
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
+    );
+  }
+
+  // Show company selector if not in subdomain mode and no company is selected
+  if (!isSubdomainMode && !company) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <CompanySelector />
+        <Toaster />
+      </QueryClientProvider>
     );
   }
 

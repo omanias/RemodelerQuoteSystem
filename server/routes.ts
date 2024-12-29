@@ -2,8 +2,10 @@ import type { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
 import { 
-  users, quotes, products, templates, tablePermissions, companies,
-  UserRole, QuoteStatus, UserStatus, categories, PermissionType
+  users, quotes, products, templates, tablePermissions, companies, contacts, contactNotes,
+  contactTasks, contactDocuments, contactPhotos, contactCustomFields,
+  UserRole, QuoteStatus, UserStatus, categories, PermissionType,
+  type Company, type User
 } from "@db/schema";
 import { eq, ilike, desc, and } from "drizzle-orm";
 import session from "express-session";
@@ -11,6 +13,10 @@ import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { companyMiddleware, requireCompany, requireSameCompany } from "./middleware/company";
+import { requireAuth, requireRole } from "./middleware/auth";
+import PDFDocument from "pdfkit";
+import { createObjectCsvWriter } from "csv-writer";
+import { Readable } from "stream";
 
 const scryptAsync = promisify(scrypt);
 
@@ -33,6 +39,29 @@ const crypto = {
   }
 };
 
+// Type for quote content
+interface QuoteProduct {
+  id: number;
+  name: string;
+  price: number;
+  quantity: number;
+  unit: string;
+}
+
+interface QuoteCalculations {
+  subtotal: number;
+  total: number;
+  downPayment: number;
+  remainingBalance: number;
+  discount: number;
+  tax: number;
+}
+
+interface QuoteContent {
+  products: QuoteProduct[];
+  calculations: QuoteCalculations;
+}
+
 function setupSession(app: Express) {
   const MemoryStore = createMemoryStore(session);
   app.use(
@@ -49,43 +78,53 @@ function setupSession(app: Express) {
   );
 }
 
-const requireAuth = async (req: any, res: any, next: any) => {
-  try {
-    if (!req.session.userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, req.session.userId),
-    });
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-    req.user = user;
-    next();
-  } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-const requireRole = (allowedRoles: Array<keyof typeof UserRole>) => async (req: any, res: any, next: any) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Insufficient permissions" });
-    }
-    next();
-  } catch (error) {
-    console.error('Role middleware error:', error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
 export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
   setupSession(app);
+
+  // Direct company lookup by ID (no auth required)
+  app.get("/api/companies/:id", async (req, res) => {
+    try {
+      const companyId = parseInt(req.params.id);
+
+      if (isNaN(companyId)) {
+        return res.status(400).json({ message: "Invalid company ID" });
+      }
+
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      res.json(company);
+    } catch (error) {
+      console.error('Error fetching company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Company search route (no auth required)
+  app.get("/api/companies/search", async (req, res) => {
+    try {
+      const { q } = req.query;
+      const searchTerm = q ? String(q) : '';
+
+      const results = await db.query.companies.findMany({
+        where: searchTerm ? ilike(companies.name, `%${searchTerm}%`) : undefined,
+        limit: 10,
+      });
+
+      res.json(results);
+    } catch (error) {
+      console.error('Error searching companies:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   // Add company middleware globally
   app.use(companyMiddleware);
@@ -154,6 +193,9 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/user", requireAuth, async (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
     res.json(req.user);
   });
 
@@ -163,7 +205,12 @@ export function registerRoutes(app: Express) {
   // Categories Routes
   app.get("/api/categories", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
+
       const allCategories = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.company.id),
         orderBy: (categories, { asc }) => [asc(categories.name)],
       });
       res.json(allCategories);
@@ -187,7 +234,7 @@ export function registerRoutes(app: Express) {
       }
 
       const [category] = await db.insert(categories)
-        .values({ name, description, companyId: req.company.id }) // Added companyId
+        .values({ name, description, companyId: req.company!.id }) 
         .returning();
 
       res.json(category);
@@ -247,11 +294,14 @@ export function registerRoutes(app: Express) {
   // Products Routes with Category Support
   app.get("/api/products", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const allProducts = await db.query.products.findMany({
         with: {
           category: true,
         },
-        where: eq(products.companyId, req.company.id), // Added company filter
+        where: eq(products.companyId, req.company.id), 
         orderBy: (products, { asc }) => [asc(products.name)],
       });
       res.json(allProducts);
@@ -267,7 +317,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company!.id)), 
       });
 
       if (!category) {
@@ -282,7 +332,7 @@ export function registerRoutes(app: Express) {
           cost,
           unit,
           isActive: isActive ?? true,
-          companyId: req.company.id // Added companyId
+          companyId: req.company!.id 
         })
         .returning();
 
@@ -303,7 +353,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company!.id)), 
       });
 
       if (!category) {
@@ -339,9 +389,12 @@ export function registerRoutes(app: Express) {
   // User Management Routes
   app.get("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const allUsers = await db.query.users.findMany({
         orderBy: (users, { asc }) => [asc(users.name)],
-        where: eq(users.companyId, req.company.id) // Added company filter
+        where: eq(users.companyId, req.company.id) 
       });
 
       res.json(allUsers.map(u => ({
@@ -378,7 +431,7 @@ export function registerRoutes(app: Express) {
           name,
           role,
           status: UserStatus.ACTIVE,
-          companyId: req.company.id // Added companyId
+          companyId: req.company!.id 
         })
         .returning();
 
@@ -451,11 +504,14 @@ export function registerRoutes(app: Express) {
   // Template Routes
   app.get("/api/templates", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const allTemplates = await db.query.templates.findMany({
         with: {
           category: true,
         },
-        where: eq(templates.companyId, req.company.id), // Added company filter
+        where: eq(templates.companyId, req.company.id), 
         orderBy: (templates, { asc }) => [asc(templates.name)],
       });
       res.json(allTemplates);
@@ -471,7 +527,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company!.id)), 
       });
 
       if (!category) {
@@ -493,7 +549,7 @@ export function registerRoutes(app: Express) {
           termsAndConditions,
           imageUrls,
           isDefault: isDefault || false,
-          companyId: req.company.id // Added companyId
+          companyId: req.company!.id 
         })
         .returning();
 
@@ -514,7 +570,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company!.id)), 
       });
 
       if (!category) {
@@ -592,9 +648,12 @@ export function registerRoutes(app: Express) {
   // Quote Routes
   app.get("/api/contacts/:id/quotes", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
       const contactQuotes = await db.query.quotes.findMany({
-        where: and(eq(quotes.contactId, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
+        where: and(eq(quotes.contactId, parseInt(id)), eq(quotes.companyId, req.company.id)), 
         orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
         with: {
           category: true,
@@ -611,9 +670,12 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
       const quote = await db.query.quotes.findFirst({
-        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
+        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), 
         with: {
           category: true,
           template: true,
@@ -703,8 +765,8 @@ export function registerRoutes(app: Express) {
           clientPhone: clientPhone || null,
           clientAddress: clientAddress || null,
           status: QuoteStatus.DRAFT,
-          userId: req.user.id,
-          companyId: req.company.id, // Added companyId
+          userId: req.user!.id,
+          companyId: req.company!.id, 
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -741,6 +803,9 @@ export function registerRoutes(app: Express) {
 
   app.put("/api/quotes/:id", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
       const {
         categoryId,
@@ -818,8 +883,11 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/quotes", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const userQuotes = await db.query.quotes.findMany({
-        where: and(eq(quotes.userId, req.user.id), eq(quotes.companyId, req.company.id)), // Added company filter
+        where: and(eq(quotes.userId, req.user!.id), eq(quotes.companyId, req.company.id)), 
         with: {
           category: true,
           template: true,
@@ -899,7 +967,7 @@ export function registerRoutes(app: Express) {
             roleId,
             permissionType,
             isAllowed,
-            createdBy: req.user.id,
+            createdBy: req.user!.id,
           })
           .returning();
       }
@@ -916,7 +984,7 @@ export function registerRoutes(app: Express) {
     try {
       const { tableName, roleId, isAllowed } = req.body;
 
-            // Update all permission types for the given table and role
+      // Update all permission types for the given table and role
       const permissions = await Promise.all(
         Object.values(PermissionType).map(async (permissionType) => {
           const [permission] = await db.update(tablePermissions)
@@ -941,9 +1009,12 @@ export function registerRoutes(app: Express) {
   // Export quote as PDF
   app.get("/api/quotes/:id/export/pdf", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
       const quote = await db.query.quotes.findFirst({
-        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
+        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), 
         with: {
           category: true,
           template: true,
@@ -1022,8 +1093,11 @@ export function registerRoutes(app: Express) {
   // Export quotes as CSV
   app.get("/api/quotes/export/csv", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const quotes = await db.query.quotes.findMany({
-        where: and(eq(quotes.userId, req.user.id), eq(quotes.companyId, req.company.id)), // Added company filter
+        where: and(eq(quotes.userId, req.user!.id), eq(quotes.companyId, req.company.id)), 
         with: {
           category: true,
           template: true,
@@ -1082,8 +1156,11 @@ export function registerRoutes(app: Express) {
   // Contact Management Routes
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const allContacts = await db.query.contacts.findMany({
-        where: eq(contacts.companyId, req.company.id), // Added company filter
+        where: eq(contacts.companyId, req.company.id), 
         orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
       });
       res.json(allContacts);
@@ -1106,7 +1183,7 @@ export function registerRoutes(app: Express) {
           ...contact,
           createdAt: new Date(),
           updatedAt: new Date(),
-          companyId: req.company.id // Added companyId
+          companyId: req.company!.id 
         })
         .returning();
 
@@ -1119,9 +1196,12 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/contacts/:id", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
       const contact = await db.query.contacts.findFirst({
-        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), // Added company filter
+        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), 
       });
 
       if (!contact) {
@@ -1165,11 +1245,14 @@ export function registerRoutes(app: Express) {
 
   app.delete("/api/contacts/:id", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const { id } = req.params;
 
       // Check if contact exists
       const contact = await db.query.contacts.findFirst({
-        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), // Added company filter
+        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), 
       });
 
       if (!contact) {
@@ -1211,8 +1294,11 @@ export function registerRoutes(app: Express) {
   // Custom fields management
   app.get("/api/contact-custom-fields", requireAuth, async (req, res) => {
     try {
+      if (!req.company) {
+        return res.status(403).json({ message: "Company access required" });
+      }
       const fields = await db.query.contactCustomFields.findMany({
-        where: eq(contactCustomFields.companyId, req.company.id), // Added company filter
+        where: eq(contactCustomFields.companyId, req.company.id), 
         orderBy: (fields, { asc }) => [asc(fields.name)],
       });
       res.json(fields);
@@ -1236,7 +1322,7 @@ export function registerRoutes(app: Express) {
       const fieldData = {
         ...result.data,
         options: result.data.options ? JSON.stringify(result.data.options) : null,
-        companyId: req.company.id // Added companyId
+        companyId: req.company!.id 
       };
 
       const [field] = await db.insert(contactCustomFields)
