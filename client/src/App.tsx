@@ -21,7 +21,7 @@ import { ContactDetail } from "@/pages/ContactDetail";
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   // Handle company error in subdomain mode
   useEffect(() => {
@@ -30,6 +30,25 @@ function App() {
       clearCompany();
     }
   }, [isSubdomainMode, error, logout, clearCompany]);
+
+  // Handle routing when company is selected
+  useEffect(() => {
+    if (!user && company && location !== '/login') {
+      console.log('Company selected, redirecting to login:', company.name);
+      setLocation('/login');
+    }
+  }, [company, user, location, setLocation]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('App state:', {
+      user: !!user,
+      company: !!company,
+      location,
+      isSubdomainMode,
+      loading: authLoading || companyLoading
+    });
+  }, [user, company, location, isSubdomainMode, authLoading, companyLoading]);
 
   // Show loading state while checking auth and company status
   if (authLoading || (isSubdomainMode && companyLoading)) {
@@ -40,20 +59,23 @@ function App() {
     );
   }
 
-  // Show login page if user is not authenticated
+  // Not authenticated flow
   if (!user) {
-    // In subdomain mode with error, show error company selector
+    // Show error company selector in subdomain mode with error
     if (isSubdomainMode && error) {
       return <CompanySelector showError={true} />;
     }
 
-    // In non-subdomain mode:
+    // Non-subdomain mode routing
     if (!isSubdomainMode) {
-      // If on login page and company selected, show login form
-      if (location === "/login" && company) {
+      // Show login form if company is selected
+      if (company && location === "/login") {
+        console.log("Showing login form for company:", company.name);
         return <Login />;
       }
-      // Otherwise show company selector
+
+      // Show company selector otherwise
+      console.log("Showing company selector");
       return <CompanySelector />;
     }
 

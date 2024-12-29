@@ -13,7 +13,7 @@ export type Company = {
 
 interface CompanyContextType {
   company: Company | null;
-  setCompany: (company: Company | null) => void;
+  setCompany: (company: Company | null) => Promise<void>;
   subdomain: string | null;
   isSubdomainMode: boolean;
   loading: boolean;
@@ -24,7 +24,8 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [company, setCompany] = useState<Company | null>(null);
+  const [company, setCompanyState] = useState<Company | null>(null);
+  const [isSettingCompany, setIsSettingCompany] = useState(false);
   const { toast } = useToast();
 
   // Parse subdomain from hostname
@@ -64,12 +65,26 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   // Update company state when data changes
   useEffect(() => {
     if (companyData) {
-      setCompany(companyData);
+      setCompanyState(companyData);
     }
   }, [companyData]);
 
+  const setCompany = async (newCompany: Company | null): Promise<void> => {
+    setIsSettingCompany(true);
+    return new Promise((resolve) => {
+      console.log("Setting company:", newCompany?.name || 'null');
+      setCompanyState(newCompany);
+      // Use a small timeout to ensure state is updated
+      setTimeout(() => {
+        setIsSettingCompany(false);
+        resolve();
+      }, 100);
+    });
+  };
+
   const clearCompany = () => {
-    setCompany(null);
+    console.log("Clearing company");
+    setCompanyState(null);
   };
 
   const value: CompanyContextType = {
@@ -77,7 +92,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     setCompany,
     subdomain,
     isSubdomainMode,
-    loading: isLoading,
+    loading: isLoading || isSettingCompany,
     error: error instanceof Error ? error : null,
     clearCompany
   };

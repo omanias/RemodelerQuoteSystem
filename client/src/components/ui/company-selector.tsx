@@ -48,27 +48,26 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     }
   };
 
-  const fetchCompanyDetails = async (id: number) => {
-    const response = await fetch(`/api/companies/${id}`, {
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    return response.json();
-  };
-
   const handleCompanySelect = async (company: { id: number; name: string }) => {
     setIsLoading(true);
+
     try {
-      const selectedCompany = await fetchCompanyDetails(company.id);
+      console.log("Selecting company:", company.id);
+      const response = await fetch(`/api/companies/${company.id}`, {
+        credentials: "include",
+      });
 
-      // Update company in context first
-      setCompany(selectedCompany);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
 
-      // Clear the form state
+      const selectedCompany = await response.json();
+      console.log("Selected company data:", selectedCompany);
+
+      // Update context and wait for it to complete
+      await setCompany(selectedCompany);
+
+      // Clear form state
       setCompanyId("");
       setSearchResults([]);
       setSearchTerm("");
@@ -79,13 +78,17 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${selectedCompany.name}`,
       });
 
-      // Redirect to login page
-      setLocation("/login");
+      // Navigate to login page after a short delay to ensure state is updated
+      setTimeout(() => {
+        console.log("Navigating to login page...");
+        setLocation("/login");
+      }, 500);
+
     } catch (error) {
       console.error('Company selection error:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to find company",
+        description: error instanceof Error ? error.message : "Failed to select company",
         variant: "destructive",
       });
     } finally {
@@ -108,9 +111,13 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     await handleCompanySelect({ id: parseInt(companyId), name: "" });
   };
 
-  const content = (
-    <div className="space-y-4">
-      <div className="space-y-2">
+  return embedded ? (
+    <div className="rounded-lg bg-muted/50 p-4 border">
+      <div className="flex items-center gap-2 mb-4">
+        <Building2 className="h-5 w-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold">Select Your Company</h2>
+      </div>
+      <div className="space-y-4">
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -142,58 +149,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
           </div>
         )}
       </div>
-
-      {!embedded && (
-        <>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                Or enter company ID
-              </span>
-            </div>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              type="number"
-              placeholder="Enter company ID"
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              min="1"
-              required
-              disabled={isLoading}
-            />
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Accessing...
-                </>
-              ) : (
-                "Access Company"
-              )}
-            </Button>
-          </form>
-        </>
-      )}
     </div>
-  );
-
-  if (embedded) {
-    return (
-      <div className="rounded-lg bg-muted/50 p-4 border">
-        <div className="flex items-center gap-2 mb-4">
-          <Building2 className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Select Your Company</h2>
-        </div>
-        {content}
-      </div>
-    );
-  }
-
-  return (
+  ) : (
     <div className="min-h-screen w-full flex items-center justify-center bg-background">
       <Card className="w-full max-w-md mx-4">
         <CardHeader>
@@ -209,13 +166,79 @@ export function CompanySelector({ showError = false, embedded = false }: Company
             </div>
           )}
           <CardDescription>
-            {showError 
+            {showError
               ? "The company you're trying to access was not found. Please verify your company ID or search by name."
               : "Enter your company ID or search by company name to access your workspace."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {content}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search companies..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    handleSearch(e.target.value);
+                  }}
+                  className="pl-8"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {searchResults.length > 0 && (
+                <div className="border rounded-md mt-2 divide-y max-h-48 overflow-y-auto bg-background shadow-sm">
+                  {searchResults.map((company) => (
+                    <button
+                      key={company.id}
+                      onClick={() => handleCompanySelect(company)}
+                      className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
+                      disabled={isLoading}
+                    >
+                      <span className="font-medium">{company.name}</span>
+                      <span className="text-muted-foreground">ID: {company.id}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or enter company ID
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <Input
+                type="number"
+                placeholder="Enter company ID"
+                value={companyId}
+                onChange={(e) => setCompanyId(e.target.value)}
+                min="1"
+                required
+                disabled={isLoading}
+              />
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Accessing...
+                  </>
+                ) : (
+                  "Access Company"
+                )}
+              </Button>
+            </form>
+          </div>
         </CardContent>
       </Card>
     </div>
