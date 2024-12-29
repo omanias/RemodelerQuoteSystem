@@ -53,6 +53,11 @@ export function Login() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <Card className="w-[400px] shadow-lg">
+        {!isSubdomainMode && !company && (
+          <div className="mb-4 px-6 pt-6">
+            <CompanySelector embedded />
+          </div>
+        )}
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold">QuoteBuilder</CardTitle>
           {company && (
@@ -66,8 +71,18 @@ export function Login() {
         </CardHeader>
         <CardContent>
           {!isSubdomainMode && (
-            <div className="mb-6 bg-muted/50 p-4 rounded-lg border">
+            <div className="mb-6">
               <CompanySelector embedded />
+              <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Login to your account
+                  </span>
+                </div>
+              </div>
             </div>
           )}
           <form onSubmit={handleLogin} className="space-y-4">
