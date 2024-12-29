@@ -192,7 +192,9 @@ export const contacts = pgTable("contacts", {
   profileImage: text("profile_image"),
   leadStatus: text("lead_status").notNull().$type<keyof typeof LeadStatus>(),
   leadSource: text("lead_source").notNull().$type<keyof typeof LeadSource>(),
-  assignedUserId: integer("assigned_user_id").references(() => users.id),
+  assignedUserId: integer("assigned_user_id")
+    .references(() => users.id)
+    .notNull(),
   propertyType: text("property_type").notNull().$type<keyof typeof PropertyType>(),
   primaryEmail: text("primary_email").notNull(),
   secondaryEmail: text("secondary_email"),
@@ -209,7 +211,8 @@ export const contacts = pgTable("contacts", {
   numberOfStories: integer("number_of_stories"),
   previousRenovations: jsonb("previous_renovations"),
   propertyNotes: text("property_notes"),
-  categoryId: integer("category_id").references(() => categories.id),
+  categoryId: integer("category_id")
+    .references(() => categories.id),
   projectTimeline: text("project_timeline"),
   budgetRangeMin: decimal("budget_range_min", { precision: 10, scale: 2 }),
   budgetRangeMax: decimal("budget_range_max", { precision: 10, scale: 2 }),
@@ -218,7 +221,9 @@ export const contacts = pgTable("contacts", {
   financingInterest: boolean("financing_interest").default(false),
   customFields: jsonb("custom_fields"),
   tags: text("tags").notNull(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -230,48 +235,74 @@ export const contactCustomFields = pgTable("contact_custom_fields", {
   required: boolean("required").default(false),
   options: text("options"),
   defaultValue: text("default_value"),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const contactNotes = pgTable("contact_notes", {
   id: serial("id").primaryKey(),
-  contactId: integer("contact_id").references(() => contacts.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: 'cascade' })
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   content: text("content").notNull(),
   type: text("type").notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const contactTasks = pgTable("contact_tasks", {
   id: serial("id").primaryKey(),
-  contactId: integer("contact_id").references(() => contacts.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: 'cascade' })
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
   title: text("title").notNull(),
   description: text("description"),
   dueDate: timestamp("due_date"),
   completed: boolean("completed").default(false),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const contactDocuments = pgTable("contact_documents", {
   id: serial("id").primaryKey(),
-  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: 'cascade' })
+    .notNull(),
   name: text("name").notNull(),
   type: text("type").notNull(),
   url: text("url").notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const contactPhotos = pgTable("contact_photos", {
   id: serial("id").primaryKey(),
-  contactId: integer("contact_id").references(() => contacts.id).notNull(),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: 'cascade' })
+    .notNull(),
   type: text("type").notNull(),
   url: text("url").notNull(),
   description: text("description"),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -322,6 +353,12 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   companyUsers: many(companyUsers, {
     relationName: "company_user_relations",
   }),
+  contacts: many(contacts),
+  contactNotes: many(contactNotes),
+  contactTasks: many(contactTasks),
+  contactDocuments: many(contactDocuments),
+  contactPhotos: many(contactPhotos),
+  contactCustomFields: many(contactCustomFields),
 }));
 
 export const usersRelations = relations(users, ({ many, one }) => ({
@@ -406,6 +443,10 @@ export const contactNotesRelations = relations(contactNotes, ({ one }) => ({
     fields: [contactNotes.userId],
     references: [users.id],
   }),
+  company: one(companies, {
+    fields: [contactNotes.companyId],
+    references: [companies.id],
+  }),
 }));
 
 export const contactTasksRelations = relations(contactTasks, ({ one }) => ({
@@ -417,6 +458,10 @@ export const contactTasksRelations = relations(contactTasks, ({ one }) => ({
     fields: [contactTasks.userId],
     references: [users.id],
   }),
+  company: one(companies, {
+    fields: [contactTasks.companyId],
+    references: [companies.id],
+  }),
 }));
 
 export const contactDocumentsRelations = relations(contactDocuments, ({ one }) => ({
@@ -424,12 +469,20 @@ export const contactDocumentsRelations = relations(contactDocuments, ({ one }) =
     fields: [contactDocuments.contactId],
     references: [contacts.id],
   }),
+  company: one(companies, {
+    fields: [contactDocuments.companyId],
+    references: [companies.id],
+  }),
 }));
 
 export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   contact: one(contacts, {
     fields: [contactPhotos.contactId],
     references: [contacts.id],
+  }),
+  company: one(companies, {
+    fields: [contactPhotos.companyId],
+    references: [companies.id],
   }),
 }));
 

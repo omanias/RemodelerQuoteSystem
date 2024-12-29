@@ -1,19 +1,16 @@
-import { Express } from "express";
+import type { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
 import { 
-  users, quotes, products, templates, tablePermissions,
-  UserRole, QuoteStatus, UserStatus, categories, PermissionType, contacts, contactNotes, contactTasks, contactDocuments, contactPhotos, contactCustomFields,
-  insertContactSchema, insertContactCustomFieldSchema
+  users, quotes, products, templates, tablePermissions, companies,
+  UserRole, QuoteStatus, UserStatus, categories, PermissionType
 } from "@db/schema";
 import { eq, ilike, desc, and } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import PDFDocument from "pdfkit";
-import { createObjectCsvWriter } from "csv-writer";
-import { Readable } from "stream";
+import { companyMiddleware, requireCompany, requireSameCompany } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
 
@@ -71,7 +68,7 @@ const requireAuth = async (req: any, res: any, next: any) => {
   }
 };
 
-const requireRole = (allowedRoles: string[]) => async (req: any, res: any, next: any) => {
+const requireRole = (allowedRoles: Array<keyof typeof UserRole>) => async (req: any, res: any, next: any) => {
   try {
     if (!req.user) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -90,42 +87,49 @@ export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
   setupSession(app);
 
+  // Add company middleware globally
+  app.use(companyMiddleware);
+
+  // Company routes
+  app.get("/api/companies/current", requireAuth, async (req, res) => {
+    try {
+      if (!req.company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+      res.json(req.company);
+    } catch (error) {
+      console.error('Error fetching current company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, subdomain } = req.body;
 
     try {
       console.log(`Login attempt for email: ${email}`);
 
-      // Find or create admin user
-      let user = await db.query.users.findFirst({
-        where: eq(users.email, email),
+      // Find user and check company association if subdomain is provided
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, email)
       });
-
-      if (!user && email === "admin@quotebuilder.com") {
-        // Create new admin user with correct password hash
-        const hashedPassword = await crypto.hash("admin123");
-        [user] = await db.insert(users)
-          .values({
-            email: "admin@quotebuilder.com",
-            password: hashedPassword,
-            name: "Admin User",
-            role: UserRole.ADMIN,
-            status: UserStatus.ACTIVE,
-          })
-          .returning();
-      }
 
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // Now try to log in
+      // Verify password
       const isValidPassword = await crypto.compare(password, user.password);
-      console.log(`Password validation result: ${isValidPassword}`);
-
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      // If subdomain is provided, verify user has access to the company
+      if (subdomain && req.company) {
+        if (user.companyId !== req.company.id) {
+          return res.status(403).json({ message: "You don't have access to this company" });
+        }
       }
 
       req.session.userId = user.id;
@@ -134,7 +138,8 @@ export function registerRoutes(app: Express) {
         email: user.email,
         name: user.name,
         role: user.role,
-        status: user.status
+        status: user.status,
+        companyId: user.companyId
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -151,6 +156,9 @@ export function registerRoutes(app: Express) {
   app.get("/api/auth/user", requireAuth, async (req, res) => {
     res.json(req.user);
   });
+
+  // Apply multi-tenant middleware to all other routes
+  app.use("/api/*", requireAuth, requireCompany, requireSameCompany);
 
   // Categories Routes
   app.get("/api/categories", requireAuth, async (req, res) => {
@@ -179,7 +187,7 @@ export function registerRoutes(app: Express) {
       }
 
       const [category] = await db.insert(categories)
-        .values({ name, description })
+        .values({ name, description, companyId: req.company.id }) // Added companyId
         .returning();
 
       res.json(category);
@@ -243,6 +251,7 @@ export function registerRoutes(app: Express) {
         with: {
           category: true,
         },
+        where: eq(products.companyId, req.company.id), // Added company filter
         orderBy: (products, { asc }) => [asc(products.name)],
       });
       res.json(allProducts);
@@ -258,7 +267,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: eq(categories.id, categoryId),
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
       });
 
       if (!category) {
@@ -273,6 +282,7 @@ export function registerRoutes(app: Express) {
           cost,
           unit,
           isActive: isActive ?? true,
+          companyId: req.company.id // Added companyId
         })
         .returning();
 
@@ -293,7 +303,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: eq(categories.id, categoryId),
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
       });
 
       if (!category) {
@@ -331,6 +341,7 @@ export function registerRoutes(app: Express) {
     try {
       const allUsers = await db.query.users.findMany({
         orderBy: (users, { asc }) => [asc(users.name)],
+        where: eq(users.companyId, req.company.id) // Added company filter
       });
 
       res.json(allUsers.map(u => ({
@@ -367,6 +378,7 @@ export function registerRoutes(app: Express) {
           name,
           role,
           status: UserStatus.ACTIVE,
+          companyId: req.company.id // Added companyId
         })
         .returning();
 
@@ -443,6 +455,7 @@ export function registerRoutes(app: Express) {
         with: {
           category: true,
         },
+        where: eq(templates.companyId, req.company.id), // Added company filter
         orderBy: (templates, { asc }) => [asc(templates.name)],
       });
       res.json(allTemplates);
@@ -458,7 +471,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: eq(categories.id, categoryId),
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
       });
 
       if (!category) {
@@ -480,6 +493,7 @@ export function registerRoutes(app: Express) {
           termsAndConditions,
           imageUrls,
           isDefault: isDefault || false,
+          companyId: req.company.id // Added companyId
         })
         .returning();
 
@@ -500,7 +514,7 @@ export function registerRoutes(app: Express) {
 
       // Validate that category exists
       const category = await db.query.categories.findFirst({
-        where: eq(categories.id, categoryId),
+        where: and(eq(categories.id, categoryId), eq(categories.companyId, req.company.id)), // Added company filter
       });
 
       if (!category) {
@@ -580,7 +594,7 @@ export function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
       const contactQuotes = await db.query.quotes.findMany({
-        where: eq(quotes.contactId, parseInt(id)),
+        where: and(eq(quotes.contactId, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
         orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
         with: {
           category: true,
@@ -599,7 +613,7 @@ export function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
       const quote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, parseInt(id)),
+        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
         with: {
           category: true,
           template: true,
@@ -637,7 +651,7 @@ export function registerRoutes(app: Express) {
         subtotal,
         remainingBalance,
         notes,
-        contactId 
+        contactId
       } = req.body;
 
       console.log('Quote creation request:', {
@@ -648,7 +662,7 @@ export function registerRoutes(app: Express) {
         clientAddress,
         downPaymentValue,
         total,
-        contactId 
+        contactId
       });
 
       // Validate quote data
@@ -690,6 +704,7 @@ export function registerRoutes(app: Express) {
           clientAddress: clientAddress || null,
           status: QuoteStatus.DRAFT,
           userId: req.user.id,
+          companyId: req.company.id, // Added companyId
           subtotal: parsedSubtotal,
           total: parsedTotal,
           downPaymentValue: parsedDownPayment,
@@ -745,7 +760,7 @@ export function registerRoutes(app: Express) {
         remainingBalance,
         notes,
         status,
-        contactId 
+        contactId
       } = req.body;
 
       // Parse numeric values with fallbacks
@@ -804,7 +819,7 @@ export function registerRoutes(app: Express) {
   app.get("/api/quotes", requireAuth, async (req, res) => {
     try {
       const userQuotes = await db.query.quotes.findMany({
-        where: eq(quotes.userId, req.user.id),
+        where: and(eq(quotes.userId, req.user.id), eq(quotes.companyId, req.company.id)), // Added company filter
         with: {
           category: true,
           template: true,
@@ -901,7 +916,7 @@ export function registerRoutes(app: Express) {
     try {
       const { tableName, roleId, isAllowed } = req.body;
 
-      // Update all permission types for the given table and role
+            // Update all permission types for the given table and role
       const permissions = await Promise.all(
         Object.values(PermissionType).map(async (permissionType) => {
           const [permission] = await db.update(tablePermissions)
@@ -928,7 +943,7 @@ export function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
       const quote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, parseInt(id)),
+        where: and(eq(quotes.id, parseInt(id)), eq(quotes.companyId, req.company.id)), // Added company filter
         with: {
           category: true,
           template: true,
@@ -1008,7 +1023,7 @@ export function registerRoutes(app: Express) {
   app.get("/api/quotes/export/csv", requireAuth, async (req, res) => {
     try {
       const quotes = await db.query.quotes.findMany({
-        where: eq(quotes.userId, req.user.id),
+        where: and(eq(quotes.userId, req.user.id), eq(quotes.companyId, req.company.id)), // Added company filter
         with: {
           category: true,
           template: true,
@@ -1068,6 +1083,7 @@ export function registerRoutes(app: Express) {
   app.get("/api/contacts", requireAuth, async (req, res) => {
     try {
       const allContacts = await db.query.contacts.findMany({
+        where: eq(contacts.companyId, req.company.id), // Added company filter
         orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
       });
       res.json(allContacts);
@@ -1090,6 +1106,7 @@ export function registerRoutes(app: Express) {
           ...contact,
           createdAt: new Date(),
           updatedAt: new Date(),
+          companyId: req.company.id // Added companyId
         })
         .returning();
 
@@ -1104,7 +1121,7 @@ export function registerRoutes(app: Express) {
     try {
       const { id } = req.params;
       const contact = await db.query.contacts.findFirst({
-        where: eq(contacts.id, parseInt(id)),
+        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), // Added company filter
       });
 
       if (!contact) {
@@ -1152,7 +1169,7 @@ export function registerRoutes(app: Express) {
 
       // Check if contact exists
       const contact = await db.query.contacts.findFirst({
-        where: eq(contacts.id, parseInt(id)),
+        where: and(eq(contacts.id, parseInt(id)), eq(contacts.companyId, req.company.id)), // Added company filter
       });
 
       if (!contact) {
@@ -1195,6 +1212,7 @@ export function registerRoutes(app: Express) {
   app.get("/api/contact-custom-fields", requireAuth, async (req, res) => {
     try {
       const fields = await db.query.contactCustomFields.findMany({
+        where: eq(contactCustomFields.companyId, req.company.id), // Added company filter
         orderBy: (fields, { asc }) => [asc(fields.name)],
       });
       res.json(fields);
@@ -1218,6 +1236,7 @@ export function registerRoutes(app: Express) {
       const fieldData = {
         ...result.data,
         options: result.data.options ? JSON.stringify(result.data.options) : null,
+        companyId: req.company.id // Added companyId
       };
 
       const [field] = await db.insert(contactCustomFields)

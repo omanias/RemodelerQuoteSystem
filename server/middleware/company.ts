@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "@db";
-import { companies } from "@db/schema";
+import { companies, type Company, type User } from "@db/schema";
 import { eq } from "drizzle-orm";
 
 declare global {
   namespace Express {
     interface Request {
-      company?: any;
+      company?: Company;
+      user?: User;
     }
   }
 }
@@ -17,7 +18,7 @@ export async function companyMiddleware(
   next: NextFunction
 ) {
   const subdomain = req.hostname.split(".")[0];
-  
+
   // Skip middleware for www and localhost
   if (subdomain === "www" || subdomain === "localhost") {
     return next();
