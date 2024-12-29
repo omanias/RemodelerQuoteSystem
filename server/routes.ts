@@ -14,6 +14,7 @@ import { promisify } from "util";
 import { companyMiddleware, requireAuth, requireRole } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
+const MemoryStore = createMemoryStore(session);
 
 const crypto = {
   hash: async (password: string) => {
@@ -34,8 +35,10 @@ const crypto = {
   }
 };
 
-function setupSession(app: Express) {
-  const MemoryStore = createMemoryStore(session);
+export function registerRoutes(app: Express) {
+  const httpServer = createServer(app);
+
+  // Setup session before any middleware or routes
   app.use(
     session({
       secret: process.env.REPL_ID || "quote-builder-secret",
@@ -48,11 +51,6 @@ function setupSession(app: Express) {
       },
     })
   );
-}
-
-export function registerRoutes(app: Express) {
-  const httpServer = createServer(app);
-  setupSession(app);
 
   // Public company search and lookup routes (no auth or company middleware required)
   app.get("/api/companies/search", async (req, res) => {
@@ -104,6 +102,10 @@ export function registerRoutes(app: Express) {
   app.post("/api/auth/login", async (req, res) => {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
     try {
       // Find user
       const [user] = await db
@@ -127,6 +129,10 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "You don't have access to this company" });
       }
 
+      if (!req.session) {
+        return res.status(500).json({ message: "Session not initialized" });
+      }
+
       req.session.userId = user.id;
       res.json({
         id: user.id,
@@ -143,13 +149,17 @@ export function registerRoutes(app: Express) {
   });
 
   app.post("/api/auth/logout", (req, res) => {
+    if (!req.session) {
+      return res.status(200).json({ message: "Already logged out" });
+    }
+
     req.session.destroy(() => {
       res.json({ message: "Logged out successfully" });
     });
   });
 
   app.get("/api/auth/user", async (req, res) => {
-    if (!req.session.userId) {
+    if (!req.session?.userId) {
       return res.status(401).json({ message: "Not authenticated" });
     }
 

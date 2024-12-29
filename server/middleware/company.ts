@@ -23,7 +23,7 @@ export async function companyMiddleware(
   try {
     const hostname = req.hostname;
 
-    // Skip middleware for development URLs, direct company access routes, and API routes
+    // Skip middleware for development URLs, direct company access routes, and public API routes
     if (
       hostname === 'localhost' || 
       hostname === 'www' || 
