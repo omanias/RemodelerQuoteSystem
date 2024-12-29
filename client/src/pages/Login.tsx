@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -28,6 +27,17 @@ export function Login() {
     setIsLoading(true);
 
     try {
+      // In non-subdomain mode, require company selection before login
+      if (!isSubdomainMode && !company) {
+        toast({
+          title: "Company Required",
+          description: "Please select a company before logging in",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       await login({ email, password });
     } catch (error: any) {
       toast({
@@ -63,7 +73,9 @@ export function Login() {
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-background px-2 text-muted-foreground">Login to your account</span>
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Login to your account
+                  </span>
                 </div>
               </div>
             </div>

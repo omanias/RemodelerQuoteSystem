@@ -54,7 +54,7 @@ export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
   setupSession(app);
 
-  // Company search and lookup routes (no auth or company middleware required)
+  // Public company search and lookup routes (no auth or company middleware required)
   app.get("/api/companies/search", async (req, res) => {
     try {
       const { q } = req.query;
@@ -97,7 +97,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Add company middleware after company lookup routes
+  // Add company middleware after public routes
   app.use(companyMiddleware);
 
   // Auth routes

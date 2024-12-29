@@ -22,12 +22,25 @@ export async function companyMiddleware(
 ) {
   try {
     const hostname = req.hostname;
-    // Skip middleware for development URLs and direct company access routes
-    if (hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.') || req.path.startsWith('/api/companies/')) {
+
+    // Skip middleware for development URLs, direct company access routes, and API routes
+    if (
+      hostname === 'localhost' || 
+      hostname === 'www' || 
+      hostname.startsWith('.') || 
+      req.path.startsWith('/api/companies/') ||
+      req.path === '/api/auth/login' ||
+      req.path === '/api/auth/logout' ||
+      req.path === '/api/auth/user'
+    ) {
       return next();
     }
 
     const subdomain = hostname.split('.')[0];
+    if (!subdomain) {
+      return next();
+    }
+
     const [company] = await db
       .select()
       .from(companies)
@@ -47,7 +60,7 @@ export async function companyMiddleware(
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
+  if (!req.session?.userId) {
     return res.status(401).json({ message: "Not authenticated" });
   }
   next();
@@ -55,7 +68,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 export function requireRole(roles: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session.userId) {
+    if (!req.session?.userId) {
       return res.status(401).json({ message: "Not authenticated" });
     }
 
