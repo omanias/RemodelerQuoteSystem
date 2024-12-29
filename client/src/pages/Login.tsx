@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -39,11 +40,6 @@ export function Login() {
     }
   };
 
-  // For direct URL access without subdomain, show only company selector
-  if (!isSubdomainMode && !company) {
-    return <CompanySelector />;
-  }
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <Card className="w-[400px] shadow-lg">
@@ -82,8 +78,6 @@ export function Login() {
                 required
                 disabled={isLoading}
               />
-            </div>
-            <div className="space-y-2">
               <Input
                 type="password"
                 placeholder="Password"
@@ -93,7 +87,11 @@ export function Login() {
                 disabled={isLoading}
               />
             </div>
-            <Button className="w-full" type="submit" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || (!isSubdomainMode && !company)}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
