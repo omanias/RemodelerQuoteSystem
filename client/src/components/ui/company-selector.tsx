@@ -52,7 +52,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     setIsLoading(true);
 
     try {
-      console.log("Selecting company:", company.id);
       const response = await fetch(`/api/companies/${company.id}`, {
         credentials: "include",
       });
@@ -62,9 +61,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       }
 
       const selectedCompany = await response.json();
-      console.log("Selected company data:", selectedCompany);
 
-      // Set company in context
+      // Set company in context first
       await setCompany(selectedCompany);
 
       // Clear form state
@@ -78,9 +76,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${selectedCompany.name}`,
       });
 
-      // Navigate to company-specific login page
-      setLocation(`/companies/${selectedCompany.id}/login`);
-
+      // Use replace instead of setLocation to prevent back button issues
+      window.location.replace(`/companies/${selectedCompany.id}/login`);
     } catch (error) {
       console.error('Company selection error:', error);
       toast({

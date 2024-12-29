@@ -56,7 +56,7 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      // Navigate to dashboard after successful login, maintaining the company context
+      // Navigate to dashboard after successful login
       setLocation("/");
     },
   });
