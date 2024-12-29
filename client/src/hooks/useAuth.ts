@@ -56,8 +56,6 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      // Navigate to dashboard after successful login
-      setLocation("/");
     },
   });
 
@@ -88,7 +86,11 @@ export function useAuth() {
   return {
     user,
     loading: isLoading,
-    login: loginMutation.mutateAsync,
+    login: async (credentials: { email: string; password: string }) => {
+      await loginMutation.mutateAsync(credentials);
+      // After successful login and user data refresh, navigate to dashboard
+      setLocation("/");
+    },
     logout: logoutMutation.mutateAsync,
     // Only consider user authenticated if:
     // 1. User exists AND
