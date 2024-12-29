@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, AlertCircle, Search } from "lucide-react";
-import { useLocation } from "wouter";
 
 interface CompanySelectorProps {
   showError?: boolean;
@@ -19,7 +18,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
   const [searchResults, setSearchResults] = useState<Array<{ id: number; name: string; subdomain: string }>>([]);
   const { setCompany } = useCompany();
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
 
   const handleSearch = async (term: string) => {
     if (!term.trim()) {
@@ -61,8 +59,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       }
 
       const selectedCompany = await response.json();
-
-      // Set company in context
       setCompany(selectedCompany);
 
       // Clear form state
@@ -75,9 +71,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         title: "Success",
         description: `Connected to ${selectedCompany.name}`,
       });
-
-      // Navigate to company-specific login page
-      setLocation(`/companies/${selectedCompany.id}/login`);
     } catch (error) {
       console.error('Company selection error:', error);
       toast({

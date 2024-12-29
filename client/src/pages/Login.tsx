@@ -38,7 +38,7 @@ export function Login() {
     }
   };
 
-  // Ensure we have a company before showing the login form
+  // Must have a company to show login form
   if (!company) {
     return (
       <div className="flex items-center justify-center min-h-screen">
