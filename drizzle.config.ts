@@ -11,4 +11,6 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Enable strict mode to prevent accidental data loss
+  strict: true,
 });
