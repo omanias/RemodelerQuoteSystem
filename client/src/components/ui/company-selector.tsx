@@ -8,7 +8,7 @@ import { Building2, Loader2, AlertCircle, Search } from "lucide-react";
 
 interface CompanySelectorProps {
   showError?: boolean;
-  embedded?: boolean;  // New prop for embedded mode
+  embedded?: boolean;  // For embedding in other components like Login
 }
 
 export function CompanySelector({ showError = false, embedded = false }: CompanySelectorProps) {
@@ -77,6 +77,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${company.name}`,
       });
     } catch (error) {
+      console.error('Company selection error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to find company",
@@ -110,6 +111,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${company.name}`,
       });
     } catch (error) {
+      console.error('Company selection error:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to connect to company",
@@ -138,15 +140,15 @@ export function CompanySelector({ showError = false, embedded = false }: Company
           />
         </div>
         {searchResults.length > 0 && (
-          <div className="border rounded-md mt-2">
+          <div className="border rounded-md mt-2 divide-y">
             {searchResults.map((company) => (
               <button
                 key={company.id}
                 onClick={() => selectCompany(company)}
-                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center justify-between"
+                className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between"
               >
                 <span>{company.name}</span>
-                <span className="text-sm text-gray-500">ID: {company.id}</span>
+                <span className="text-sm text-muted-foreground">ID: {company.id}</span>
               </button>
             ))}
           </div>
@@ -199,13 +201,13 @@ export function CompanySelector({ showError = false, embedded = false }: Company
 
   // Otherwise, return the full-page layout
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen w-full flex items-center justify-center bg-background">
       <Card className="w-full max-w-md mx-4">
         <CardHeader>
           {showError ? (
-            <div className="flex items-center gap-2 text-red-500 mb-4">
+            <div className="flex items-center gap-2 text-destructive mb-4">
               <AlertCircle className="h-6 w-6" />
-              <CardTitle className="text-red-500">Company Not Found</CardTitle>
+              <CardTitle className="text-destructive">Company Not Found</CardTitle>
             </div>
           ) : (
             <div className="flex items-center gap-2">
