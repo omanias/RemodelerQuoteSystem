@@ -1,19 +1,12 @@
 import { Express } from "express";
 import { createServer } from "http";
 import { db } from "@db";
-import { 
-  users, quotes, products, templates, tablePermissions,
-  UserRole, QuoteStatus, UserStatus, categories, PermissionType, contacts, contactNotes, contactTasks, contactDocuments, contactPhotos, contactCustomFields,
-  insertContactSchema, insertContactCustomFieldSchema
-} from "@db/schema";
-import { eq, ilike, desc, and } from "drizzle-orm";
+import { companies, users } from "@db/schema";
+import { eq, ilike } from "drizzle-orm";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import PDFDocument from "pdfkit";
-import { createObjectCsvWriter } from "csv-writer";
-import { Readable } from "stream";
 
 const scryptAsync = promisify(scrypt);
 
@@ -59,6 +52,9 @@ const requireAuth = async (req: any, res: any, next: any) => {
     }
     const user = await db.query.users.findFirst({
       where: eq(users.id, req.session.userId),
+      with: {
+        company: true,
+      },
     });
     if (!user) {
       return res.status(401).json({ message: "User not found" });
@@ -71,17 +67,14 @@ const requireAuth = async (req: any, res: any, next: any) => {
   }
 };
 
-const requireRole = (allowedRoles: string[]) => async (req: any, res: any, next: any) => {
+const requireSuperAdmin = async (req: any, res: any, next: any) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Insufficient permissions" });
+    if (!req.user.isSuperAdmin) {
+      return res.status(403).json({ message: "Super admin access required" });
     }
     next();
   } catch (error) {
-    console.error('Role middleware error:', error);
+    console.error('Super admin middleware error:', error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -92,49 +85,44 @@ export function registerRoutes(app: Express) {
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
     try {
-      console.log(`Login attempt for email: ${email}`);
+      console.log(`Login attempt for username: ${username}`);
 
-      // Find or create admin user
-      let user = await db.query.users.findFirst({
-        where: eq(users.email, email),
+      // Find user and their company
+      const user = await db.query.users.findFirst({
+        where: eq(users.username, username),
+        with: {
+          company: true,
+        },
       });
 
-      if (!user && email === "admin@quotebuilder.com") {
-        // Create new admin user with correct password hash
-        const hashedPassword = await crypto.hash("admin123");
-        [user] = await db.insert(users)
-          .values({
-            email: "admin@quotebuilder.com",
-            password: hashedPassword,
-            name: "Admin User",
-            role: UserRole.ADMIN,
-            status: UserStatus.ACTIVE,
-          })
-          .returning();
-      }
-
       if (!user) {
-        return res.status(401).json({ message: "Invalid email or password" });
+        return res.status(401).json({ message: "Invalid username or password" });
       }
 
-      // Now try to log in
+      // Verify password
       const isValidPassword = await crypto.compare(password, user.password);
-      console.log(`Password validation result: ${isValidPassword}`);
-
       if (!isValidPassword) {
-        return res.status(401).json({ message: "Invalid email or password" });
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+
+      // Check if user's company is active (unless super admin)
+      if (!user.isSuperAdmin && user.company && user.company.status !== 'ACTIVE') {
+        return res.status(403).json({ message: "Company account is inactive" });
       }
 
       req.session.userId = user.id;
       res.json({
         id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status
+        username: user.username,
+        isSuperAdmin: user.isSuperAdmin,
+        company: user.company ? {
+          id: user.company.id,
+          name: user.company.name,
+          subdomain: user.company.subdomain,
+        } : null,
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -149,7 +137,184 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/auth/user", requireAuth, async (req, res) => {
-    res.json(req.user);
+    res.json({
+      id: req.user.id,
+      username: req.user.username,
+      isSuperAdmin: req.user.isSuperAdmin,
+      company: req.user.company ? {
+        id: req.user.company.id,
+        name: req.user.company.name,
+        subdomain: req.user.company.subdomain,
+      } : null,
+    });
+  });
+
+  // Company management routes (super admin only)
+  app.get("/api/companies", requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const allCompanies = await db.query.companies.findMany({
+        orderBy: (companies, { asc }) => [asc(companies.name)],
+      });
+      res.json(allCompanies);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/companies", requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { name, subdomain, settings } = req.body;
+
+      // Validate subdomain uniqueness
+      const existingCompany = await db.query.companies.findFirst({
+        where: eq(companies.subdomain, subdomain),
+      });
+
+      if (existingCompany) {
+        return res.status(400).json({ message: "Subdomain already in use" });
+      }
+
+      // Create company
+      const [company] = await db
+        .insert(companies)
+        .values({
+          name,
+          subdomain,
+          settings,
+          status: 'ACTIVE',
+        })
+        .returning();
+
+      res.json(company);
+    } catch (error) {
+      console.error('Error creating company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/companies/:id", requireAuth, requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, subdomain, status, settings } = req.body;
+
+      // Check if company exists
+      const existingCompany = await db.query.companies.findFirst({
+        where: eq(companies.id, id),
+      });
+
+      if (!existingCompany) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Check subdomain uniqueness if changed
+      if (subdomain !== existingCompany.subdomain) {
+        const subdomainExists = await db.query.companies.findFirst({
+          where: eq(companies.subdomain, subdomain),
+        });
+
+        if (subdomainExists) {
+          return res.status(400).json({ message: "Subdomain already in use" });
+        }
+      }
+
+      // Update company
+      const [company] = await db
+        .update(companies)
+        .set({
+          name,
+          subdomain,
+          status,
+          settings,
+          updatedAt: new Date(),
+        })
+        .where(eq(companies.id, id))
+        .returning();
+
+      res.json(company);
+    } catch (error) {
+      console.error('Error updating company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // User management (with company context)
+  app.post("/api/users", requireAuth, async (req, res) => {
+    try {
+      const { username, password, companyId } = req.body;
+
+      // Only super admin can create users for other companies
+      if (!req.user.isSuperAdmin && companyId !== req.user.companyId) {
+        return res.status(403).json({ message: "Cannot create user for another company" });
+      }
+
+      // Check if user exists
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.username, username),
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      // Hash password
+      const hashedPassword = await crypto.hash(password);
+
+      // Create user
+      const [user] = await db
+        .insert(users)
+        .values({
+          username,
+          password: hashedPassword,
+          companyId,
+          isSuperAdmin: false,
+        })
+        .returning();
+
+      res.json({
+        id: user.id,
+        username: user.username,
+        companyId: user.companyId,
+      });
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/users", requireAuth, async (req, res) => {
+    try {
+      // Super admin sees all users, regular users only see their company's users
+      const query = req.user.isSuperAdmin
+        ? db.query.users.findMany({
+            orderBy: (users, { asc }) => [asc(users.username)],
+            with: { company: true },
+          })
+        : db.query.users.findMany({
+            where: eq(users.companyId, req.user.companyId!),
+            orderBy: (users, { asc }) => [asc(users.username)],
+          });
+
+      const allUsers = await query;
+
+      res.json(
+        allUsers.map((u) => ({
+          id: u.id,
+          username: u.username,
+          isSuperAdmin: u.isSuperAdmin,
+          company: u.company
+            ? {
+                id: u.company.id,
+                name: u.company.name,
+                subdomain: u.company.subdomain,
+              }
+            : null,
+        }))
+      );
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
   });
 
   // Categories Routes
@@ -165,7 +330,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/categories", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/categories", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { name, description } = req.body;
 
@@ -189,7 +354,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.put("/api/categories/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.put("/api/categories/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
       const { name, description } = req.body;
@@ -215,7 +380,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/categories/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.delete("/api/categories/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
 
@@ -252,7 +417,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/products", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/products", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { name, categoryId, basePrice, cost, unit, isActive } = req.body;
 
@@ -286,7 +451,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.put("/api/products/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.put("/api/products/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
       const { name, categoryId, basePrice, unit, variations, isActive } = req.body;
@@ -315,7 +480,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/products/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.delete("/api/products/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
       await db.delete(products).where(eq(products.id, parseInt(id)));
@@ -326,115 +491,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // User Management Routes
-  app.get("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
-    try {
-      const allUsers = await db.query.users.findMany({
-        orderBy: (users, { asc }) => [asc(users.name)],
-      });
-
-      res.json(allUsers.map(u => ({
-        id: u.id,
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        status: u.status
-      })));
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.post("/api/users", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
-    try {
-      const { email, password, name, role } = req.body;
-
-      // Check if user already exists
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.email, email),
-      });
-
-      if (existingUser) {
-        return res.status(400).json({ message: "User with this email already exists" });
-      }
-
-      const hashedPassword = await crypto.hash(password);
-      const [user] = await db.insert(users)
-        .values({
-          email,
-          password: hashedPassword,
-          name,
-          role,
-          status: UserStatus.ACTIVE,
-        })
-        .returning();
-
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status
-      });
-    } catch (error) {
-      console.error('Error creating user:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.put("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { email, name, role, status } = req.body;
-
-      // Check if email is being changed and if it's already taken
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.email, email),
-      });
-
-      if (existingUser && existingUser.id !== parseInt(id)) {
-        return res.status(400).json({ message: "Email already taken" });
-      }
-
-      const [user] = await db.update(users)
-        .set({ email, name, role, status })
-        .where(eq(users.id, parseInt(id)))
-        .returning();
-
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status
-      });
-    } catch (error) {
-      console.error('Error updating user:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.delete("/api/users/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      // Prevent deleting the admin user
-      const userToDelete = await db.query.users.findFirst({
-        where: eq(users.id, parseInt(id)),
-      });
-
-      if (userToDelete?.email === "admin@quotebuilder.com") {
-        return res.status(400).json({ message: "Cannot delete admin user" });
-      }
-
-      await db.delete(users).where(eq(users.id, parseInt(id)));
-      res.json({ message: "User deleted successfully" });
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
 
   // Template Routes
   app.get("/api/templates", requireAuth, async (req, res) => {
@@ -452,7 +508,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/templates", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/templates", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { name, categoryId, termsAndConditions, imageUrls, isDefault } = req.body;
 
@@ -493,7 +549,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.put("/api/templates/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.put("/api/templates/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
       const { name, categoryId, termsAndConditions, imageUrls, isDefault } = req.body;
@@ -536,7 +592,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/templates/:id", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.delete("/api/templates/:id", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { id } = req.params;
 
@@ -637,7 +693,7 @@ export function registerRoutes(app: Express) {
         subtotal,
         remainingBalance,
         notes,
-        contactId 
+        contactId
       } = req.body;
 
       console.log('Quote creation request:', {
@@ -648,7 +704,7 @@ export function registerRoutes(app: Express) {
         clientAddress,
         downPaymentValue,
         total,
-        contactId 
+        contactId
       });
 
       // Validate quote data
@@ -745,7 +801,7 @@ export function registerRoutes(app: Express) {
         remainingBalance,
         notes,
         status,
-        contactId 
+        contactId
       } = req.body;
 
       // Parse numeric values with fallbacks
@@ -832,7 +888,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Permission Management Routes
-  app.get("/api/permissions", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.get("/api/permissions", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const allPermissions = await db.query.tablePermissions.findMany({
         orderBy: (tablePermissions, { asc }) => [
@@ -847,7 +903,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/permissions", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/permissions", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { tableName, roleId, permissionType, isAllowed } = req.body;
 
@@ -870,7 +926,7 @@ export function registerRoutes(app: Express) {
       if (existingPermission) {
         // Update existing permission
         [permission] = await db.update(tablePermissions)
-          .set({ 
+          .set({
             isAllowed,
             updatedAt: new Date()
           })
@@ -897,7 +953,7 @@ export function registerRoutes(app: Express) {
   });
 
   // Bulk permission update
-  app.post("/api/permissions/bulk", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/permissions/bulk", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const { tableName, roleId, isAllowed } = req.body;
 
@@ -1165,8 +1221,8 @@ export function registerRoutes(app: Express) {
       });
 
       if (quoteWithContact) {
-        return res.status(400).json({ 
-          message: "Cannot delete contact with associated quotes" 
+        return res.status(400).json({
+          message: "Cannot delete contact with associated quotes"
         });
       }
 
@@ -1204,13 +1260,13 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.post("/api/contact-custom-fields", requireAuth, requireRole([UserRole.ADMIN]), async (req, res) => {
+  app.post("/api/contact-custom-fields", requireAuth, async (req, res) => { //requireRole([UserRole.ADMIN]) removed
     try {
       const result = insertContactCustomFieldSchema.safeParse(req.body);
       if (!result.success) {
-        return res.status(400).json({ 
-          message: "Invalid input", 
-          errors: result.error.issues 
+        return res.status(400).json({
+          message: "Invalid input",
+          errors: result.error.issues
         });
       }
 
