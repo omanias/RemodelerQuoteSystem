@@ -26,7 +26,7 @@ type LoginParams = {
 function CompanyLoginRoute() {
   const params = useParams<LoginParams>();
   const { company, setCompany } = useCompany();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     const fetchCompany = async () => {
@@ -88,16 +88,17 @@ function App() {
 
     // In non-subdomain mode
     if (!isSubdomainMode) {
+      // Check if we're on a company login route
       const isCompanyLoginRoute = location.match(/^\/companies\/\d+\/login$/);
 
-      // If we're on a company login route and have a company, show login
-      if (isCompanyLoginRoute && company) {
-        return <CompanyLoginRoute />;
+      // Show company selector if no company is selected and not on login route
+      if (!company && !isCompanyLoginRoute) {
+        return <CompanySelector />;
       }
 
-      // For all other cases without a company, show selector
-      if (!company) {
-        return <CompanySelector />;
+      // Show company login route if we're on that path
+      if (isCompanyLoginRoute) {
+        return <CompanyLoginRoute />;
       }
     }
 

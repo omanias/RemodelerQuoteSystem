@@ -83,7 +83,6 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isSubdomainMode, companyData]);
 
-
   const setCompany = (newCompany: Company | null) => {
     if (newCompany) {
       localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
@@ -98,7 +97,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     setCompanyState(null);
   };
 
-  const value: CompanyContextType = {
+  const value = {
     company,
     setCompany,
     subdomain,

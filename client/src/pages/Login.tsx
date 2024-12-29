@@ -19,7 +19,7 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const { toast } = useToast();
-  const { company, isSubdomainMode } = useCompany();
+  const { company } = useCompany();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,17 +38,23 @@ export function Login() {
     }
   };
 
-  // Show login form for subdomain mode or after company selection
+  // Ensure we have a company before showing the login form
+  if (!company) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-[400px] shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold">QuoteBuilder</CardTitle>
-          {company && (
-            <CardDescription className="text-lg font-medium mt-2">
-              {company.name}
-            </CardDescription>
-          )}
+          <CardDescription className="text-lg font-medium mt-2">
+            {company.name}
+          </CardDescription>
           <CardDescription className="text-sm text-muted-foreground mt-2">
             Sign in to your account
           </CardDescription>
