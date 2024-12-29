@@ -24,7 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
-  const { company, isSubdomainMode, loading: companyLoading } = useCompany();
+  const { company, isSubdomainMode, loading: companyLoading, error } = useCompany();
 
   // Show loading state while checking auth and company status
   if (authLoading || (isSubdomainMode && companyLoading)) {
@@ -37,44 +37,33 @@ function App() {
 
   // Show login page if user is not authenticated
   if (!user) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <Login />
-        <Toaster />
-      </QueryClientProvider>
-    );
+    return <Login />;
   }
 
-  // Show company selector if not in subdomain mode and no company is selected
-  if (!isSubdomainMode && !company) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <CompanySelector />
-        <Toaster />
-      </QueryClientProvider>
-    );
+  // Show company selector if:
+  // 1. Not in subdomain mode and no company selected
+  // 2. In subdomain mode but company not found (error state)
+  if (!isSubdomainMode && !company || (isSubdomainMode && error)) {
+    return <CompanySelector showError={isSubdomainMode && error !== null} />;
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Layout>
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/quotes" component={Quotes} />
-          <Route path="/quotes/new" component={QuoteDetail} />
-          <Route path="/quotes/:id" component={QuoteDetail} />
-          <Route path="/contacts" component={Contacts} />
-          <Route path="/contacts/new" component={ContactDetail} />
-          <Route path="/contacts/:id" component={ContactDetail} />
-          <Route path="/categories" component={Categories} />
-          <Route path="/products" component={Products} />
-          <Route path="/templates" component={Templates} />
-          <Route path="/users" component={Users} />
-          <Route path="/permissions" component={AdminPermissions} />
-        </Switch>
-      </Layout>
-      <Toaster />
-    </QueryClientProvider>
+    <Layout>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/quotes" component={Quotes} />
+        <Route path="/quotes/new" component={QuoteDetail} />
+        <Route path="/quotes/:id" component={QuoteDetail} />
+        <Route path="/contacts" component={Contacts} />
+        <Route path="/contacts/new" component={ContactDetail} />
+        <Route path="/contacts/:id" component={ContactDetail} />
+        <Route path="/categories" component={Categories} />
+        <Route path="/products" component={Products} />
+        <Route path="/templates" component={Templates} />
+        <Route path="/users" component={Users} />
+        <Route path="/permissions" component={AdminPermissions} />
+      </Switch>
+    </Layout>
   );
 }
 

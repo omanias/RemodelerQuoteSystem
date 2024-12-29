@@ -4,9 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
-import { Building2, Loader2 } from "lucide-react";
+import { Building2, Loader2, AlertCircle } from "lucide-react";
 
-export function CompanySelector() {
+export function CompanySelector({ showError = false }: { showError?: boolean }) {
   const [companyId, setCompanyId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { setCompany } = useCompany();
@@ -38,9 +38,10 @@ export function CompanySelector() {
       const company = await response.json();
       setCompany(company);
 
+      // Show success message
       toast({
         title: "Success",
-        description: "Company access granted successfully",
+        description: `Connected to ${company.name}`,
       });
     } catch (error) {
       toast({
@@ -57,12 +58,21 @@ export function CompanySelector() {
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md mx-4">
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Building2 className="h-6 w-6" />
-            <CardTitle>Access Your Company</CardTitle>
-          </div>
+          {showError ? (
+            <div className="flex items-center gap-2 text-red-500 mb-4">
+              <AlertCircle className="h-6 w-6" />
+              <CardTitle className="text-red-500">Company Not Found</CardTitle>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Building2 className="h-6 w-6" />
+              <CardTitle>Access Your Company</CardTitle>
+            </div>
+          )}
           <CardDescription>
-            Enter your company ID to access your workspace. If you don't know your company ID, please contact your administrator.
+            {showError 
+              ? "The company you're trying to access was not found. Please verify your company ID and try again."
+              : "Enter your company ID to access your workspace. If you don't know your company ID, please contact your administrator."}
           </CardDescription>
         </CardHeader>
         <CardContent>

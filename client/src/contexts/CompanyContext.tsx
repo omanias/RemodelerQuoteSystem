@@ -22,17 +22,10 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const subdomain = isLocalOrWWW ? null : hostname.split('.')[0];
   const isSubdomainMode = !!subdomain;
 
-  // Only fetch company data if we're in subdomain mode
-  const { data: companyData, isLoading, error } = useQuery<Company>({
+  const { data: companyData, isLoading, error } = useQuery<Company, Error>({
     queryKey: ['/api/companies/current'],
     enabled: !!subdomain && subdomain !== 'www' && subdomain !== 'localhost',
-    onError: (error) => {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load company data",
-        variant: "destructive",
-      });
-    },
+    retry: false,
   });
 
   // Update company state when data changes
@@ -49,7 +42,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       subdomain, 
       isSubdomainMode,
       loading: isLoading,
-      error: error instanceof Error ? error : null
+      error
     }}>
       {children}
     </CompanyContext.Provider>
