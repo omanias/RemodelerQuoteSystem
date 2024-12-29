@@ -9,7 +9,7 @@ import { useLocation } from "wouter";
 
 interface CompanySelectorProps {
   showError?: boolean;
-  embedded?: boolean;  // For embedding in other components like Login
+  embedded?: boolean;
 }
 
 export function CompanySelector({ showError = false, embedded = false }: CompanySelectorProps) {
@@ -62,8 +62,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
 
       const selectedCompany = await response.json();
 
-      // Set company in context first
-      await setCompany(selectedCompany);
+      // Set company in context
+      setCompany(selectedCompany);
 
       // Clear form state
       setCompanyId("");
@@ -76,8 +76,8 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${selectedCompany.name}`,
       });
 
-      // Use replace instead of setLocation to prevent back button issues
-      window.location.replace(`/companies/${selectedCompany.id}/login`);
+      // Navigate to company-specific login page
+      setLocation(`/companies/${selectedCompany.id}/login`);
     } catch (error) {
       console.error('Company selection error:', error);
       toast({

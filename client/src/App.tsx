@@ -23,34 +23,38 @@ type LoginParams = {
   companyId: string;
 };
 
-// Wrapper component for the login route that handles company ID from URL
 function CompanyLoginRoute() {
   const params = useParams<LoginParams>();
   const { company, setCompany } = useCompany();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   useEffect(() => {
-    if (!company && params.companyId) {
-      // Fetch and set company based on URL parameter
-      fetch(`/api/companies/${params.companyId}`, {
-        credentials: "include",
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error("Company not found");
-          return res.json();
-        })
-        .then((data) => {
-          setCompany(data);
-        })
-        .catch((error) => {
-          console.error("Error fetching company:", error);
-          setLocation("/"); // Redirect to company selector on error
+    const fetchCompany = async () => {
+      try {
+        const response = await fetch(`/api/companies/${params.companyId}`, {
+          credentials: "include",
         });
+
+        if (!response.ok) {
+          throw new Error("Company not found");
+        }
+
+        const data = await response.json();
+        setCompany(data);
+      } catch (error) {
+        console.error("Error fetching company:", error);
+        setLocation("/");
+      }
+    };
+
+    // Only fetch if company ID in URL doesn't match current company
+    if (!company || (params.companyId && company.id !== parseInt(params.companyId))) {
+      fetchCompany();
     }
   }, [params.companyId, company, setCompany, setLocation]);
 
-  // Don't render login form until company is loaded
-  if (!company) {
+  // Prevent flash of login form while company is loading
+  if (!company || (params.companyId && company.id !== parseInt(params.companyId))) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -62,28 +66,9 @@ function CompanyLoginRoute() {
 }
 
 function App() {
-  const { user, loading: authLoading, logout } = useAuth();
-  const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
+  const { user, loading: authLoading } = useAuth();
+  const { company, isSubdomainMode, loading: companyLoading, error } = useCompany();
   const [location] = useLocation();
-
-  // Handle company error in subdomain mode
-  useEffect(() => {
-    if (isSubdomainMode && error) {
-      logout();
-      clearCompany();
-    }
-  }, [isSubdomainMode, error, logout, clearCompany]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log('App state:', {
-      user: !!user,
-      company: !!company,
-      location,
-      isSubdomainMode,
-      loading: authLoading || companyLoading
-    });
-  }, [user, company, location, isSubdomainMode, authLoading, companyLoading]);
 
   // Show loading state while checking auth and company status
   if (authLoading || (isSubdomainMode && companyLoading)) {
@@ -96,32 +81,27 @@ function App() {
 
   // Not authenticated flow
   if (!user) {
-    // Show error company selector in subdomain mode with error
+    // Show error page in subdomain mode with error
     if (isSubdomainMode && error) {
       return <CompanySelector showError={true} />;
     }
 
-    // In non-subdomain mode:
+    // In non-subdomain mode
     if (!isSubdomainMode) {
-      // If we're on a company login page, show the login component
-      if (location.startsWith('/companies/') && location.endsWith('/login')) {
-        return <Switch>
-          <Route path="/companies/:companyId/login" component={CompanyLoginRoute} />
-        </Switch>;
+      const isCompanyLoginRoute = location.match(/^\/companies\/\d+\/login$/);
+
+      // If we're on a company login route and have a company, show login
+      if (isCompanyLoginRoute && company) {
+        return <CompanyLoginRoute />;
       }
 
-      // If we have no company selected and we're on the root, show company selector
-      if (!company && location === '/') {
-        return <CompanySelector />;
-      }
-
-      // For all other cases in non-subdomain mode without a company, redirect to selector
+      // For all other cases without a company, show selector
       if (!company) {
         return <CompanySelector />;
       }
     }
 
-    // For subdomain mode or when company is selected, show login
+    // Default to login for all other cases (has company or subdomain mode)
     return <Login />;
   }
 

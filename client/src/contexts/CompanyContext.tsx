@@ -13,7 +13,7 @@ export type Company = {
 
 interface CompanyContextType {
   company: Company | null;
-  setCompany: (company: Company | null) => Promise<void>;
+  setCompany: (company: Company | null) => void;
   subdomain: string | null;
   isSubdomainMode: boolean;
   loading: boolean;
@@ -24,8 +24,22 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [company, setCompanyState] = useState<Company | null>(null);
-  const [isSettingCompany, setIsSettingCompany] = useState(false);
+  const [company, setCompanyState] = useState<Company | null>(() => {
+    // Initialize from localStorage on mount
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('selectedCompany');
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch (error) {
+          console.error('Error parsing stored company:', error);
+          localStorage.removeItem('selectedCompany');
+        }
+      }
+    }
+    return null;
+  });
+
   const { toast } = useToast();
 
   // Parse subdomain from hostname
@@ -62,58 +76,24 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isSubdomainMode, error, toast]);
 
-  // Update company state when data changes
+  // Update company state when data changes in subdomain mode
   useEffect(() => {
-    if (companyData) {
+    if (isSubdomainMode && companyData) {
       setCompanyState(companyData);
     }
-  }, [companyData]);
+  }, [isSubdomainMode, companyData]);
 
-  const setCompany = async (newCompany: Company | null): Promise<void> => {
-    setIsSettingCompany(true);
-    try {
-      console.log("Setting company:", newCompany?.name || 'null');
 
-      // Store company in localStorage for persistence
-      if (newCompany) {
-        localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
-      } else {
-        localStorage.removeItem('selectedCompany');
-      }
-
-      setCompanyState(newCompany);
-
-      // Wait for state to update
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          setIsSettingCompany(false);
-          resolve();
-        }, 100);
-      });
-    } catch (error) {
-      setIsSettingCompany(false);
-      throw error;
+  const setCompany = (newCompany: Company | null) => {
+    if (newCompany) {
+      localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
+    } else {
+      localStorage.removeItem('selectedCompany');
     }
+    setCompanyState(newCompany);
   };
 
-  // Load company from localStorage on mount
-  useEffect(() => {
-    if (!isSubdomainMode && !company) {
-      const storedCompany = localStorage.getItem('selectedCompany');
-      if (storedCompany) {
-        try {
-          const parsedCompany = JSON.parse(storedCompany);
-          setCompanyState(parsedCompany);
-        } catch (error) {
-          console.error('Error parsing stored company:', error);
-          localStorage.removeItem('selectedCompany');
-        }
-      }
-    }
-  }, [isSubdomainMode, company]);
-
   const clearCompany = () => {
-    console.log("Clearing company");
     localStorage.removeItem('selectedCompany');
     setCompanyState(null);
   };
@@ -123,7 +103,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     setCompany,
     subdomain,
     isSubdomainMode,
-    loading: isLoading || isSettingCompany,
+    loading: isLoading,
     error: error instanceof Error ? error : null,
     clearCompany
   };
