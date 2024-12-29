@@ -13,7 +13,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { Loader2 } from "lucide-react";
 
-export function Login() {
+interface LoginProps {
+  embedded?: boolean;
+}
+
+export function Login({ embedded = false }: LoginProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +51,47 @@ export function Login() {
     );
   }
 
+  const loginForm = (
+    <form onSubmit={handleLogin} className="space-y-4">
+      <div className="space-y-2">
+        <Input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+        <Input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={isLoading}
+        />
+      </div>
+      <Button 
+        type="submit" 
+        className="w-full" 
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Signing in...
+          </>
+        ) : (
+          "Sign In"
+        )}
+      </Button>
+    </form>
+  );
+
+  if (embedded) {
+    return loginForm;
+  }
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-[400px] shadow-lg">
@@ -60,40 +105,7 @@ export function Login() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-              <Input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
-              )}
-            </Button>
-          </form>
+          {loginForm}
         </CardContent>
       </Card>
     </div>
