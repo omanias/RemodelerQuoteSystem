@@ -23,34 +23,26 @@ export async function companyMiddleware(
   try {
     const hostname = req.hostname;
 
-    // Public routes that don't require company context
-    const publicPaths = [
-      '/api/companies/search',
-      '/api/companies/',
-      '/api/auth/login',
-      '/api/auth/logout',
-      '/api/auth/user'
-    ];
-
-    // Skip middleware for development URLs, direct company access routes, and public API routes
+    // Skip middleware for:
+    // 1. Local development
+    // 2. Non-subdomain routes
+    // 3. Public API endpoints
     if (
       hostname === 'localhost' || 
-      hostname === 'www' || 
-      hostname.startsWith('.') || 
-      publicPaths.some(path => req.path.startsWith(path))
+      hostname.includes('.') || // This catches www and other non-subdomain URLs
+      req.path.startsWith('/api/companies') || // Allow all company-related routes
+      req.path === '/api/auth/login' ||
+      req.path === '/api/auth/logout' ||
+      req.path === '/api/auth/user'
     ) {
       return next();
     }
 
-    const subdomain = hostname.split('.')[0];
-    if (!subdomain) {
-      return next();
-    }
-
+    // At this point, we're in subdomain mode and need to verify the company
     const [company] = await db
       .select()
       .from(companies)
-      .where(eq(companies.subdomain, subdomain))
+      .where(eq(companies.subdomain, hostname))
       .limit(1);
 
     if (!company) {

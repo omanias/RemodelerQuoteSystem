@@ -70,12 +70,21 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       }
 
       const company = await response.json();
+
+      // Important: Set company state first
       setCompany(company);
 
+      // Clear the form state
+      setCompanyId("");
+      setSearchResults([]);
+      setSearchTerm("");
+
+      // Show success message
       toast({
         title: "Success",
         description: `Connected to ${company.name}`,
       });
+
     } catch (error) {
       console.error('Company selection error:', error);
       toast({
@@ -88,44 +97,9 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     }
   };
 
-  const selectCompany = async (company: { id: number; name: string }) => {
-    setCompanyId(company.id.toString());
-    setSearchResults([]);
-    setSearchTerm("");
-
-    try {
-      setIsLoading(true);
-      const response = await fetch(`/api/companies/${company.id}`, {
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const companyData = await response.json();
-      setCompany(companyData);
-
-      toast({
-        title: "Success",
-        description: `Connected to ${company.name}`,
-      });
-    } catch (error) {
-      console.error('Company selection error:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to connect to company",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const content = (
     <div className="space-y-4">
       <div className="space-y-2">
-        {/* Search field with icon */}
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -141,13 +115,15 @@ export function CompanySelector({ showError = false, embedded = false }: Company
           />
         </div>
 
-        {/* Search results */}
         {searchResults.length > 0 && (
           <div className="border rounded-md mt-2 divide-y max-h-48 overflow-y-auto bg-background shadow-sm">
             {searchResults.map((company) => (
               <button
                 key={company.id}
-                onClick={() => selectCompany(company)}
+                onClick={() => {
+                  setCompanyId(company.id.toString());
+                  handleSubmit(new Event('submit') as any);
+                }}
                 className="w-full px-4 py-2 text-left hover:bg-accent flex items-center justify-between text-sm"
               >
                 <span className="font-medium">{company.name}</span>
@@ -158,7 +134,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         )}
       </div>
 
-      {/* Only show the manual ID entry in full page mode */}
       {!embedded && (
         <>
           <div className="relative">
@@ -197,7 +172,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     </div>
   );
 
-  // If embedded (used in login form), return minimal UI
   if (embedded) {
     return (
       <div className="rounded-lg bg-muted/50 p-4 border">
@@ -210,7 +184,6 @@ export function CompanySelector({ showError = false, embedded = false }: Company
     );
   }
 
-  // Otherwise, return the full-page layout
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background">
       <Card className="w-full max-w-md mx-4">

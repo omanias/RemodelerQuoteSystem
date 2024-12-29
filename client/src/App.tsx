@@ -11,7 +11,6 @@ import { Login } from "@/pages/Login";
 import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
 import { QuoteDetail } from "@/pages/QuoteDetail";
-import { Categories } from "@/pages/Categories";
 import { Products } from "@/pages/Products";
 import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
@@ -23,7 +22,7 @@ function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
 
-  // Logout and clear company if in subdomain mode and company error occurs
+  // Handle company error in subdomain mode
   useEffect(() => {
     if (isSubdomainMode && error) {
       logout();
@@ -42,16 +41,24 @@ function App() {
 
   // Show login page if user is not authenticated
   if (!user) {
+    // In subdomain mode with error, show error company selector
+    if (isSubdomainMode && error) {
+      return <CompanySelector showError={true} />;
+    }
+    // In non-subdomain mode without company, show company selector
+    if (!isSubdomainMode && !company) {
+      return <CompanySelector />;
+    }
+    // Otherwise show login page
     return <Login />;
   }
 
-  // Show company selector if:
-  // 1. Not in subdomain mode and no company selected
-  // 2. In subdomain mode but company not found (error state)
-  if ((!isSubdomainMode && !company) || (isSubdomainMode && error)) {
-    return <CompanySelector showError={isSubdomainMode && error !== null} />;
+  // After login, ensure company is selected in non-subdomain mode
+  if (!isSubdomainMode && !company) {
+    return <CompanySelector />;
   }
 
+  // Show main application once authenticated and company is selected
   return (
     <Layout>
       <Switch>
@@ -62,7 +69,6 @@ function App() {
         <Route path="/contacts" component={Contacts} />
         <Route path="/contacts/new" component={ContactDetail} />
         <Route path="/contacts/:id" component={ContactDetail} />
-        <Route path="/categories" component={Categories} />
         <Route path="/products" component={Products} />
         <Route path="/templates" component={Templates} />
         <Route path="/users" component={Users} />
