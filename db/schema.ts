@@ -108,15 +108,21 @@ export const users = pgTable("users", {
   role: text("role").notNull().$type<keyof typeof UserRole>(),
   status: text("status").notNull().$type<keyof typeof UserStatus>(),
   password: text("password").notNull(),
-  companyId: integer("company_id").references(() => companies.id),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const companyUsers = pgTable("company_users", {
   id: serial("id").primaryKey(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id, { onDelete: 'cascade' })
+    .notNull(),
   role: text("role").notNull().$type<keyof typeof UserRole>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -126,7 +132,9 @@ export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -134,13 +142,17 @@ export const categories = pgTable("categories", {
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  categoryId: integer("category_id").references(() => categories.id).notNull(),
+  categoryId: integer("category_id")
+    .references(() => categories.id, { onDelete: 'cascade' })
+    .notNull(),
   basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
   cost: decimal("cost", { precision: 10, scale: 2 }).notNull(),
   unit: text("unit").notNull().$type<keyof typeof ProductUnit>(),
   isActive: boolean("is_active").default(true).notNull(),
   variations: jsonb("variations"),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -148,11 +160,15 @@ export const products = pgTable("products", {
 export const templates = pgTable("templates", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  categoryId: integer("category_id").references(() => categories.id).notNull(),
+  categoryId: integer("category_id")
+    .references(() => categories.id, { onDelete: 'cascade' })
+    .notNull(),
   termsAndConditions: text("terms_and_conditions"),
   imageUrls: jsonb("image_urls"),
   isDefault: boolean("is_default").default(false).notNull(),
-  companyId: integer("company_id").references(() => companies.id).notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -291,11 +307,21 @@ export const quotes = pgTable("quotes", {
 
 // Relations
 export const companiesRelations = relations(companies, ({ many }) => ({
-  users: many(users),
-  categories: many(categories),
-  products: many(products),
-  templates: many(templates),
-  companyUsers: many(companyUsers),
+  users: many(users, {
+    relationName: "company_users",
+  }),
+  categories: many(categories, {
+    relationName: "company_categories",
+  }),
+  products: many(products, {
+    relationName: "company_products",
+  }),
+  templates: many(templates, {
+    relationName: "company_templates",
+  }),
+  companyUsers: many(companyUsers, {
+    relationName: "company_user_relations",
+  }),
 }));
 
 export const usersRelations = relations(users, ({ many, one }) => ({

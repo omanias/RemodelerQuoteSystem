@@ -1,16 +1,19 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { useCompany } from "@/contexts/CompanyContext";
 
 export type AuthUser = {
   id: number;
   email: string;
   name: string;
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
+  companyId: number;
 };
 
 export function useAuth() {
   const [, setLocation] = useLocation();
+  const { company, subdomain } = useCompany();
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -35,7 +38,7 @@ export function useAuth() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ ...credentials, subdomain }),
         credentials: "include",
       });
 
@@ -73,6 +76,6 @@ export function useAuth() {
     loading: isLoading,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user && (!subdomain || (company && user.companyId === company.id)),
   };
 }
