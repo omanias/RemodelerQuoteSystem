@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
 import { CompanySelector } from "@/components/ui/company-selector";
 import { Loader2 } from "lucide-react";
+import { useLocation } from "wouter";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -21,6 +22,15 @@ export function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const { company, isSubdomainMode } = useCompany();
+  const [location] = useLocation();
+
+  // Redirect to company selector if no company is selected in non-subdomain mode
+  useEffect(() => {
+    if (!isSubdomainMode && !company && !location.includes('/companies/')) {
+      console.log('No company selected, redirecting to company selector');
+      window.location.href = '/';
+    }
+  }, [company, isSubdomainMode, location]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,25 +48,6 @@ export function Login() {
       setIsLoading(false);
     }
   };
-
-  // In non-subdomain mode without company selected, only show company selector
-  if (!isSubdomainMode && !company) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-[400px] shadow-lg">
-          <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold">QuoteBuilder</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground mt-2">
-              Select your company to continue
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CompanySelector embedded />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // Show login form for subdomain mode or after company selection
   return (

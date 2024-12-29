@@ -71,15 +71,21 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
 
   const setCompany = async (newCompany: Company | null): Promise<void> => {
     setIsSettingCompany(true);
-    return new Promise((resolve) => {
+    try {
       console.log("Setting company:", newCompany?.name || 'null');
       setCompanyState(newCompany);
-      // Use a small timeout to ensure state is updated
-      setTimeout(() => {
-        setIsSettingCompany(false);
-        resolve();
-      }, 100);
-    });
+
+      // Wait for state to update
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          setIsSettingCompany(false);
+          resolve();
+        }, 100);
+      });
+    } catch (error) {
+      setIsSettingCompany(false);
+      throw error;
+    }
   };
 
   const clearCompany = () => {

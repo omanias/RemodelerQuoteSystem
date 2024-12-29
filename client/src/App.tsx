@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, useLocation, useParams } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +18,35 @@ import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 
+// Wrapper component for the login route that handles company ID from URL
+function LoginRoute() {
+  const params = useParams();
+  const { company, setCompany } = useCompany();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!company && params.companyId) {
+      // Fetch and set company based on URL parameter
+      fetch(`/api/companies/${params.companyId}`, {
+        credentials: "include",
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error("Company not found");
+          return res.json();
+        })
+        .then((data) => {
+          setCompany(data);
+        })
+        .catch((error) => {
+          console.error("Error fetching company:", error);
+          setLocation("/"); // Redirect to company selector on error
+        });
+    }
+  }, [params.companyId, company, setCompany, setLocation]);
+
+  return <Login />;
+}
+
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
@@ -30,14 +59,6 @@ function App() {
       clearCompany();
     }
   }, [isSubdomainMode, error, logout, clearCompany]);
-
-  // Handle routing when company is selected
-  useEffect(() => {
-    if (!user && company && location !== '/login') {
-      console.log('Company selected, redirecting to login:', company.name);
-      setLocation('/login');
-    }
-  }, [company, user, location, setLocation]);
 
   // Debug logging
   useEffect(() => {
@@ -68,19 +89,19 @@ function App() {
 
     // Non-subdomain mode routing
     if (!isSubdomainMode) {
-      // Show login form if company is selected
-      if (company && location === "/login") {
-        console.log("Showing login form for company:", company.name);
-        return <Login />;
+      // Show company selector by default
+      if (!company && location === "/") {
+        return <CompanySelector />;
       }
-
-      // Show company selector otherwise
-      console.log("Showing company selector");
-      return <CompanySelector />;
     }
 
-    // Show login form for subdomain mode
-    return <Login />;
+    // Show login form for subdomain mode or when company is selected
+    return (
+      <Switch>
+        <Route path="/companies/:companyId/login" component={LoginRoute} />
+        <Route component={CompanySelector} />
+      </Switch>
+    );
   }
 
   // Show main application once authenticated

@@ -78,10 +78,10 @@ export function CompanySelector({ showError = false, embedded = false }: Company
         description: `Connected to ${selectedCompany.name}`,
       });
 
-      // Navigate to login page after a short delay to ensure state is updated
+      // Navigate to company-specific login page
       setTimeout(() => {
-        console.log("Navigating to login page...");
-        setLocation("/login");
+        console.log("Navigating to company login page...");
+        setLocation(`/companies/${selectedCompany.id}/login`);
       }, 500);
 
     } catch (error) {
