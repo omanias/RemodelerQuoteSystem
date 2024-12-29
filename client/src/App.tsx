@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -23,14 +23,25 @@ import { ContactDetail } from "@/pages/ContactDetail";
 import { useAuth } from "@/hooks/useAuth";
 
 function App() {
-  const { user, loading } = useAuth();
-  const { company, isSubdomainMode } = useCompany();
+  const { user, loading: authLoading } = useAuth();
+  const { company, isSubdomainMode, loading: companyLoading } = useCompany();
 
-  if (loading) {
+  // Show loading state while checking auth and company status
+  if (authLoading || (isSubdomainMode && companyLoading)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
+    );
+  }
+
+  // Show login page if user is not authenticated
+  if (!user) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <Login />
+        <Toaster />
+      </QueryClientProvider>
     );
   }
 
@@ -39,15 +50,6 @@ function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <CompanySelector />
-        <Toaster />
-      </QueryClientProvider>
-    );
-  }
-
-  if (!user) {
-    return (
-      <QueryClientProvider client={queryClient}>
-        <Login />
         <Toaster />
       </QueryClientProvider>
     );
