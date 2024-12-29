@@ -64,7 +64,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       const selectedCompany = await response.json();
       console.log("Selected company data:", selectedCompany);
 
-      // Update context and wait for it to complete
+      // Set company in context
       await setCompany(selectedCompany);
 
       // Clear form state
@@ -79,10 +79,7 @@ export function CompanySelector({ showError = false, embedded = false }: Company
       });
 
       // Navigate to company-specific login page
-      setTimeout(() => {
-        console.log("Navigating to company login page...");
-        setLocation(`/companies/${selectedCompany.id}/login`);
-      }, 500);
+      setLocation(`/companies/${selectedCompany.id}/login`);
 
     } catch (error) {
       console.error('Company selection error:', error);

@@ -18,11 +18,16 @@ import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 
+// Type for route params
+type LoginParams = {
+  companyId: string;
+};
+
 // Wrapper component for the login route that handles company ID from URL
-function LoginRoute() {
-  const params = useParams();
+function CompanyLoginRoute() {
+  const params = useParams<LoginParams>();
   const { company, setCompany } = useCompany();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (!company && params.companyId) {
@@ -47,10 +52,15 @@ function LoginRoute() {
   return <Login />;
 }
 
+// Standalone company selector route
+function CompanySelectorRoute() {
+  return <CompanySelector />;
+}
+
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const { company, isSubdomainMode, loading: companyLoading, error, clearCompany } = useCompany();
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
 
   // Handle company error in subdomain mode
   useEffect(() => {
@@ -87,19 +97,16 @@ function App() {
       return <CompanySelector showError={true} />;
     }
 
-    // Non-subdomain mode routing
-    if (!isSubdomainMode) {
-      // Show company selector by default
-      if (!company && location === "/") {
-        return <CompanySelector />;
-      }
+    // Show company selector by default in non-subdomain mode
+    if (!isSubdomainMode && !company && location === "/") {
+      return <CompanySelector />;
     }
 
     // Show login form for subdomain mode or when company is selected
     return (
       <Switch>
-        <Route path="/companies/:companyId/login" component={LoginRoute} />
-        <Route component={CompanySelector} />
+        <Route path="/companies/:companyId/login" component={CompanyLoginRoute} />
+        <Route component={CompanySelectorRoute} />
       </Switch>
     );
   }
