@@ -22,8 +22,8 @@ export async function companyMiddleware(
 ) {
   try {
     const hostname = req.hostname;
-    // Skip middleware for www and localhost
-    if (hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.')) {
+    // Skip middleware for development URLs and direct company access routes
+    if (hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.') || req.path.startsWith('/api/companies/')) {
       return next();
     }
 

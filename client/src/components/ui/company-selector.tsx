@@ -6,7 +6,12 @@ import { useCompany } from "@/contexts/CompanyContext";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, Loader2, AlertCircle, Search } from "lucide-react";
 
-export function CompanySelector({ showError = false }: { showError?: boolean }) {
+interface CompanySelectorProps {
+  showError?: boolean;
+  embedded?: boolean;  // New prop for embedded mode
+}
+
+export function CompanySelector({ showError = false, embedded = false }: CompanySelectorProps) {
   const [companyId, setCompanyId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +120,84 @@ export function CompanySelector({ showError = false }: { showError?: boolean }) 
     }
   };
 
+  const content = (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search companies by name"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              handleSearch(e.target.value);
+            }}
+            className="pl-8"
+            disabled={isLoading}
+          />
+        </div>
+        {searchResults.length > 0 && (
+          <div className="border rounded-md mt-2">
+            {searchResults.map((company) => (
+              <button
+                key={company.id}
+                onClick={() => selectCompany(company)}
+                className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center justify-between"
+              >
+                <span>{company.name}</span>
+                <span className="text-sm text-gray-500">ID: {company.id}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">Or enter company ID</span>
+        </div>
+      </div>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Input
+            type="number"
+            placeholder="Enter your company ID"
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            required
+            min="1"
+            className="flex-1"
+            disabled={isLoading}
+            aria-label="Company ID"
+          />
+        </div>
+        <Button 
+          type="submit" 
+          className="w-full" 
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Accessing...
+            </>
+          ) : (
+            "Access Company"
+          )}
+        </Button>
+      </form>
+    </div>
+  );
+
+  // If embedded, return just the content
+  if (embedded) {
+    return content;
+  }
+
+  // Otherwise, return the full-page layout
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md mx-4">
@@ -137,75 +220,7 @@ export function CompanySelector({ showError = false }: { showError?: boolean }) 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="text"
-                  placeholder="Search companies by name"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    handleSearch(e.target.value);
-                  }}
-                  className="pl-8"
-                  disabled={isLoading}
-                />
-              </div>
-              {searchResults.length > 0 && (
-                <div className="border rounded-md mt-2">
-                  {searchResults.map((company) => (
-                    <button
-                      key={company.id}
-                      onClick={() => selectCompany(company)}
-                      className="w-full px-4 py-2 text-left hover:bg-gray-100 flex items-center justify-between"
-                    >
-                      <span>{company.name}</span>
-                      <span className="text-sm text-gray-500">ID: {company.id}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Or enter company ID</span>
-              </div>
-            </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Input
-                  type="number"
-                  placeholder="Enter your company ID"
-                  value={companyId}
-                  onChange={(e) => setCompanyId(e.target.value)}
-                  required
-                  min="1"
-                  className="flex-1"
-                  disabled={isLoading}
-                  aria-label="Company ID"
-                />
-              </div>
-              <Button 
-                type="submit" 
-                className="w-full" 
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Accessing...
-                  </>
-                ) : (
-                  "Access Company"
-                )}
-              </Button>
-            </form>
-          </div>
+          {content}
         </CardContent>
       </Card>
     </div>

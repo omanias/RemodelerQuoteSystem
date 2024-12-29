@@ -26,11 +26,14 @@ const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [company, setCompany] = useState<Company | null>(null);
   const { toast } = useToast();
+
+  // Parse subdomain from hostname
   const hostname = window.location.hostname;
   const isLocalOrWWW = hostname === 'localhost' || hostname === 'www' || hostname.startsWith('.');
   const subdomain = isLocalOrWWW ? null : hostname.split('.')[0];
   const isSubdomainMode = !!subdomain;
 
+  // Only fetch company data if we're in subdomain mode
   const { data: companyData, isLoading, error } = useQuery({
     queryKey: ['/api/companies/current'],
     queryFn: async () => {
@@ -43,7 +46,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       }
       return response.json() as Promise<Company>;
     },
-    enabled: !!subdomain,
+    enabled: isSubdomainMode,
     retry: false,
   });
 

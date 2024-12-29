@@ -98,9 +98,6 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Add company middleware globally
-  app.use(companyMiddleware);
-
   // Company routes
   app.get("/api/companies/current", requireAuth, async (req, res) => {
     try {
@@ -113,6 +110,9 @@ export function registerRoutes(app: Express) {
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  // Add company middleware globally after company routes
+  app.use(companyMiddleware);
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
