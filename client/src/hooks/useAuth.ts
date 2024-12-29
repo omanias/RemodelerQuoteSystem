@@ -56,6 +56,7 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      // Navigate to dashboard after successful login, maintaining the company context
       setLocation("/");
     },
   });
@@ -75,7 +76,12 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setLocation("/login");
+      // After logout, redirect to company-specific login or company selector
+      if (company && !isSubdomainMode) {
+        setLocation(`/companies/${company.id}/login`);
+      } else {
+        setLocation("/");
+      }
     },
   });
 

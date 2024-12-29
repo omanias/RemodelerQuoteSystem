@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,9 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useCompany } from "@/contexts/CompanyContext";
-import { CompanySelector } from "@/components/ui/company-selector";
 import { Loader2 } from "lucide-react";
-import { useLocation } from "wouter";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -22,15 +20,6 @@ export function Login() {
   const { login } = useAuth();
   const { toast } = useToast();
   const { company, isSubdomainMode } = useCompany();
-  const [location] = useLocation();
-
-  // Redirect to company selector if no company is selected in non-subdomain mode
-  useEffect(() => {
-    if (!isSubdomainMode && !company && !location.includes('/companies/')) {
-      console.log('No company selected, redirecting to company selector');
-      window.location.href = '/';
-    }
-  }, [company, isSubdomainMode, location]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
