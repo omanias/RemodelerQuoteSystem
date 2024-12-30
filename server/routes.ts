@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { db } from "@db";
 import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole } from "@db/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
-import { createServer } from "http";
+import { createServer, type Server } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -228,11 +228,11 @@ export function registerRoutes(app: Express) {
   // Data routes with company filtering
   app.get("/api/quotes", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
-      const quotes = await db.query.quotes.findMany({
+      const quotesData = await db.query.quotes.findMany({
         where: eq(quotes.companyId, req.session.companyId),
-        orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
+        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
       });
-      res.json(quotes);
+      res.json(quotesData);
     } catch (error) {
       console.error('Error fetching quotes:', error);
       res.status(500).json({ message: "Server error" });
@@ -241,11 +241,11 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/contacts", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
-      const contacts = await db.query.contacts.findMany({
+      const contactsData = await db.query.contacts.findMany({
         where: eq(contacts.companyId, req.session.companyId),
-        orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
+        orderBy: (contactsTable, { desc }) => [desc(contactsTable.updatedAt)],
       });
-      res.json(contacts);
+      res.json(contactsData);
     } catch (error) {
       console.error('Error fetching contacts:', error);
       res.status(500).json({ message: "Server error" });
@@ -254,11 +254,11 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/products", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
-      const products = await db.query.products.findMany({
+      const productsData = await db.query.products.findMany({
         where: eq(products.companyId, req.session.companyId),
-        orderBy: (products, { desc }) => [desc(products.updatedAt)],
+        orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
       });
-      res.json(products);
+      res.json(productsData);
     } catch (error) {
       console.error('Error fetching products:', error);
       res.status(500).json({ message: "Server error" });
@@ -267,11 +267,11 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/categories", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
-      const categories = await db.query.categories.findMany({
+      const categoriesData = await db.query.categories.findMany({
         where: eq(categories.companyId, req.session.companyId),
-        orderBy: (categories, { desc }) => [desc(categories.updatedAt)],
+        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
       });
-      res.json(categories);
+      res.json(categoriesData);
     } catch (error) {
       console.error('Error fetching categories:', error);
       res.status(500).json({ message: "Server error" });
@@ -280,11 +280,11 @@ export function registerRoutes(app: Express) {
 
   app.get("/api/templates", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
-      const templates = await db.query.templates.findMany({
+      const templatesData = await db.query.templates.findMany({
         where: eq(templates.companyId, req.session.companyId),
-        orderBy: (templates, { desc }) => [desc(templates.updatedAt)],
+        orderBy: (templatesTable, { desc }) => [desc(templatesTable.updatedAt)],
       });
-      res.json(templates);
+      res.json(templatesData);
     } catch (error) {
       console.error('Error fetching templates:', error);
       res.status(500).json({ message: "Server error" });
