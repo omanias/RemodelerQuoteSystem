@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates } from "@db/schema";
-import { eq, and } from "drizzle-orm";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole } from "@db/schema";
+import { eq, and, or, inArray } from "drizzle-orm";
 import { createServer } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -29,6 +29,15 @@ const crypto = {
     }
   }
 };
+
+declare module 'express-session' {
+  interface SessionData {
+    userId: number;
+    userRole: keyof typeof UserRole;
+    companyId: number;
+    accessibleCompanyIds?: number[];
+  }
+}
 
 export function registerRoutes(app: Express) {
   const httpServer = createServer(app);
@@ -80,26 +89,56 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      // Verify user belongs to company
-      if (user.companyId !== companyId) {
-        return res.status(403).json({ message: "Invalid company access" });
-      }
-
       // Verify password
       const isValidPassword = await crypto.compare(password, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
-      req.session!.userId = user.id;
-      req.session!.companyId = user.companyId; // Store company ID in session
+      // For SUPER_ADMIN, allow access to all companies
+      if (user.role === UserRole.SUPER_ADMIN) {
+        req.session.userId = user.id;
+        req.session.userRole = user.role;
+        req.session.companyId = companyId;
+        // No need to set accessibleCompanyIds as SUPER_ADMIN has access to all
+      }
+      // For MULTI_ADMIN, get their accessible companies
+      else if (user.role === UserRole.MULTI_ADMIN) {
+        const accessibleCompanies = await db
+          .select({ companyId: companyAccess.companyId })
+          .from(companyAccess)
+          .where(eq(companyAccess.userId, user.id));
+
+        const accessibleCompanyIds = accessibleCompanies.map(c => c.companyId);
+
+        // Verify if user has access to the requested company
+        if (!accessibleCompanyIds.includes(companyId)) {
+          return res.status(403).json({ message: "Access denied to this company" });
+        }
+
+        req.session.userId = user.id;
+        req.session.userRole = user.role;
+        req.session.companyId = companyId;
+        req.session.accessibleCompanyIds = accessibleCompanyIds;
+      }
+      // For regular users, verify they belong to the company
+      else {
+        if (user.companyId !== companyId) {
+          return res.status(403).json({ message: "Invalid company access" });
+        }
+
+        req.session.userId = user.id;
+        req.session.userRole = user.role;
+        req.session.companyId = companyId;
+      }
+
       res.json({
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
         status: user.status,
-        companyId: user.companyId
+        companyId: req.session.companyId
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -133,13 +172,19 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not found" });
       }
 
+      // For MULTI_ADMIN, include accessible company IDs
+      const accessibleCompanyIds = req.session.userRole === UserRole.MULTI_ADMIN
+        ? req.session.accessibleCompanyIds
+        : undefined;
+
       res.json({
         id: user.id,
         email: user.email,
         name: user.name,
         role: user.role,
         status: user.status,
-        companyId: user.companyId
+        companyId: req.session.companyId,
+        accessibleCompanyIds
       });
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -155,11 +200,36 @@ export function registerRoutes(app: Express) {
     next();
   };
 
+  // Company access middleware
+  const checkCompanyAccess = async (req: any, res: any, next: any) => {
+    const { userRole, companyId, accessibleCompanyIds } = req.session;
+
+    if (userRole === UserRole.SUPER_ADMIN) {
+      // Super admin has access to all companies
+      return next();
+    }
+
+    if (userRole === UserRole.MULTI_ADMIN) {
+      // Multi admin can only access their assigned companies
+      if (!accessibleCompanyIds?.includes(companyId)) {
+        return res.status(403).json({ message: "Access denied to this company" });
+      }
+      return next();
+    }
+
+    // Regular users can only access their own company
+    if (companyId !== req.session.companyId) {
+      return res.status(403).json({ message: "Access denied to this company" });
+    }
+
+    next();
+  };
+
   // Data routes with company filtering
-  app.get("/api/quotes", requireAuth, async (req, res) => {
+  app.get("/api/quotes", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
       const quotes = await db.query.quotes.findMany({
-        where: eq(quotes.companyId, req.session!.companyId),
+        where: eq(quotes.companyId, req.session.companyId),
         orderBy: (quotes, { desc }) => [desc(quotes.updatedAt)],
       });
       res.json(quotes);
@@ -169,10 +239,10 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/contacts", requireAuth, async (req, res) => {
+  app.get("/api/contacts", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
       const contacts = await db.query.contacts.findMany({
-        where: eq(contacts.companyId, req.session!.companyId),
+        where: eq(contacts.companyId, req.session.companyId),
         orderBy: (contacts, { desc }) => [desc(contacts.updatedAt)],
       });
       res.json(contacts);
@@ -182,10 +252,10 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/products", requireAuth, async (req, res) => {
+  app.get("/api/products", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
       const products = await db.query.products.findMany({
-        where: eq(products.companyId, req.session!.companyId),
+        where: eq(products.companyId, req.session.companyId),
         orderBy: (products, { desc }) => [desc(products.updatedAt)],
       });
       res.json(products);
@@ -195,10 +265,10 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/categories", requireAuth, async (req, res) => {
+  app.get("/api/categories", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
       const categories = await db.query.categories.findMany({
-        where: eq(categories.companyId, req.session!.companyId),
+        where: eq(categories.companyId, req.session.companyId),
         orderBy: (categories, { desc }) => [desc(categories.updatedAt)],
       });
       res.json(categories);
@@ -208,10 +278,10 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.get("/api/templates", requireAuth, async (req, res) => {
+  app.get("/api/templates", requireAuth, checkCompanyAccess, async (req, res) => {
     try {
       const templates = await db.query.templates.findMany({
-        where: eq(templates.companyId, req.session!.companyId),
+        where: eq(templates.companyId, req.session.companyId),
         orderBy: (templates, { desc }) => [desc(templates.updatedAt)],
       });
       res.json(templates);

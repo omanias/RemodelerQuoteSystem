@@ -4,6 +4,8 @@ import { relations, type SQL, sql, type Many } from "drizzle-orm";
 
 // Enums
 export const UserRole = {
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  MULTI_ADMIN: 'MULTI_ADMIN',
   ADMIN: 'ADMIN',
   MANAGER: 'MANAGER',
   SALES_REP: 'SALES_REP'
@@ -320,6 +322,19 @@ export const contactPhotos = pgTable("contact_photos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Add company_access table after the existing tables
+export const companyAccess = pgTable("company_access", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
 export const companiesRelations = relations(companies, ({ many }) => ({
   users: many(users),
@@ -336,6 +351,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [companies.id],
   }),
   assignedContacts: many(contacts, { relationName: "assignedUser" }),
+  companyAccess: many(companyAccess)
 }));
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -472,6 +488,17 @@ export const tablePermissionsRelations = relations(tablePermissions, ({ one }) =
   }),
 }));
 
+export const companyAccessRelations = relations(companyAccess, ({ one }) => ({
+  user: one(users, {
+    fields: [companyAccess.userId],
+    references: [users.id],
+  }),
+  company: one(companies, {
+    fields: [companyAccess.companyId],
+    references: [companies.id],
+  }),
+}));
+
 
 // Types
 export type User = typeof users.$inferSelect;
@@ -500,6 +527,8 @@ export type ContactCustomField = typeof contactCustomFields.$inferSelect;
 export type NewContactCustomField = typeof contactCustomFields.$inferInsert;
 export type TablePermission = typeof tablePermissions.$inferSelect;
 export type NewTablePermission = typeof tablePermissions.$inferInsert;
+export type CompanyAccess = typeof companyAccess.$inferSelect;
+export type NewCompanyAccess = typeof companyAccess.$inferInsert;
 
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
@@ -528,3 +557,5 @@ export const insertContactPhotoSchema = createInsertSchema(contactPhotos);
 export const selectContactPhotoSchema = createSelectSchema(contactPhotos);
 export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFields);
 export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
+export const insertCompanyAccessSchema = createInsertSchema(companyAccess);
+export const selectCompanyAccessSchema = createSelectSchema(companyAccess);
