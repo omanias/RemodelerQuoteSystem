@@ -1,15 +1,13 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { 
-  users, companies
-} from "@db/schema";
+import { users, companies } from "@db/schema";
 import { eq, ilike } from "drizzle-orm";
 import { createServer } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { companyMiddleware, requireAuth } from "./middleware/company";
+import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -129,11 +127,7 @@ export function registerRoutes(app: Express) {
         return res.status(403).json({ message: "You don't have access to this company" });
       }
 
-      if (!req.session) {
-        return res.status(500).json({ message: "Session not initialized" });
-      }
-
-      req.session.userId = user.id;
+      req.session!.userId = user.id;
       res.json({
         id: user.id,
         email: user.email,
@@ -149,11 +143,7 @@ export function registerRoutes(app: Express) {
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    if (!req.session) {
-      return res.status(200).json({ message: "Already logged out" });
-    }
-
-    req.session.destroy((err) => {
+    req.session?.destroy((err) => {
       if (err) {
         console.error('Logout error:', err);
         return res.status(500).json({ message: "Error during logout" });
@@ -178,6 +168,11 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not found" });
       }
 
+      // If in subdomain mode, verify user has access to the company
+      if (req.company && user.companyId !== req.company.id) {
+        return res.status(403).json({ message: "You don't have access to this company" });
+      }
+
       res.json({
         id: user.id,
         email: user.email,
@@ -192,6 +187,7 @@ export function registerRoutes(app: Express) {
     }
   });
 
+  // Company-specific routes (require auth and company access)
   app.get("/api/companies/current", requireAuth, async (req, res) => {
     try {
       if (!req.company) {

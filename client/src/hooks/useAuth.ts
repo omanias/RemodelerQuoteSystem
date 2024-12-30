@@ -56,7 +56,10 @@ export function useAuth() {
     },
     onSuccess: () => {
       // Invalidate user query first
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }).then(() => {
+        // After successful login and user data refresh, navigate to dashboard
+        setLocation("/");
+      });
     },
   });
 

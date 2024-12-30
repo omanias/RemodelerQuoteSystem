@@ -24,19 +24,8 @@ interface CompanyContextType {
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
 
 export function CompanyProvider({ children }: { children: React.ReactNode }) {
-  const [company, setCompanyState] = useState<Company | null>(() => {
-    // Try to load from localStorage on mount
-    const stored = localStorage.getItem('selectedCompany');
-    if (stored) {
-      try {
-        return JSON.parse(stored);
-      } catch (error) {
-        localStorage.removeItem('selectedCompany');
-      }
-    }
-    return null;
-  });
-
+  // Initialize company from localStorage only if not in subdomain mode
+  const [company, setCompanyState] = useState<Company | null>(null);
   const { toast } = useToast();
 
   // Parse subdomain from hostname
@@ -61,6 +50,8 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     },
     enabled: isSubdomainMode,
     retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
   // Show errors only in subdomain mode
@@ -74,24 +65,44 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isSubdomainMode, error, toast]);
 
-  // Update company state when data changes in subdomain mode
+  // Update company state when data changes in subdomain mode or localStorage
   useEffect(() => {
-    if (isSubdomainMode && companyData) {
-      setCompanyState(companyData);
+    if (isSubdomainMode) {
+      // In subdomain mode, use the fetched company data
+      if (companyData) {
+        setCompanyState(companyData);
+      }
+    } else {
+      // In non-subdomain mode, try to load from localStorage
+      const stored = localStorage.getItem('selectedCompany');
+      if (stored) {
+        try {
+          const parsedCompany = JSON.parse(stored);
+          setCompanyState(parsedCompany);
+        } catch (error) {
+          localStorage.removeItem('selectedCompany');
+          setCompanyState(null);
+        }
+      }
     }
   }, [isSubdomainMode, companyData]);
 
   const setCompany = (newCompany: Company | null) => {
-    if (newCompany) {
-      localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
-    } else {
-      localStorage.removeItem('selectedCompany');
+    if (!isSubdomainMode) {
+      // Only store in localStorage if not in subdomain mode
+      if (newCompany) {
+        localStorage.setItem('selectedCompany', JSON.stringify(newCompany));
+      } else {
+        localStorage.removeItem('selectedCompany');
+      }
     }
     setCompanyState(newCompany);
   };
 
   const clearCompany = () => {
-    localStorage.removeItem('selectedCompany');
+    if (!isSubdomainMode) {
+      localStorage.removeItem('selectedCompany');
+    }
     setCompanyState(null);
   };
 

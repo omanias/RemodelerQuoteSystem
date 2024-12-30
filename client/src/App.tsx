@@ -35,14 +35,19 @@ function App() {
     return <CompanySelector showError={true} />;
   }
 
-  // If no company selected, show company selector
-  if (!company) {
+  // If no company selected in non-subdomain mode, show company selector
+  if (!isSubdomainMode && !company) {
     return <CompanySelector />;
   }
 
   // If we have a company but no authenticated user, show login
   if (!user) {
     return <Login />;
+  }
+
+  // If user is authenticated but their company doesn't match the current company, show error
+  if (user.companyId !== company?.id) {
+    return <CompanySelector showError={true} />;
   }
 
   // Show main application once authenticated with company
