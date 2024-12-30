@@ -149,75 +149,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Protected data routes with company filtering
-  app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const quotesData = await db.query.quotes.findMany({
-        where: eq(quotes.companyId, req.company!.id),
-        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
-      });
-      res.json(quotesData);
-    } catch (error) {
-      console.error('Error fetching quotes:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const contactsData = await db.query.contacts.findMany({
-        where: eq(contacts.companyId, req.company!.id),
-        orderBy: (contactsTable, { desc }) => [desc(contactsTable.updatedAt)],
-      });
-      res.json(contactsData);
-    } catch (error) {
-      console.error('Error fetching contacts:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const productsData = await db.query.products.findMany({
-        where: eq(products.companyId, req.company!.id),
-        with: {
-          category: true
-        },
-        orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
-      });
-      res.json(productsData);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const categoriesData = await db.query.categories.findMany({
-        where: eq(categories.companyId, req.company!.id),
-        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
-      });
-      res.json(categoriesData);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const templatesData = await db.query.templates.findMany({
-        where: eq(templates.companyId, req.company!.id),
-        orderBy: (templatesTable, { desc }) => [desc(templatesTable.updatedAt)],
-      });
-      res.json(templatesData);
-    } catch (error) {
-      console.error('Error fetching templates:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
   app.post("/api/auth/logout", (req, res) => {
     req.session?.destroy((err) => {
       if (err) {
@@ -264,69 +195,102 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
-  // Add company switching endpoint for SUPER_ADMIN and MULTI_ADMIN users
-  app.post("/api/auth/switch-company", requireAuth, async (req, res) => {
+  // Protected data routes with company filtering
+  app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const { companyId } = req.body;
-      const userId = req.session.userId;
-
-      if (!companyId) {
-        return res.status(400).json({ message: "Company ID is required" });
-      }
-
-      // Get user's role
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
-      }
-
-      // Verify company exists
-      const [company] = await db
-        .select()
-        .from(companies)
-        .where(eq(companies.id, companyId))
-        .limit(1);
-
-      if (!company) {
-        return res.status(404).json({ message: "Company not found" });
-      }
-
-      // For SUPER_ADMIN, allow access to any company
-      if (user.role === UserRole.SUPER_ADMIN) {
-        req.session.companyId = companyId;
-        return res.json({ message: "Company switched successfully" });
-      }
-
-      // For MULTI_ADMIN, verify they have access to the company
-      if (user.role === UserRole.MULTI_ADMIN) {
-        const [hasAccess] = await db
-          .select()
-          .from(companyAccess)
-          .where(and(
-            eq(companyAccess.userId, userId),
-            eq(companyAccess.companyId, companyId)
-          ))
-          .limit(1);
-
-        if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied to this company" });
-        }
-
-        req.session.companyId = companyId;
-        return res.json({ message: "Company switched successfully" });
-      }
-
-      // Regular users cannot switch companies
-      return res.status(403).json({ message: "Unauthorized to switch companies" });
-
+      const quotesData = await db.query.quotes.findMany({
+        where: eq(quotes.companyId, req.company!.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
+      });
+      res.json(quotesData);
     } catch (error) {
-      console.error('Company switch error:', error);
+      console.error('Error fetching quotes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactsData = await db.query.contacts.findMany({
+        where: eq(contacts.companyId, req.company!.id),
+        with: {
+          assignedUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          category: true
+        },
+        orderBy: (contactsTable, { desc }) => [desc(contactsTable.updatedAt)],
+      });
+      res.json(contactsData);
+    } catch (error) {
+      console.error('Error fetching contacts:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productsData = await db.query.products.findMany({
+        where: eq(products.companyId, req.company!.id),
+        with: {
+          category: true
+        },
+        orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
+      });
+      res.json(productsData);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoriesData = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.company!.id),
+        with: {
+          products: true,
+          templates: true
+        },
+        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
+      });
+      res.json(categoriesData);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const templatesData = await db.query.templates.findMany({
+        where: eq(templates.companyId, req.company!.id),
+        with: {
+          category: true
+        },
+        orderBy: (templatesTable, { desc }) => [desc(templatesTable.updatedAt)],
+      });
+      res.json(templatesData);
+    } catch (error) {
+      console.error('Error fetching templates:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
