@@ -7,6 +7,7 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
+import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -58,6 +59,9 @@ export function registerRoutes(app: Express): Server {
     })
   );
 
+  // Apply company middleware to all routes
+  app.use(companyMiddleware);
+
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
     const { companyId, email, password } = req.body;
@@ -100,7 +104,6 @@ export function registerRoutes(app: Express): Server {
         req.session.userId = user.id;
         req.session.userRole = user.role;
         req.session.companyId = companyId;
-        // No need to set accessibleCompanyIds as SUPER_ADMIN has access to all
       }
       // For MULTI_ADMIN, get their accessible companies
       else if (user.role === UserRole.MULTI_ADMIN) {
@@ -142,6 +145,75 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error('Login error:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Protected data routes with company filtering
+  app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quotesData = await db.query.quotes.findMany({
+        where: eq(quotes.companyId, req.company!.id),
+        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
+      });
+      res.json(quotesData);
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactsData = await db.query.contacts.findMany({
+        where: eq(contacts.companyId, req.company!.id),
+        orderBy: (contactsTable, { desc }) => [desc(contactsTable.updatedAt)],
+      });
+      res.json(contactsData);
+    } catch (error) {
+      console.error('Error fetching contacts:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productsData = await db.query.products.findMany({
+        where: eq(products.companyId, req.company!.id),
+        with: {
+          category: true
+        },
+        orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
+      });
+      res.json(productsData);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoriesData = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.company!.id),
+        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
+      });
+      res.json(categoriesData);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const templatesData = await db.query.templates.findMany({
+        where: eq(templates.companyId, req.company!.id),
+        orderBy: (templatesTable, { desc }) => [desc(templatesTable.updatedAt)],
+      });
+      res.json(templatesData);
+    } catch (error) {
+      console.error('Error fetching templates:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -192,107 +264,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Protected routes middleware
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.session?.userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    next();
-  };
-
-  // Company access middleware
-  const checkCompanyAccess = async (req: any, res: any, next: any) => {
-    const { userRole, companyId, accessibleCompanyIds } = req.session;
-
-    if (userRole === UserRole.SUPER_ADMIN) {
-      // Super admin has access to all companies
-      return next();
-    }
-
-    if (userRole === UserRole.MULTI_ADMIN) {
-      // Multi admin can only access their assigned companies
-      if (!accessibleCompanyIds?.includes(companyId)) {
-        return res.status(403).json({ message: "Access denied to this company" });
-      }
-      return next();
-    }
-
-    // Regular users can only access their own company
-    if (companyId !== req.session.companyId) {
-      return res.status(403).json({ message: "Access denied to this company" });
-    }
-
-    next();
-  };
-
-  // Data routes with company filtering
-  app.get("/api/quotes", requireAuth, checkCompanyAccess, async (req, res) => {
-    try {
-      const quotesData = await db.query.quotes.findMany({
-        where: eq(quotes.companyId, req.session.companyId),
-        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
-      });
-      res.json(quotesData);
-    } catch (error) {
-      console.error('Error fetching quotes:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/contacts", requireAuth, checkCompanyAccess, async (req, res) => {
-    try {
-      const contactsData = await db.query.contacts.findMany({
-        where: eq(contacts.companyId, req.session.companyId),
-        orderBy: (contactsTable, { desc }) => [desc(contactsTable.updatedAt)],
-      });
-      res.json(contactsData);
-    } catch (error) {
-      console.error('Error fetching contacts:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/products", requireAuth, checkCompanyAccess, async (req, res) => {
-    try {
-      const productsData = await db.query.products.findMany({
-        where: eq(products.companyId, req.session.companyId),
-        with: {
-          category: true
-        },
-        orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
-      });
-      res.json(productsData);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/categories", requireAuth, checkCompanyAccess, async (req, res) => {
-    try {
-      const categoriesData = await db.query.categories.findMany({
-        where: eq(categories.companyId, req.session.companyId),
-        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
-      });
-      res.json(categoriesData);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.get("/api/templates", requireAuth, checkCompanyAccess, async (req, res) => {
-    try {
-      const templatesData = await db.query.templates.findMany({
-        where: eq(templates.companyId, req.session.companyId),
-        orderBy: (templatesTable, { desc }) => [desc(templatesTable.updatedAt)],
-      });
-      res.json(templatesData);
-    } catch (error) {
-      console.error('Error fetching templates:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
 
   // Add company switching endpoint for SUPER_ADMIN and MULTI_ADMIN users
   app.post("/api/auth/switch-company", requireAuth, async (req, res) => {
