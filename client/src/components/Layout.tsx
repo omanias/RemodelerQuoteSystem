@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
+import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { 
   LayoutDashboard, FileText, Package,
   LogOut, Settings, Users, UserCircle2
@@ -30,9 +31,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen">
         <Sidebar className="w-64 h-full">
           <div className="px-3 py-4 flex flex-col h-full">
-            <div className="mb-8">
+            <div className="mb-4">
               <h1 className="text-2xl font-bold text-primary">QuoteBuilder</h1>
             </div>
+
+            {/* Add CompanySwitcher for SUPER_ADMIN and MULTI_ADMIN */}
+            {(user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN") && (
+              <div className="mb-4">
+                <CompanySwitcher />
+              </div>
+            )}
 
             <nav className="flex-1 space-y-1">
               {navigation.map((item) => {

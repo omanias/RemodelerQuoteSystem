@@ -39,7 +39,7 @@ declare module 'express-session' {
   }
 }
 
-export function registerRoutes(app: Express) {
+export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
 
   // Setup session middleware before any routes
@@ -290,6 +290,130 @@ export function registerRoutes(app: Express) {
       res.json(templatesData);
     } catch (error) {
       console.error('Error fetching templates:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add company switching endpoint for SUPER_ADMIN and MULTI_ADMIN users
+  app.post("/api/auth/switch-company", requireAuth, async (req, res) => {
+    try {
+      const { companyId } = req.body;
+      const userId = req.session.userId;
+
+      if (!companyId) {
+        return res.status(400).json({ message: "Company ID is required" });
+      }
+
+      // Get user's role
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // Verify company exists
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // For SUPER_ADMIN, allow access to any company
+      if (user.role === UserRole.SUPER_ADMIN) {
+        req.session.companyId = companyId;
+        return res.json({ message: "Company switched successfully" });
+      }
+
+      // For MULTI_ADMIN, verify they have access to the company
+      if (user.role === UserRole.MULTI_ADMIN) {
+        const [hasAccess] = await db
+          .select()
+          .from(companyAccess)
+          .where(and(
+            eq(companyAccess.userId, userId),
+            eq(companyAccess.companyId, companyId)
+          ))
+          .limit(1);
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this company" });
+        }
+
+        req.session.companyId = companyId;
+        return res.json({ message: "Company switched successfully" });
+      }
+
+      // Regular users cannot switch companies
+      return res.status(403).json({ message: "Unauthorized to switch companies" });
+
+    } catch (error) {
+      console.error('Company switch error:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add endpoint to get accessible companies for SUPER_ADMIN and MULTI_ADMIN
+  app.get("/api/companies", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // For SUPER_ADMIN, return all companies
+      if (user.role === UserRole.SUPER_ADMIN) {
+        const allCompanies = await db
+          .select()
+          .from(companies)
+          .orderBy(companies.name);
+        return res.json(allCompanies);
+      }
+
+      // For MULTI_ADMIN, return only accessible companies
+      if (user.role === UserRole.MULTI_ADMIN) {
+        const accessibleCompanies = await db
+          .select({
+            id: companies.id,
+            name: companies.name,
+            // add other company fields as needed
+          })
+          .from(companies)
+          .innerJoin(
+            companyAccess,
+            and(
+              eq(companyAccess.companyId, companies.id),
+              eq(companyAccess.userId, userId)
+            )
+          )
+          .orderBy(companies.name);
+        return res.json(accessibleCompanies);
+      }
+
+      // Regular users only see their own company
+      const [userCompany] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, user.companyId))
+        .limit(1);
+
+      return res.json(userCompany ? [userCompany] : []);
+
+    } catch (error) {
+      console.error('Error fetching companies:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
