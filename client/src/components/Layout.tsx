@@ -8,6 +8,8 @@ import {
   LogOut, Settings, Users, UserCircle2
 } from "lucide-react";
 
+type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
@@ -21,7 +23,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { name: "Products", href: "/products", icon: Package },
   ];
 
-  if (user.role === "ADMIN") {
+  // Show additional menu items for admin roles
+  if (["SUPER_ADMIN", "MULTI_ADMIN", "ADMIN"].includes(user.role as UserRole)) {
     navigation.push({ name: "Users", href: "/users", icon: Users });
     navigation.push({ name: "Settings", href: "/settings", icon: Settings });
   }
@@ -47,16 +50,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 const isActive = location === item.href;
                 return (
                   <Link key={item.name} href={item.href}>
-                    <a
-                      className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-muted"
-                      }`}
+                    <Button
+                      variant={isActive ? "secondary" : "ghost"}
+                      className="w-full justify-start"
                     >
                       <item.icon className="mr-3 h-5 w-5" />
                       {item.name}
-                    </a>
+                    </Button>
                   </Link>
                 );
               })}

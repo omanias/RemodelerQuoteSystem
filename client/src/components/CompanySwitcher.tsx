@@ -20,6 +20,8 @@ interface Company {
   name: string;
 }
 
+type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
+
 export function CompanySwitcher() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
