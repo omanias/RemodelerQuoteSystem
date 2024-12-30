@@ -20,7 +20,9 @@ interface Company {
   name: string;
 }
 
-type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
+// Assuming UserRole is defined in schema.ts and imported accordingly.  Adjust path as needed.
+import { UserRole } from '@/schema';
+
 
 export function CompanySwitcher() {
   const { user } = useAuth();
