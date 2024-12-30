@@ -9,6 +9,7 @@ export type AuthUser = {
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
   companyId: number;
   status: 'ACTIVE' | 'INACTIVE';
+  companyName?: string; // Added company name
 };
 
 type LoginCredentials = {
@@ -36,10 +37,15 @@ export function useAuth() {
 
       return res.json() as Promise<AuthUser>;
     },
+    retry: false
   });
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginCredentials) => {
+      if (!credentials.companyId || !credentials.email || !credentials.password) {
+        throw new Error("Company ID, email and password are required");
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,12 +54,14 @@ export function useAuth() {
       });
 
       if (!res.ok) {
-        throw new Error(await res.text());
+        const errorText = await res.text();
+        throw new Error(errorText || "Login failed");
       }
 
-      return res.json();
+      return res.json() as Promise<AuthUser>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/user"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       setLocation("/");
     },
@@ -73,8 +81,9 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.setQueryData(["/api/auth/user"], null);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setLocation("/");
+      setLocation("/login");
     },
   });
 
@@ -84,5 +93,7 @@ export function useAuth() {
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     isAuthenticated: !!user,
+    isLoading: loginMutation.isPending || logoutMutation.isPending,
+    error: loginMutation.error || logoutMutation.error,
   };
 }
