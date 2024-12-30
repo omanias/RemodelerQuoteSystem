@@ -353,5 +353,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add current company endpoint
+  app.get("/api/companies/current", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      if (!req.company) {
+        return res.status(404).json({ message: "No company context found" });
+      }
+
+      res.json({
+        id: req.company.id,
+        name: req.company.name,
+        subdomain: req.company.subdomain,
+        settings: req.company.settings
+      });
+    } catch (error) {
+      console.error('Error fetching current company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   return httpServer;
 }

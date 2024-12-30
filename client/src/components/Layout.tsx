@@ -3,9 +3,11 @@ import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
+import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, FileText, Package,
-  LogOut, Settings, Users, UserCircle2
+  LogOut, Settings, Users, UserCircle2,
+  Building2
 } from "lucide-react";
 
 type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
@@ -13,6 +15,12 @@ type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
+
+  // Fetch current company data
+  const { data: currentCompany } = useQuery({
+    queryKey: ["/api/companies/current"],
+    enabled: !!user,
+  });
 
   if (!user) return null;
 
@@ -34,18 +42,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex h-screen">
         <Sidebar className="w-64 h-full">
           <div className="px-3 py-4 flex flex-col h-full">
-            <div className="mb-4">
-              <h1 className="text-2xl font-bold text-primary">QuoteBuilder</h1>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-6 w-6 text-primary" />
+                <h1 className="text-2xl font-bold text-primary">QuoteBuilder</h1>
+              </div>
+
+              {currentCompany && (
+                <div className="text-sm text-muted-foreground px-2">
+                  {currentCompany.name}
+                </div>
+              )}
+
+              {/* Add CompanySwitcher for SUPER_ADMIN and MULTI_ADMIN */}
+              {(user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN") && (
+                <div>
+                  <CompanySwitcher />
+                </div>
+              )}
             </div>
 
-            {/* Add CompanySwitcher for SUPER_ADMIN and MULTI_ADMIN */}
-            {(user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN") && (
-              <div className="mb-4">
-                <CompanySwitcher />
-              </div>
-            )}
-
-            <nav className="flex-1 space-y-1">
+            <nav className="flex-1 space-y-1 mt-6">
               {navigation.map((item) => {
                 const isActive = location === item.href;
                 return (
@@ -62,8 +79,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               })}
             </nav>
 
-            <div className="mt-auto px-3 py-4">
-              <div className="flex items-center">
+            <div className="mt-auto border-t pt-4">
+              <div className="flex items-center px-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-primary truncate">
                     {user.name}
