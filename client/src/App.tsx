@@ -2,8 +2,6 @@ import { Switch, Route } from "wouter";
 import { Loader2 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/useAuth";
-import { useCompany } from "@/contexts/CompanyContext";
-import { CompanySelector } from "@/components/ui/company-selector";
 import { Login } from "@/pages/Login";
 
 // Pages
@@ -19,10 +17,9 @@ import { ContactDetail } from "@/pages/ContactDetail";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
-  const { company, isSubdomainMode, loading: companyLoading, error } = useCompany();
 
-  // Show loading state while checking auth and company status
-  if (authLoading || (isSubdomainMode && companyLoading)) {
+  // Show loading state while checking auth
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -30,27 +27,12 @@ function App() {
     );
   }
 
-  // Show error page in subdomain mode with error
-  if (isSubdomainMode && error) {
-    return <CompanySelector showError={true} />;
-  }
-
-  // If no company selected in non-subdomain mode, show company selector
-  if (!isSubdomainMode && !company) {
-    return <CompanySelector />;
-  }
-
-  // If we have a company but no authenticated user, show login
+  // If no authenticated user, show login
   if (!user) {
     return <Login />;
   }
 
-  // If user is authenticated but their company doesn't match the current company, show error
-  if (user.companyId !== company?.id) {
-    return <CompanySelector showError={true} />;
-  }
-
-  // Show main application once authenticated with company
+  // Show main application once authenticated
   return (
     <Layout>
       <Switch>

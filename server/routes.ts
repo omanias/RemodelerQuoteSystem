@@ -1,13 +1,12 @@
 import type { Express } from "express";
 import { db } from "@db";
 import { users, companies } from "@db/schema";
-import { eq, ilike } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createServer } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -93,19 +92,28 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Add company middleware after public routes
-  app.use(companyMiddleware);
 
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
-    const { email, password } = req.body;
+    const { companyId, email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    if (!companyId || !email || !password) {
+      return res.status(400).json({ message: "Company ID, email and password are required" });
     }
 
     try {
-      // Find user
+      // First verify company exists
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(401).json({ message: "Company not found" });
+      }
+
+      // Then find user
       const [user] = await db
         .select()
         .from(users)
@@ -116,15 +124,15 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
+      // Verify user belongs to company
+      if (user.companyId !== companyId) {
+        return res.status(403).json({ message: "Invalid company access" });
+      }
+
       // Verify password
       const isValidPassword = await crypto.compare(password, user.password);
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid email or password" });
-      }
-
-      // If in subdomain mode, verify user has access to the company
-      if (req.company && user.companyId !== req.company.id) {
-        return res.status(403).json({ message: "You don't have access to this company" });
       }
 
       req.session!.userId = user.id;
@@ -168,11 +176,6 @@ export function registerRoutes(app: Express) {
         return res.status(401).json({ message: "User not found" });
       }
 
-      // If in subdomain mode, verify user has access to the company
-      if (req.company && user.companyId !== req.company.id) {
-        return res.status(403).json({ message: "You don't have access to this company" });
-      }
-
       res.json({
         id: user.id,
         email: user.email,
@@ -183,19 +186,6 @@ export function registerRoutes(app: Express) {
       });
     } catch (error) {
       console.error('Error fetching user:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Company-specific routes (require auth and company access)
-  app.get("/api/companies/current", requireAuth, async (req, res) => {
-    try {
-      if (!req.company) {
-        return res.status(404).json({ message: "Company not found" });
-      }
-      res.json(req.company);
-    } catch (error) {
-      console.error('Error fetching current company:', error);
       res.status(500).json({ message: "Server error" });
     }
   });

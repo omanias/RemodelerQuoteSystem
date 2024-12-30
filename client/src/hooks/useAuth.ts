@@ -1,7 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
-import { useCompany } from "@/contexts/CompanyContext";
 
 export type AuthUser = {
   id: number;
@@ -12,9 +11,14 @@ export type AuthUser = {
   status: 'ACTIVE' | 'INACTIVE';
 };
 
+type LoginCredentials = {
+  companyId: number;
+  email: string;
+  password: string;
+};
+
 export function useAuth() {
   const [, setLocation] = useLocation();
-  const { company, subdomain, isSubdomainMode } = useCompany();
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
@@ -35,12 +39,7 @@ export function useAuth() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: async (credentials: { email: string; password: string }) => {
-      // In non-subdomain mode, require company selection before login
-      if (!isSubdomainMode && !company) {
-        throw new Error("Please select a company before logging in");
-      }
-
+    mutationFn: async (credentials: LoginCredentials) => {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -55,11 +54,8 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: () => {
-      // Invalidate user query first
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] }).then(() => {
-        // After successful login and user data refresh, navigate to dashboard
-        setLocation("/");
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setLocation("/");
     },
   });
 
@@ -78,26 +74,15 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      // After logout, redirect to company-specific login or company selector
-      if (company && !isSubdomainMode) {
-        setLocation(`/companies/${company.id}/login`);
-      } else {
-        setLocation("/");
-      }
+      setLocation("/");
     },
   });
 
   return {
     user,
     loading: isLoading,
-    login: async (credentials: { email: string; password: string }) => {
-      await loginMutation.mutateAsync(credentials);
-      // Wait for query invalidation to complete
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      // After successful login and user data refresh, navigate to dashboard
-      setLocation("/");
-    },
+    login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
-    isAuthenticated: !!user && (!isSubdomainMode || (company && user.companyId === company.id)),
+    isAuthenticated: !!user,
   };
 }
