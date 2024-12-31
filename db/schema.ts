@@ -359,8 +359,18 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
     fields: [categories.companyId],
     references: [companies.id],
   }),
-  products: many(products),
-  quotes: many(quotes),
+  products: many(products, {
+    fields: [categories.id],
+    references: [products.categoryId],
+  }),
+  templates: many(templates, {
+    fields: [categories.id],
+    references: [templates.categoryId],
+  }),
+  quotes: many(quotes, {
+    fields: [categories.id],
+    references: [quotes.categoryId],
+  }),
 }));
 
 export const productsRelations = relations(products, ({ one }) => ({
@@ -383,7 +393,10 @@ export const templatesRelations = relations(templates, ({ one, many }) => ({
     fields: [templates.companyId],
     references: [companies.id],
   }),
-  quotes: many(quotes),
+  quotes: many(quotes, {
+    fields: [templates.id],
+    references: [quotes.templateId],
+  }),
 }));
 
 export const contactsRelations = relations(contacts, ({ one, many }) => ({

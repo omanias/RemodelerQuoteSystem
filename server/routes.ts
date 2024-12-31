@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus } from "@db/schema";
 import { eq, and, or, inArray } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -265,30 +265,137 @@ export function registerRoutes(app: Express): Server {
   // Categories endpoint with proper relations
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const categoriesData = await db.query.categories.findMany({
-        where: eq(categories.companyId, req.company!.id),
-        with: {
+      const categoriesData = await db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          description: categories.description,
+          companyId: categories.companyId,
+          createdAt: categories.createdAt,
+          updatedAt: categories.updatedAt,
           products: {
-            columns: {
-              id: true,
-              name: true,
-            },
+            id: products.id,
+            name: products.name,
           },
           templates: {
-            columns: {
-              id: true,
-              name: true,
-            },
+            id: templates.id,
+            name: templates.name,
           },
-        },
-        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
-      });
-      res.json(categoriesData);
+        })
+        .from(categories)
+        .leftJoin(products, eq(categories.id, products.categoryId))
+        .leftJoin(templates, eq(categories.id, templates.categoryId))
+        .where(eq(categories.companyId, req.company!.id))
+        .orderBy(categories.updatedAt);
+
+      // Group the results by category
+      const groupedCategories = categoriesData.reduce((acc: any[], curr) => {
+        const existingCategory = acc.find(c => c.id === curr.id);
+        if (existingCategory) {
+          if (curr.products.id && !existingCategory.products.find((p: any) => p.id === curr.products.id)) {
+            existingCategory.products.push(curr.products);
+          }
+          if (curr.templates.id && !existingCategory.templates.find((t: any) => t.id === curr.templates.id)) {
+            existingCategory.templates.push(curr.templates);
+          }
+        } else {
+          acc.push({
+            ...curr,
+            products: curr.products.id ? [curr.products] : [],
+            templates: curr.templates.id ? [curr.templates] : [],
+          });
+        }
+        return acc;
+      }, []);
+
+      res.json(groupedCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  // Add detailed quote endpoint
+  app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, parseInt(req.params.id)),
+          eq(quotes.companyId, req.company!.id)
+        ),
+        with: {
+          contact: true,
+          template: {
+            with: {
+              category: true
+            }
+          },
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      res.json(quoteData);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update users endpoint to include proper company filtering
+  app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      let userQuery = db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        })
+        .from(users);
+
+      // For SUPER_ADMIN, return all users
+      if (req.session.userRole === UserRole.SUPER_ADMIN) {
+        const allUsers = await userQuery.orderBy(users.name);
+        return res.json(allUsers);
+      }
+
+      // For MULTI_ADMIN, return users from accessible companies
+      if (req.session.userRole === UserRole.MULTI_ADMIN && req.session.accessibleCompanyIds) {
+        const accessibleUsers = await userQuery
+          .where(inArray(users.companyId, req.session.accessibleCompanyIds))
+          .orderBy(users.name);
+        return res.json(accessibleUsers);
+      }
+
+      // For regular users, return only users from their company
+      const companyUsers = await userQuery
+        .where(eq(users.companyId, req.company!.id))
+        .orderBy(users.name);
+
+      res.json(companyUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
 
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
@@ -383,53 +490,38 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add users endpoint with company filtering
+  // Update users endpoint to include proper company filtering
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      // For SUPER_ADMIN, return all users
-      if (req.session.userRole === UserRole.SUPER_ADMIN) {
-        const allUsers = await db
-          .select({
-            id: users.id,
-            name: users.name,
-            email: users.email,
-            role: users.role,
-            status: users.status,
-            companyId: users.companyId
-          })
-          .from(users)
-          .orderBy(users.name);
-        return res.json(allUsers);
-      }
-
-      // For MULTI_ADMIN, return users from accessible companies
-      if (req.session.userRole === UserRole.MULTI_ADMIN && req.session.accessibleCompanyIds) {
-        const accessibleUsers = await db
-          .select({
-            id: users.id,
-            name: users.name,
-            email: users.email,
-            role: users.role,
-            status: users.status,
-            companyId: users.companyId
-          })
-          .from(users)
-          .where(inArray(users.companyId, req.session.accessibleCompanyIds))
-          .orderBy(users.name);
-        return res.json(accessibleUsers);
-      }
-
-      // For regular users, return only users from their company
-      const companyUsers = await db
+      let userQuery = db
         .select({
           id: users.id,
           name: users.name,
           email: users.email,
           role: users.role,
           status: users.status,
-          companyId: users.companyId
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
         })
-        .from(users)
+        .from(users);
+
+      // For SUPER_ADMIN, return all users
+      if (req.session.userRole === UserRole.SUPER_ADMIN) {
+        const allUsers = await userQuery.orderBy(users.name);
+        return res.json(allUsers);
+      }
+
+      // For MULTI_ADMIN, return users from accessible companies
+      if (req.session.userRole === UserRole.MULTI_ADMIN && req.session.accessibleCompanyIds) {
+        const accessibleUsers = await userQuery
+          .where(inArray(users.companyId, req.session.accessibleCompanyIds))
+          .orderBy(users.name);
+        return res.json(accessibleUsers);
+      }
+
+      // For regular users, return only users from their company
+      const companyUsers = await userQuery
         .where(eq(users.companyId, req.company!.id))
         .orderBy(users.name);
 
@@ -439,7 +531,6 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Server error" });
     }
   });
-
 
   return httpServer;
 }
