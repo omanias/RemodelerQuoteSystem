@@ -265,50 +265,26 @@ export function registerRoutes(app: Express): Server {
   // Categories endpoint with proper relations
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const categoriesData = await db
-        .select({
-          id: categories.id,
-          name: categories.name,
-          description: categories.description,
-          companyId: categories.companyId,
-          createdAt: categories.createdAt,
-          updatedAt: categories.updatedAt,
+      const categoriesData = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.company!.id),
+        with: {
           products: {
-            id: products.id,
-            name: products.name,
+            columns: {
+              id: true,
+              name: true,
+            },
           },
           templates: {
-            id: templates.id,
-            name: templates.name,
+            columns: {
+              id: true,
+              name: true,
+            },
           },
-        })
-        .from(categories)
-        .leftJoin(products, eq(categories.id, products.categoryId))
-        .leftJoin(templates, eq(categories.id, templates.categoryId))
-        .where(eq(categories.companyId, req.company!.id))
-        .orderBy(categories.updatedAt);
+        },
+        orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
+      });
 
-      // Group the results by category
-      const groupedCategories = categoriesData.reduce((acc: any[], curr) => {
-        const existingCategory = acc.find(c => c.id === curr.id);
-        if (existingCategory) {
-          if (curr.products.id && !existingCategory.products.find((p: any) => p.id === curr.products.id)) {
-            existingCategory.products.push(curr.products);
-          }
-          if (curr.templates.id && !existingCategory.templates.find((t: any) => t.id === curr.templates.id)) {
-            existingCategory.templates.push(curr.templates);
-          }
-        } else {
-          acc.push({
-            ...curr,
-            products: curr.products.id ? [curr.products] : [],
-            templates: curr.templates.id ? [curr.templates] : [],
-          });
-        }
-        return acc;
-      }, []);
-
-      res.json(groupedCategories);
+      res.json(categoriesData);
     } catch (error) {
       console.error('Error fetching categories:', error);
       res.status(500).json({ message: "Server error" });
@@ -490,47 +466,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update users endpoint to include proper company filtering
-  app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      let userQuery = db
-        .select({
-          id: users.id,
-          name: users.name,
-          email: users.email,
-          role: users.role,
-          status: users.status,
-          companyId: users.companyId,
-          createdAt: users.createdAt,
-          updatedAt: users.updatedAt,
-        })
-        .from(users);
-
-      // For SUPER_ADMIN, return all users
-      if (req.session.userRole === UserRole.SUPER_ADMIN) {
-        const allUsers = await userQuery.orderBy(users.name);
-        return res.json(allUsers);
-      }
-
-      // For MULTI_ADMIN, return users from accessible companies
-      if (req.session.userRole === UserRole.MULTI_ADMIN && req.session.accessibleCompanyIds) {
-        const accessibleUsers = await userQuery
-          .where(inArray(users.companyId, req.session.accessibleCompanyIds))
-          .orderBy(users.name);
-        return res.json(accessibleUsers);
-      }
-
-      // For regular users, return only users from their company
-      const companyUsers = await userQuery
-        .where(eq(users.companyId, req.company!.id))
-        .orderBy(users.name);
-
-      res.json(companyUsers);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
+  // Update users endpoint to include proper company filtering (duplicate removed)
 
   return httpServer;
 }
