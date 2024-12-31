@@ -262,13 +262,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Categories endpoint with proper relations
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const categoriesData = await db.query.categories.findMany({
         where: eq(categories.companyId, req.company!.id),
         with: {
-          products: true,
-          templates: true
+          products: {
+            columns: {
+              id: true,
+              name: true,
+            },
+          },
+          templates: {
+            columns: {
+              id: true,
+              name: true,
+            },
+          },
         },
         orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
       });
@@ -371,6 +382,64 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Server error" });
     }
   });
+
+  // Add users endpoint with company filtering
+  app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      // For SUPER_ADMIN, return all users
+      if (req.session.userRole === UserRole.SUPER_ADMIN) {
+        const allUsers = await db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            role: users.role,
+            status: users.status,
+            companyId: users.companyId
+          })
+          .from(users)
+          .orderBy(users.name);
+        return res.json(allUsers);
+      }
+
+      // For MULTI_ADMIN, return users from accessible companies
+      if (req.session.userRole === UserRole.MULTI_ADMIN && req.session.accessibleCompanyIds) {
+        const accessibleUsers = await db
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            role: users.role,
+            status: users.status,
+            companyId: users.companyId
+          })
+          .from(users)
+          .where(inArray(users.companyId, req.session.accessibleCompanyIds))
+          .orderBy(users.name);
+        return res.json(accessibleUsers);
+      }
+
+      // For regular users, return only users from their company
+      const companyUsers = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId
+        })
+        .from(users)
+        .where(eq(users.companyId, req.company!.id))
+        .orderBy(users.name);
+
+      res.json(companyUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
 
   return httpServer;
 }

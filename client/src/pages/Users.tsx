@@ -30,10 +30,20 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { UserPlus, MoreVertical, Search, Shield } from "lucide-react";
+import { UserPlus, MoreVertical, Search, Shield, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserForm } from "@/components/UserForm";
 import { Link } from "wouter";
+import { UserRole } from "@db/schema";
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: keyof typeof UserRole;
+  status: 'active' | 'inactive';
+  companyId: number;
+}
 
 const ITEMS_PER_PAGE = 10;
 
@@ -42,12 +52,13 @@ export function Users() {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<string>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [editUser, setEditUser] = useState<User | null>(null);
 
-  const { data: users = [], isLoading } = useQuery({
+  const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users", search, sortField, sortDirection],
   });
 
-  const filteredUsers = users.filter((user: any) =>
+  const filteredUsers = users.filter((user) =>
     user.name.toLowerCase().includes(search.toLowerCase()) ||
     user.email.toLowerCase().includes(search.toLowerCase())
   );
@@ -71,7 +82,12 @@ export function Users() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Users</h1>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
+          <p className="text-muted-foreground">
+            Manage your team and their access levels
+          </p>
+        </div>
         <div className="flex gap-2">
           <Link href="/permissions">
             <Button variant="outline">
@@ -142,24 +158,26 @@ export function Users() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
-                  Loading...
+                <TableCell colSpan={5} className="text-center py-8">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
                 </TableCell>
               </TableRow>
             ) : paginatedUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={5} className="text-center py-8">
                   No users found
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedUsers.map((user: any) => (
+              paginatedUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.role === "ADMIN" ? "default" : "secondary"}
+                      variant={user.role === "SUPER_ADMIN" ? "default" : "secondary"}
                     >
                       {user.role}
                     </Badge>
@@ -184,7 +202,12 @@ export function Users() {
                       <DropdownMenuContent align="end">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => {
+                              e.preventDefault();
+                              setEditUser(user);
+                            }}>
+                              Edit
+                            </DropdownMenuItem>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
@@ -193,9 +216,6 @@ export function Users() {
                             <UserForm user={user} />
                           </DialogContent>
                         </Dialog>
-                        <DropdownMenuItem className="text-destructive">
-                          Delete
-                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -206,23 +226,25 @@ export function Users() {
         </Table>
       </div>
 
-      <Pagination>
-        <PaginationContent>
-          <PaginationItem>
-            <PaginationPrevious
-              onClick={() => setPage(Math.max(1, page - 1))}
-              disabled={page === 1}
-            />
-          </PaginationItem>
-          <PaginationItem>Page {page} of {totalPages}</PaginationItem>
-          <PaginationItem>
-            <PaginationNext
-              onClick={() => setPage(Math.min(totalPages, page + 1))}
-              disabled={page === totalPages}
-            />
-          </PaginationItem>
-        </PaginationContent>
-      </Pagination>
+      {paginatedUsers.length > 0 && (
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={() => setPage(Math.max(1, page - 1))}
+                className={page === 1 ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+            <PaginationItem>Page {page} of {totalPages}</PaginationItem>
+            <PaginationItem>
+              <PaginationNext
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                className={page === totalPages ? "pointer-events-none opacity-50" : ""}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      )}
     </div>
   );
 }
