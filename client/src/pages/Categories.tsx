@@ -122,16 +122,16 @@ export function Categories() {
             ) : filteredCategories.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8">
-                  No categories found
+                  {search ? "No categories found matching your search" : "No categories found"}
                 </TableCell>
               </TableRow>
             ) : (
               filteredCategories.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
-                  <TableCell>{category.description}</TableCell>
-                  <TableCell>{category.products.length}</TableCell>
-                  <TableCell>{category.templates.length}</TableCell>
+                  <TableCell>{category.description || "-"}</TableCell>
+                  <TableCell>{Array.isArray(category.products) ? category.products.length : 0}</TableCell>
+                  <TableCell>{Array.isArray(category.templates) ? category.templates.length : 0}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
