@@ -31,7 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { UserPlus, MoreVertical, Search, Shield, Loader2, Trash2 } from "lucide-react";
+import { UserPlus, MoreVertical, Search, Shield, Loader2, Trash2, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserForm } from "@/components/UserForm";
 import { Link } from "wouter";
@@ -223,8 +223,8 @@ export function Users() {
                     <Badge
                       variant={user.status === "active" ? "success" : "destructive"}
                       className={
-                        user.status === "active" 
-                          ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                        user.status === "active"
+                          ? "bg-green-100 text-green-800 hover:bg-green-200"
                           : "bg-red-100 text-red-800 hover:bg-red-200"
                       }
                     >
@@ -248,6 +248,7 @@ export function Users() {
                               e.preventDefault();
                               setEditUser(user);
                             }}>
+                              <Pencil className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
                           </DialogTrigger>
