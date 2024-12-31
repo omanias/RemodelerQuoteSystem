@@ -268,18 +268,8 @@ export function registerRoutes(app: Express): Server {
       const categoriesData = await db.query.categories.findMany({
         where: eq(categories.companyId, req.company!.id),
         with: {
-          products: {
-            columns: {
-              id: true,
-              name: true,
-            },
-          },
-          templates: {
-            columns: {
-              id: true,
-              name: true,
-            },
-          },
+          products: true,
+          templates: true,
         },
         orderBy: (categoriesTable, { desc }) => [desc(categoriesTable.updatedAt)],
       });
