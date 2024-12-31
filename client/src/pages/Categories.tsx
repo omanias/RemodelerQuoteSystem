@@ -23,18 +23,33 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Plus, Search, ArrowLeft } from "lucide-react";
+import { MoreVertical, Plus, Search, ArrowLeft, Loader2 } from "lucide-react";
 import { CategoryForm } from "@/components/CategoryForm";
 import { Link } from "wouter";
 
+interface Category {
+  id: number;
+  name: string;
+  description: string | null;
+  products: Array<{
+    id: number;
+    name: string;
+  }>;
+  templates: Array<{
+    id: number;
+    name: string;
+  }>;
+}
+
 export function Categories() {
   const [search, setSearch] = useState("");
+  const [editCategory, setEditCategory] = useState<Category | null>(null);
 
-  const { data: categories = [], isLoading } = useQuery({
+  const { data: categories = [], isLoading, refetch } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
-  const filteredCategories = categories.filter((category: any) =>
+  const filteredCategories = categories.filter((category) =>
     category.name.toLowerCase().includes(search.toLowerCase()) ||
     (category.description || "").toLowerCase().includes(search.toLowerCase())
   );
@@ -62,7 +77,7 @@ export function Categories() {
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
             </DialogHeader>
-            <CategoryForm />
+            <CategoryForm onSuccess={refetch} />
           </DialogContent>
         </Dialog>
       </div>
@@ -85,27 +100,33 @@ export function Categories() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Products</TableHead>
+              <TableHead>Templates</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center">
-                  Loading...
+                <TableCell colSpan={5} className="text-center py-8">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
                 </TableCell>
               </TableRow>
             ) : filteredCategories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center">
+                <TableCell colSpan={5} className="text-center py-8">
                   No categories found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredCategories.map((category: any) => (
+              filteredCategories.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>{category.description}</TableCell>
+                  <TableCell>{category.products.length}</TableCell>
+                  <TableCell>{category.templates.length}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -119,18 +140,27 @@ export function Categories() {
                       <DropdownMenuContent align="end">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={(e) => {
+                              e.preventDefault();
+                              setEditCategory(category);
+                            }}>
+                              Edit
+                            </DropdownMenuItem>
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
                               <DialogTitle>Edit Category</DialogTitle>
                             </DialogHeader>
-                            <CategoryForm category={category} />
+                            <CategoryForm 
+                              category={editCategory}
+                              onSuccess={() => {
+                                setEditCategory(null);
+                                refetch();
+                              }}
+                            />
                           </DialogContent>
                         </Dialog>
-                        <DropdownMenuItem className="text-destructive">
-                          Delete
-                        </DropdownMenuItem>
+                        
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

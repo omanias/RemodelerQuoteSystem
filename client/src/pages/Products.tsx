@@ -34,21 +34,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, MoreVertical, FolderTree } from "lucide-react";
+import { Plus, MoreVertical, FolderTree, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 
+interface Product {
+  id: number;
+  name: string;
+  basePrice: number;
+  unit: string;
+  isActive: boolean;
+  category: {
+    id: number;
+    name: string;
+  };
+}
+
 export function Products() {
   const [open, setOpen] = useState(false);
-  const [editProduct, setEditProduct] = useState<any>(null);
-  const [deleteProduct, setDeleteProduct] = useState<any>(null);
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const { toast } = useToast();
 
-  const { data: products = [], refetch } = useQuery({
+  const { data: products = [], isLoading, refetch } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
 
   const handleDelete = async () => {
+    if (!deleteProduct) return;
+
     try {
       const response = await fetch(`/api/products/${deleteProduct.id}`, {
         method: "DELETE",
@@ -104,7 +118,10 @@ export function Products() {
               <DialogHeader>
                 <DialogTitle>Add New Product</DialogTitle>
               </DialogHeader>
-              <ProductForm onSuccess={() => setOpen(false)} />
+              <ProductForm onSuccess={() => {
+                setOpen(false);
+                refetch();
+              }} />
             </DialogContent>
           </Dialog>
         </div>
@@ -123,55 +140,74 @@ export function Products() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {products?.map((product: any) => (
-              <TableRow key={product.id}>
-                <TableCell>{product.name}</TableCell>
-                <TableCell>{product.category.name}</TableCell>
-                <TableCell>${product.basePrice}</TableCell>
-                <TableCell>{product.unit}</TableCell>
-                <TableCell>
-                  <Badge variant={product.isActive ? "default" : "secondary"}>
-                    {product.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <DropdownMenuItem onSelect={(e) => {
-                            e.preventDefault();
-                            setEditProduct(product);
-                          }}>
-                            Edit
-                          </DropdownMenuItem>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Edit Product</DialogTitle>
-                          </DialogHeader>
-                          <ProductForm 
-                            product={editProduct} 
-                            onSuccess={() => setEditProduct(null)}
-                          />
-                        </DialogContent>
-                      </Dialog>
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onSelect={() => setDeleteProduct(product)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <div className="flex justify-center items-center">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : products.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  No products found
+                </TableCell>
+              </TableRow>
+            ) : (
+              products.map((product) => (
+                <TableRow key={product.id}>
+                  <TableCell>{product.name}</TableCell>
+                  <TableCell>{product.category.name}</TableCell>
+                  <TableCell>${product.basePrice}</TableCell>
+                  <TableCell>{product.unit}</TableCell>
+                  <TableCell>
+                    <Badge variant={product.isActive ? "default" : "secondary"}>
+                      {product.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <DropdownMenuItem onSelect={(e) => {
+                              e.preventDefault();
+                              setEditProduct(product);
+                            }}>
+                              Edit
+                            </DropdownMenuItem>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Edit Product</DialogTitle>
+                            </DialogHeader>
+                            <ProductForm 
+                              product={editProduct} 
+                              onSuccess={() => {
+                                setEditProduct(null);
+                                refetch();
+                              }}
+                            />
+                          </DialogContent>
+                        </Dialog>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onSelect={() => setDeleteProduct(product)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
