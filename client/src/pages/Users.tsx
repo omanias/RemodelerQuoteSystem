@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
   TableBody,
@@ -30,11 +30,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { UserPlus, MoreVertical, Search, Shield, Loader2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { UserPlus, MoreVertical, Search, Shield, Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserForm } from "@/components/UserForm";
 import { Link } from "wouter";
 import { UserRole } from "@db/schema";
+import { useToast } from "@/hooks/use-toast";
 
 interface User {
   id: number;
@@ -53,9 +55,40 @@ export function Users() {
   const [sortField, setSortField] = useState<string>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [editUser, setEditUser] = useState<User | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users", search, sortField, sortDirection],
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: async (userId: number) => {
+      const response = await fetch(`/api/users/${userId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({
+        title: "Success",
+        description: "User has been deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredUsers = users.filter((user) =>
@@ -77,6 +110,10 @@ export function Users() {
       setSortField(field);
       setSortDirection("asc");
     }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    await deleteUser.mutate(userId);
   };
 
   return (
@@ -167,7 +204,7 @@ export function Users() {
             ) : paginatedUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8">
-                  No users found
+                  {search ? "No users found matching your search" : "No users found"}
                 </TableCell>
               </TableRow>
             ) : (
@@ -184,7 +221,12 @@ export function Users() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={user.status === "active" ? "default" : "destructive"}
+                      variant={user.status === "active" ? "success" : "destructive"}
+                      className={
+                        user.status === "active" 
+                          ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                          : "bg-red-100 text-red-800 hover:bg-red-200"
+                      }
                     >
                       {user.status}
                     </Badge>
@@ -216,6 +258,35 @@ export function Users() {
                             <UserForm user={user} />
                           </DialogContent>
                         </Dialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <DropdownMenuItem
+                              onSelect={(e) => e.preventDefault()}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the user
+                                and remove their data from the system.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

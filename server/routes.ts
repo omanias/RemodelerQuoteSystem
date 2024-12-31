@@ -362,6 +362,49 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add the delete user endpoint after the /api/users GET endpoint
+  app.delete("/api/users/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+
+      // Check if user exists
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Only SUPER_ADMIN can delete other SUPER_ADMINs
+      if (user.role === UserRole.SUPER_ADMIN && req.session.userRole !== UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Not authorized to delete super admin users" });
+      }
+
+      // For MULTI_ADMIN, verify if they have access to the user's company
+      if (req.session.userRole === UserRole.MULTI_ADMIN) {
+        if (!req.session.accessibleCompanyIds?.includes(user.companyId)) {
+          return res.status(403).json({ message: "Not authorized to delete this user" });
+        }
+      }
+
+      // For regular ADMIN, verify they are deleting a user from their company
+      if (req.session.userRole === UserRole.ADMIN && user.companyId !== req.company!.id) {
+        return res.status(403).json({ message: "Not authorized to delete this user" });
+      }
+
+      // Delete user
+      await db.delete(users).where(eq(users.id, userId));
+
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
 
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
