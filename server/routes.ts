@@ -395,10 +395,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(403).json({ message: "Not authorized to delete this user" });
       }
 
-      // First delete from companyAccess table
-      await db.delete(companyAccess).where(eq(companyAccess.userId, userId));
-
-      // Then delete the user
+      // Delete the user
       await db.delete(users).where(eq(users.id, userId));
 
       res.json({ message: "User deleted successfully" });
