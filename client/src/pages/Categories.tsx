@@ -31,6 +31,9 @@ interface Category {
   id: number;
   name: string;
   description: string | null;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
   products: Array<{
     id: number;
     name: string;
@@ -77,7 +80,9 @@ export function Categories() {
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
             </DialogHeader>
-            <CategoryForm onSuccess={refetch} />
+            <CategoryForm onSuccess={() => {
+              refetch();
+            }} />
           </DialogContent>
         </Dialog>
       </div>
@@ -152,7 +157,11 @@ export function Categories() {
                               <DialogTitle>Edit Category</DialogTitle>
                             </DialogHeader>
                             <CategoryForm 
-                              category={editCategory}
+                              category={{
+                                id: category.id,
+                                name: category.name,
+                                description: category.description
+                              }}
                               onSuccess={() => {
                                 setEditCategory(null);
                                 refetch();
@@ -160,7 +169,6 @@ export function Categories() {
                             />
                           </DialogContent>
                         </Dialog>
-                        
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
