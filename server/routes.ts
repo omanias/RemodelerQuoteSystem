@@ -247,6 +247,83 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add detailed contact endpoint
+  app.get("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const [contactData] = await db.query.contacts.findMany({
+        where: and(
+          eq(contacts.id, parseInt(req.params.id)),
+          eq(contacts.companyId, req.company!.id)
+        ),
+        with: {
+          assignedUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          category: true,
+          quotes: {
+            with: {
+              template: true,
+              category: true,
+              user: {
+                columns: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                }
+              }
+            }
+          }
+        },
+        limit: 1
+      });
+
+      if (!contactData) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      res.json(contactData);
+    } catch (error) {
+      console.error('Error fetching contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add endpoint to get quotes for a specific contact
+  app.get("/api/contacts/:id/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quotesData = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.contactId, parseInt(req.params.id)),
+          eq(quotes.companyId, req.company!.id)
+        ),
+        with: {
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
+      });
+
+      res.json(quotesData);
+    } catch (error) {
+      console.error('Error fetching contact quotes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productsData = await db.query.products.findMany({
