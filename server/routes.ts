@@ -324,6 +324,103 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add PUT endpoint for updating contacts
+  app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+      const {
+        firstName,
+        lastName,
+        primaryEmail,
+        primaryPhone,
+        secondaryPhone,
+        address,
+        leadStatus,
+        leadSource,
+        propertyType,
+        projectTimeline,
+        budget,
+        notes,
+        assignedUserId,
+        categoryId
+      } = req.body;
+
+      // First verify contact belongs to company
+      const [existingContact] = await db
+        .select()
+        .from(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingContact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Update the contact
+      const [updatedContact] = await db
+        .update(contacts)
+        .set({
+          firstName: firstName || existingContact.firstName,
+          lastName: lastName || existingContact.lastName,
+          primaryEmail: primaryEmail || existingContact.primaryEmail,
+          primaryPhone: primaryPhone || existingContact.primaryPhone,
+          secondaryPhone: secondaryPhone || existingContact.secondaryPhone,
+          address: address || existingContact.address,
+          leadStatus: leadStatus || existingContact.leadStatus,
+          leadSource: leadSource || existingContact.leadSource,
+          propertyType: propertyType || existingContact.propertyType,
+          projectTimeline: projectTimeline || existingContact.projectTimeline,
+          budget: budget !== undefined ? parseFloat(budget) : existingContact.budget,
+          notes: notes || existingContact.notes,
+          assignedUserId: assignedUserId ? parseInt(assignedUserId) : existingContact.assignedUserId,
+          categoryId: categoryId ? parseInt(categoryId) : existingContact.categoryId,
+          updatedAt: new Date(),
+        })
+        .where(eq(contacts.id, contactId))
+        .returning();
+
+      // Get full contact data with relations
+      const [contactWithRelations] = await db.query.contacts.findMany({
+        where: eq(contacts.id, updatedContact.id),
+        with: {
+          assignedUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          category: true,
+          quotes: {
+            with: {
+              template: true,
+              category: true,
+              user: {
+                columns: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                }
+              }
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(contactWithRelations);
+    } catch (error) {
+      console.error('Error updating contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   // Add PUT endpoint for updating quotes
   app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
