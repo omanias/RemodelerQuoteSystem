@@ -36,10 +36,10 @@ interface Quote {
   id: number;
   number: string;
   clientName: string;
-  status: QuoteStatus;
+  status: typeof QuoteStatus[keyof typeof QuoteStatus];
   total: number;
-  downPaymentValue: number;
-  remainingBalance: number;
+  downPaymentValue: number | null;
+  remainingBalance: number | null;
   createdAt: string;
 }
 
@@ -56,6 +56,15 @@ interface User {
   id: number;
   email: string;
   name: string;
+}
+
+// Helper function to safely format monetary values
+function formatMoney(value: number | null): string {
+  if (value === null || typeof value !== 'number') return '-';
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
 }
 
 export function Quotes() {
@@ -259,9 +268,9 @@ export function Quotes() {
                     {quote.status}
                   </Badge>
                 </TableCell>
-                <TableCell>${quote.total.toLocaleString()}</TableCell>
-                <TableCell>${quote.downPaymentValue.toLocaleString()}</TableCell>
-                <TableCell>${quote.remainingBalance.toLocaleString()}</TableCell>
+                <TableCell>${formatMoney(quote.total)}</TableCell>
+                <TableCell>${formatMoney(quote.downPaymentValue)}</TableCell>
+                <TableCell>${formatMoney(quote.remainingBalance)}</TableCell>
                 <TableCell>
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>
