@@ -686,6 +686,20 @@ export function registerRoutes(app: Express): Server {
       const userId = req.session.userId;
       const companyId = req.company!.id;
 
+      // If creating from contact, get the contact's email
+      let clientEmail = null;
+      if (contactId) {
+        const [contact] = await db
+          .select()
+          .from(contacts)
+          .where(eq(contacts.id, contactId))
+          .limit(1);
+
+        if (contact) {
+          clientEmail = contact.primaryEmail;
+        }
+      }
+
       // Generate a quote number (you might want to implement a more sophisticated system)
       const quoteNumber = `Q${Date.now()}`;
 
@@ -698,6 +712,7 @@ export function registerRoutes(app: Express): Server {
           templateId,
           contactId,
           clientName,
+          clientEmail: clientEmail || 'temp@example.com', // Provide a default if not available
           status,
           content,
           userId,
