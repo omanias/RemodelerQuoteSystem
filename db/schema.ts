@@ -322,7 +322,23 @@ export const contactPhotos = pgTable("contact_photos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Add company_access table after the existing tables
+// Add notes table after contactPhotos and before companyAccess
+export const notes = pgTable("notes", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  contactId: integer("contact_id")
+    .references(() => contacts.id, { onDelete: 'cascade' })
+    .notNull(),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  type: text("type").notNull(),
+  quoteId: integer("quote_id")
+    .references(() => quotes.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const companyAccess = pgTable("company_access", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
@@ -478,6 +494,22 @@ export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   }),
 }));
 
+// Add notes relations after contactPhotosRelations
+export const notesRelations = relations(notes, ({ one }) => ({
+  contact: one(contacts, {
+    fields: [notes.contactId],
+    references: [contacts.id],
+  }),
+  user: one(users, {
+    fields: [notes.userId],
+    references: [users.id],
+  }),
+  quote: one(quotes, {
+    fields: [notes.quoteId],
+    references: [quotes.id],
+  }),
+}));
+
 export const tablePermissionsRelations = relations(tablePermissions, ({ one }) => ({
   company: one(companies, {
     fields: [tablePermissions.companyId],
@@ -531,6 +563,10 @@ export type NewTablePermission = typeof tablePermissions.$inferInsert;
 export type CompanyAccess = typeof companyAccess.$inferSelect;
 export type NewCompanyAccess = typeof companyAccess.$inferInsert;
 
+// Add Note types at the end of the types section
+export type Note = typeof notes.$inferSelect;
+export type NewNote = typeof notes.$inferInsert;
+
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
@@ -560,3 +596,7 @@ export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFi
 export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
 export const insertCompanyAccessSchema = createInsertSchema(companyAccess);
 export const selectCompanyAccessSchema = createSelectSchema(companyAccess);
+
+// Add Note schemas at the end of the schemas section
+export const insertNoteSchema = createInsertSchema(notes);
+export const selectNoteSchema = createSelectSchema(notes);

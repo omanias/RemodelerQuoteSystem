@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { LeadStatus, LeadSource, PropertyType, QuoteStatus } from "@db/schema";
+import { LeadStatus, LeadSource, PropertyType } from "@db/schema";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 
 const contactFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -37,6 +41,12 @@ const contactFormSchema = z.object({
 });
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
+
+const noteFormSchema = z.object({
+  content: z.string().min(1, "Note content is required"),
+});
+
+type NoteFormValues = z.infer<typeof noteFormSchema>;
 
 export function ContactDetail() {
   const { id } = useParams();
@@ -145,6 +155,57 @@ export function ContactDetail() {
     } else {
       await createContact.mutateAsync(data);
     }
+  };
+
+  // Add notes query
+  const { data: notes = [], isLoading: isLoadingNotes } = useQuery({
+    queryKey: [`/api/contacts/${id}/notes`],
+    enabled: !!id
+  });
+
+  // Add note mutation
+  const addNote = useMutation({
+    mutationFn: async (data: NoteFormValues) => {
+      const response = await fetch(`/api/contacts/${id}/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/contacts/${id}/notes`] });
+      toast({
+        title: "Success",
+        description: "Note added successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const noteForm = useForm<NoteFormValues>({
+    resolver: zodResolver(noteFormSchema),
+    defaultValues: {
+      content: "",
+    },
+  });
+
+  const onAddNote = async (data: NoteFormValues) => {
+    await addNote.mutateAsync(data);
+    noteForm.reset();
   };
 
   if (isLoadingContact) {
@@ -477,13 +538,74 @@ export function ContactDetail() {
 
         <TabsContent value="notes">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Notes</CardTitle>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Note
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Note</DialogTitle>
+                  </DialogHeader>
+                  <Form {...noteForm}>
+                    <form onSubmit={noteForm.handleSubmit(onAddNote)} className="space-y-4">
+                      <FormField
+                        control={noteForm.control}
+                        name="content"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Note Content</FormLabel>
+                            <FormControl>
+                              <Textarea {...field} rows={4} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="submit">Add Note</Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Notes form and list will go here */}
-                <p className="text-muted-foreground">No notes available</p>
+                {isLoadingNotes ? (
+                  <div className="text-center py-4">Loading notes...</div>
+                ) : notes.length === 0 ? (
+                  <p className="text-muted-foreground">No notes available</p>
+                ) : (
+                  <div className="space-y-4">
+                    {notes.map((note:any) => (
+                      <div
+                        key={note.id}
+                        className="flex flex-col space-y-2 p-4 border rounded-lg"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <Avatar>
+                              <AvatarFallback>
+                                {note.user.name.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="font-medium">{note.user.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {new Date(note.createdAt).toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge variant="outline">{note.type}</Badge>
+                        </div>
+                        <p className="text-sm">{note.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

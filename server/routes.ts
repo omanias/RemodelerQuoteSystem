@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -577,7 +577,174 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add to existing routes inside registerRoutes function
+  // Add notes endpoints
+  app.get("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify contact belongs to company
+      const [contact] = await db
+        .select()
+        .from(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Get all notes for this contact, including quote-related notes
+      const notesData = await db.query.notes.findMany({
+        where: eq(notes.contactId, contactId),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        orderBy: (notesTable, { desc }) => [desc(notesTable.createdAt)],
+      });
+
+      res.json(notesData);
+    } catch (error) {
+      console.error('Error fetching contact notes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+      const userId = req.session.userId;
+      const { content } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ message: "Note content is required" });
+      }
+
+      // First verify contact belongs to company
+      const [contact] = await db
+        .select()
+        .from(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Create the note
+      const [newNote] = await db
+        .insert(notes)
+        .values({
+          content,
+          contactId,
+          userId,
+          type: "CONTACT" as const
+        })
+        .returning();
+
+      // Get full note data with user info
+      const [noteWithUser] = await db.query.notes.findMany({
+        where: eq(notes.id, newNote.id),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(noteWithUser);
+    } catch (error) {
+      console.error('Error creating contact note:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Modify the quotes creation endpoint to add notes
+  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { contactId, templateId, categoryId, content, clientName, status } = req.body;
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
+
+      // Generate a quote number (you might want to implement a more sophisticated system)
+      const quoteNumber = `Q${Date.now()}`;
+
+      // Insert the quote
+      const [newQuote] = await db
+        .insert(quotes)
+        .values({
+          number: quoteNumber,
+          categoryId,
+          templateId,
+          contactId,
+          clientName,
+          status,
+          content,
+          userId,
+          companyId,
+          subtotal: 0, // You'll need to calculate these based on your business logic
+          total: 0,
+        })
+        .returning();
+
+      // Add a note for the contact when a quote is created
+      if (contactId) {
+        await db
+          .insert(notes)
+          .values({
+            content: `Quote #${quoteNumber} created`,
+            contactId,
+            userId,
+            type: "QUOTE" as const,
+            quoteId: newQuote.id
+          });
+      }
+
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, newQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(quoteWithRelations);
+    } catch (error) {
+      console.error('Error in quote creation:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/admin/company-metrics", requireAuth, async (req, res) => {
     try {
       // Only SUPER_ADMIN and MULTI_ADMIN can access this endpoint
