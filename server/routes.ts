@@ -942,5 +942,197 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/quotes/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify quote belongs to company
+      const [quote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Get all notes for this quote
+      const notesData = await db.query.notes.findMany({
+        where: eq(notes.quoteId, quoteId),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          contact: true
+        },
+        orderBy: (notesTable, { desc }) => [desc(notesTable.createdAt)],
+      });
+
+      res.json(notesData);
+    } catch (error) {
+      console.error('Error fetching quote notes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/quotes/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      const { content, contactId } = req.body;
+
+      if (!content) {
+        return res.status(400).json({ message: "Note content is required" });
+      }
+
+      // First verify quote exists and belongs to company
+      const [quote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, req.company!.id)
+        ))
+        .limit(1);
+
+
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Create the note
+      const [newNote] = await db
+        .insert(notes)
+        .values({
+          content,
+          quoteId,
+          userId,
+          contactId: contactId || quote.contactId,
+          type: "QUOTE"
+        })
+        .returning();
+
+      // Get full note data with user info
+      const [noteWithRelations] = await db.query.notes.findMany({
+        where: eq(notes.id, newNote.id),
+        with: {
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          contact: true
+        },
+        limit: 1
+      });
+
+      res.json(noteWithRelations);
+    } catch (error) {
+      console.error('Error creating quote note:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/admin/company-metrics", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can access this endpoint
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user || !["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      // For MULTI_ADMIN, only return metrics for accessible companies
+      const companyQuery = user.role === "SUPER_ADMIN"
+        ? db.select().from(companies)
+        : db.select()
+            .from(companies)
+            .innerJoin(
+              companyAccess,
+              and(
+                eq(companyAccess.companyId, companies.id),
+                eq(companyAccess.userId, user.id)
+              )
+            );
+
+      const companiesData = await companyQuery;
+
+      // Gather metrics for each company
+      const companyMetrics = await Promise.all(
+        companiesData.map(async (company) => {
+          // Get total users
+          const [{ value: userCount }] = await db
+            .select({ value: count() })
+            .from(users)
+            .where(eq(users.companyId, company.id));
+
+          // Get active users (users who have created quotes in the last 30 days)
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+          const [{ value: activeUsers }] = await db
+            .select({ value: count(users.id, { distinct: true }) })
+            .from(users)
+            .innerJoin(quotes, eq(quotes.userId, users.id))
+            .where(
+              and(
+                eq(users.companyId, company.id),
+                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
+              )
+            );
+
+          // Get total quotes
+          const [{ value: quoteCount }] = await db
+            .select({ value: count() })
+            .from(quotes)
+            .where(eq(quotes.companyId, company.id));
+
+          // Get recent quotes (last 30 days)
+          const [{ value: recentQuotes }] = await db
+            .select({ value: count() })
+            .from(quotes)
+            .where(
+              and(
+                eq(quotes.companyId, company.id),
+                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
+              )
+            );
+
+          return {
+            id: company.id,
+            name: company.name,
+            userCount,
+            activeUsers,
+            quoteCount,
+            recentQuotes,
+          };
+        })
+      );
+
+      res.json(companyMetrics);
+    } catch (error) {
+      console.error('Error fetching company metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   return httpServer;
 }
