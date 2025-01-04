@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Link, useLocation } from "wouter";
 import { Plus, Search } from "lucide-react";
 import { LeadStatus } from "@db/schema";
+import { ContactHoverCard } from "@/components/ContactHoverCard";
 
 export function Contacts() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,7 +91,7 @@ export function Contacts() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full"
-                prefix={<Search className="h-4 w-4 text-muted-foreground" />}
+                prefix={<Search className="mr-2 h-4 w-4 text-muted-foreground" />}
               />
             </div>
           </div>
@@ -117,16 +118,30 @@ export function Contacts() {
                 onClick={() => navigate(`/contacts/${contact.id}`)}
               >
                 <TableCell>
-                  <div>
-                    <div className="font-medium">
-                      {contact.firstName} {contact.lastName}
-                    </div>
-                    {contact.assignedUser && (
-                      <div className="text-sm text-muted-foreground">
-                        Rep: {contact.assignedUser.name}
+                  <ContactHoverCard
+                    contact={{
+                      firstName: contact.firstName,
+                      lastName: contact.lastName,
+                      primaryEmail: contact.primaryEmail,
+                      primaryPhone: contact.primaryPhone,
+                      primaryAddress: contact.primaryAddress,
+                      leadStatus: contact.leadStatus,
+                      assignedUser: contact.assignedUser,
+                      createdAt: contact.createdAt,
+                      profileImage: contact.profileImage,
+                    }}
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {contact.firstName} {contact.lastName}
                       </div>
-                    )}
-                  </div>
+                      {contact.assignedUser && (
+                        <div className="text-sm text-muted-foreground">
+                          Rep: {contact.assignedUser.name}
+                        </div>
+                      )}
+                    </div>
+                  </ContactHoverCard>
                 </TableCell>
                 <TableCell>
                   <Badge className={getStatusColor(contact.leadStatus)}>
