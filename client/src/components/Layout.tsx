@@ -17,7 +17,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   // Fetch current company data
-  const { data: currentCompany } = useQuery({
+  const { data: currentCompany } = useQuery<{ id: number; name: string; subdomain: string; settings: any }>({
     queryKey: ["/api/companies/current"],
     enabled: !!user,
   });
@@ -31,8 +31,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { name: "Products", href: "/products", icon: Package },
   ];
 
+  // Add Companies menu item for SUPER_ADMIN and MULTI_ADMIN
+  if (["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)) {
+    navigation.push({ name: "Companies", href: "/companies", icon: Building2 });
+  }
+
   // Show additional menu items for admin roles
-  if (["SUPER_ADMIN", "MULTI_ADMIN", "ADMIN"].includes(user.role as UserRole)) {
+  if (["SUPER_ADMIN", "MULTI_ADMIN", "ADMIN"].includes(user.role)) {
     navigation.push({ name: "Users", href: "/users", icon: Users });
     navigation.push({ name: "Settings", href: "/settings", icon: Settings });
   }

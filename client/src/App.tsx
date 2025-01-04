@@ -14,6 +14,7 @@ import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
+import { Companies } from "@/pages/Companies";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
@@ -47,6 +48,7 @@ function App() {
         <Route path="/templates" component={Templates} />
         <Route path="/users" component={Users} />
         <Route path="/permissions" component={AdminPermissions} />
+        <Route path="/companies" component={Companies} />
       </Switch>
     </Layout>
   );
