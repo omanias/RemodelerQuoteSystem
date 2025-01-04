@@ -37,9 +37,9 @@ interface Quote {
   number: string;
   clientName: string;
   status: typeof QuoteStatus[keyof typeof QuoteStatus];
-  total: number;
-  downPaymentValue: number | null;
-  remainingBalance: number | null;
+  total: string | number;
+  downPaymentValue: string | number | null;
+  remainingBalance: string | number | null;
   createdAt: string;
 }
 
@@ -59,9 +59,12 @@ interface User {
 }
 
 // Helper function to safely format monetary values
-function formatMoney(value: number | null): string {
-  if (value === null || typeof value !== 'number') return '-';
-  return value.toLocaleString('en-US', {
+function formatMoney(value: string | number | null): string {
+  if (value === null) return '-';
+  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(numericValue)) return '-';
+  return numericValue.toLocaleString('en-US', {
+    style: 'decimal',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
