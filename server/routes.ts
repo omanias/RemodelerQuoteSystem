@@ -349,6 +349,9 @@ export function registerRoutes(app: Express): Server {
         discountCode,
         downPaymentType,
         downPaymentValue,
+        taxRate,
+        taxAmount,
+        remainingBalance
       } = req.body;
 
       // First verify quote exists and belongs to company
@@ -365,28 +368,38 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Quote not found" });
       }
 
+      // Parse numeric values with fallback to existing values
+      const parseNumeric = (value: any, fallback: number | null = null) => {
+        if (value === undefined || value === '') return fallback;
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? fallback : parsed;
+      };
+
       // Update the quote
       const [updatedQuote] = await db
         .update(quotes)
         .set({
-          contactId: contactId ? parseInt(contactId) : null,
-          templateId: templateId ? parseInt(templateId) : null,
-          categoryId: categoryId ? parseInt(categoryId) : null,
-          clientName,
-          clientEmail,
-          clientPhone,
-          clientAddress,
-          status,
-          content,
-          subtotal,
-          total,
-          notes,
-          paymentMethod,
-          discountType,
-          discountValue,
-          discountCode,
-          downPaymentType,
-          downPaymentValue,
+          contactId: contactId ? parseInt(contactId) : existingQuote.contactId,
+          templateId: templateId ? parseInt(templateId) : existingQuote.templateId,
+          categoryId: categoryId ? parseInt(categoryId) : existingQuote.categoryId,
+          clientName: clientName || existingQuote.clientName,
+          clientEmail: clientEmail || existingQuote.clientEmail,
+          clientPhone: clientPhone || existingQuote.clientPhone,
+          clientAddress: clientAddress || existingQuote.clientAddress,
+          status: status || existingQuote.status,
+          content: content || existingQuote.content,
+          subtotal: parseNumeric(subtotal, existingQuote.subtotal),
+          total: parseNumeric(total, existingQuote.total),
+          notes: notes || existingQuote.notes,
+          paymentMethod: paymentMethod || existingQuote.paymentMethod,
+          discountType: discountType || existingQuote.discountType,
+          discountValue: parseNumeric(discountValue, existingQuote.discountValue),
+          discountCode: discountCode || existingQuote.discountCode,
+          downPaymentType: downPaymentType || existingQuote.downPaymentType,
+          downPaymentValue: parseNumeric(downPaymentValue, existingQuote.downPaymentValue),
+          taxRate: parseNumeric(taxRate, existingQuote.taxRate),
+          taxAmount: parseNumeric(taxAmount, existingQuote.taxAmount),
+          remainingBalance: parseNumeric(remainingBalance, existingQuote.remainingBalance),
           userId,
           updatedAt: new Date(),
         })
@@ -1004,7 +1017,6 @@ export function registerRoutes(app: Express): Server {
           eq(quotes.companyId, req.company!.id)
         ))
         .limit(1);
-
 
 
       if (!quote) {
