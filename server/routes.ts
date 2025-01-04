@@ -324,6 +324,101 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add PUT endpoint for updating quotes
+  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
+      const {
+        contactId,
+        templateId,
+        categoryId,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
+        status,
+        content,
+        subtotal,
+        total,
+        notes,
+        paymentMethod,
+        discountType,
+        discountValue,
+        discountCode,
+        downPaymentType,
+        downPaymentValue,
+      } = req.body;
+
+      // First verify quote exists and belongs to company
+      const [existingQuote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Update the quote
+      const [updatedQuote] = await db
+        .update(quotes)
+        .set({
+          contactId: contactId ? parseInt(contactId) : null,
+          templateId: templateId ? parseInt(templateId) : null,
+          categoryId: categoryId ? parseInt(categoryId) : null,
+          clientName,
+          clientEmail,
+          clientPhone,
+          clientAddress,
+          status,
+          content,
+          subtotal,
+          total,
+          notes,
+          paymentMethod,
+          discountType,
+          discountValue,
+          discountCode,
+          downPaymentType,
+          downPaymentValue,
+          userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(quotes.id, quoteId))
+        .returning();
+
+      // Get full quote data with relations
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, updatedQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(quoteWithRelations);
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productsData = await db.query.products.findMany({
