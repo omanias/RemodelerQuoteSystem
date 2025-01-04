@@ -370,10 +370,32 @@ export function registerRoutes(app: Express): Server {
 
       // Parse numeric values with fallback to existing values
       const parseNumeric = (value: any, fallback: number | null = null) => {
-        if (value === undefined || value === '') return fallback;
-        const parsed = parseFloat(value);
+        if (value === undefined || value === null || value === '') return fallback;
+        const parsed = parseFloat(value.toString());
         return isNaN(parsed) ? fallback : parsed;
       };
+
+      // If status has changed, create a note
+      if (status && status !== existingQuote.status) {
+        await db.insert(notes).values({
+          content: `Quote status changed from ${existingQuote.status} to ${status}`,
+          userId,
+          quoteId,
+          contactId: existingQuote.contactId,
+          type: "QUOTE" as const
+        });
+      }
+
+      // If notes field has changed, create a note
+      if (notes && notes !== existingQuote.notes) {
+        await db.insert(notes).values({
+          content: notes,
+          userId,
+          quoteId,
+          contactId: existingQuote.contactId,
+          type: "QUOTE" as const
+        });
+      }
 
       // Update the quote
       const [updatedQuote] = await db
@@ -955,6 +977,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // First verify quote belongs to company
   app.get("/api/quotes/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
@@ -985,8 +1008,7 @@ export function registerRoutes(app: Express): Server {
               email: true,
               role: true,
             }
-          },
-          contact: true
+          }
         },
         orderBy: (notesTable, { desc }) => [desc(notesTable.createdAt)],
       });

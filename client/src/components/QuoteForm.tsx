@@ -94,8 +94,6 @@ interface SelectedProduct {
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
   const [selectedProducts, setSelectedProducts] = useState(() => {
     if (quote?.content?.products) {
       return quote.content.products.map((p: any) => ({
@@ -192,7 +190,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   }, [selectedCategoryId, templates, form]);
 
   const parseNumber = (value: any): number => {
-    const parsed = parseFloat(value?.toString() || "0");
+    if (value === undefined || value === null || value === '') return 0;
+    const parsed = parseFloat(value.toString());
     return isNaN(parsed) ? 0 : parsed;
   };
 
@@ -276,6 +275,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
       const subtotal = calculateSubtotal();
+      const discount = calculateDiscount();
+      const tax = calculateTax();
 
       const formattedProducts = selectedProducts.map(item => {
         const product = products.find(p => p.id === item.productId);
@@ -283,50 +284,52 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           id: item.productId,
           quantity: item.quantity,
           name: product?.name,
-          price: parseFloat(item.unitPrice.toString()),
+          price: parseNumber(item.unitPrice),
           variation: item.variation,
           unit: product?.unit
         };
       });
+
+      const quoteData = {
+        contactId: parseInt(data.contactId),
+        categoryId: parseInt(data.categoryId),
+        templateId: parseInt(data.templateId),
+        clientName: data.clientName,
+        clientEmail: data.clientEmail,
+        clientPhone: data.clientPhone,
+        clientAddress: data.clientAddress,
+        status: data.status,
+        paymentMethod: data.paymentMethod,
+        subtotal: parseNumber(subtotal),
+        total: parseNumber(total),
+        downPaymentValue: parseNumber(downPayment),
+        remainingBalance: parseNumber(remainingBalance),
+        discountType: data.discountType,
+        discountValue: parseNumber(data.discountValue),
+        discountCode: data.discountCode,
+        taxRate: parseNumber(data.taxRate),
+        taxAmount: parseNumber(tax),
+        downPaymentType: data.downPaymentType,
+        notes: data.notes,
+        content: {
+          products: formattedProducts,
+          calculations: {
+            subtotal: parseNumber(subtotal),
+            total: parseNumber(total),
+            downPayment: parseNumber(downPayment),
+            remainingBalance: parseNumber(remainingBalance),
+            discount: parseNumber(discount),
+            tax: parseNumber(tax)
+          },
+        },
+      };
 
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          contactId: parseInt(data.contactId),
-          categoryId: parseInt(data.categoryId),
-          templateId: parseInt(data.templateId),
-          clientName: data.clientName,
-          clientEmail: data.clientEmail,
-          clientPhone: data.clientPhone,
-          clientAddress: data.clientAddress,
-          selectedProducts: formattedProducts,
-          subtotal,
-          total,
-          downPaymentValue: downPayment,
-          remainingBalance,
-          discountType: data.discountType,
-          discountValue: parseFloat(data.discountValue || "0"),
-          discountCode: data.discountCode,
-          taxRate: parseFloat(data.taxRate || "0"),
-          status: data.status,
-          paymentMethod: data.paymentMethod,
-          downPaymentType: data.downPaymentType,
-          notes: data.notes,
-          content: {
-            products: formattedProducts,
-            calculations: {
-              subtotal,
-              total,
-              downPayment,
-              remainingBalance,
-              discount: calculateDiscount(),
-              tax: calculateTax()
-            },
-          },
-        }),
+        body: JSON.stringify(quoteData),
         credentials: "include",
       });
 
@@ -339,6 +342,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      if (quote?.id) {
+        queryClient.invalidateQueries({ queryKey: [`/api/quotes/${quote.id}`] });
+      }
       toast({
         title: "Success",
         description: quote ? "Quote updated successfully" : "Quote created successfully",
@@ -375,6 +381,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
       const subtotal = calculateSubtotal();
+      const discount = calculateDiscount();
+      const tax = calculateTax();
 
       const formattedProducts = selectedProducts.map(item => {
         const product = products.find(p => p.id === item.productId);
@@ -382,7 +390,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           id: item.productId,
           quantity: item.quantity,
           name: product?.name,
-          price: parseFloat(item.unitPrice.toString()),
+          price: parseNumber(item.unitPrice),
           variation: item.variation,
           unit: product?.unit
         };
@@ -404,14 +412,15 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           clientPhone: data.clientPhone,
           clientAddress: data.clientAddress,
           selectedProducts: formattedProducts,
-          subtotal,
-          total,
-          downPaymentValue: downPayment,
-          remainingBalance,
+          subtotal: parseNumber(subtotal),
+          total: parseNumber(total),
+          downPaymentValue: parseNumber(downPayment),
+          remainingBalance: parseNumber(remainingBalance),
           discountType: data.discountType,
-          discountValue: parseFloat(data.discountValue || "0"),
+          discountValue: parseNumber(data.discountValue),
           discountCode: data.discountCode,
-          taxRate: parseFloat(data.taxRate || "0"),
+          taxRate: parseNumber(data.taxRate),
+          taxAmount: parseNumber(tax),
           status: data.status,
           paymentMethod: data.paymentMethod,
           downPaymentType: data.downPaymentType,
@@ -419,12 +428,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           content: {
             products: formattedProducts,
             calculations: {
-              subtotal,
-              total,
-              downPayment,
-              remainingBalance,
-              discount: calculateDiscount(),
-              tax: calculateTax()
+              subtotal: parseNumber(subtotal),
+              total: parseNumber(total),
+              downPayment: parseNumber(downPayment),
+              remainingBalance: parseNumber(remainingBalance),
+              discount: parseNumber(discount),
+              tax: parseNumber(tax)
             },
           },
         }),
@@ -972,8 +981,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 ? "Updating..."
                 : "Creating..."
               : quote
-              ? "Update Quote"
-              : "Create Quote"}
+                ? "Update Quote"
+                : "Create Quote"}
           </Button>
         </div>
       </form>
