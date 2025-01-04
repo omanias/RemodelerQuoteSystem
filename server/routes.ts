@@ -1,13 +1,14 @@
 import type { Express } from "express";
 import { db } from "@db";
 import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus } from "@db/schema";
-import { eq, and, or, inArray } from "drizzle-orm";
+import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } from "./middleware/company";
+import { count } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -499,7 +500,93 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update users endpoint to include proper company filtering (duplicate removed)
+  // Add to existing routes inside registerRoutes function
+  app.get("/api/admin/company-metrics", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can access this endpoint
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user || !["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      // For MULTI_ADMIN, only return metrics for accessible companies
+      const companyQuery = user.role === "SUPER_ADMIN"
+        ? db.select().from(companies)
+        : db.select()
+            .from(companies)
+            .innerJoin(
+              companyAccess,
+              and(
+                eq(companyAccess.companyId, companies.id),
+                eq(companyAccess.userId, user.id)
+              )
+            );
+
+      const companiesData = await companyQuery;
+
+      // Gather metrics for each company
+      const companyMetrics = await Promise.all(
+        companiesData.map(async (company) => {
+          // Get total users
+          const [{ value: userCount }] = await db
+            .select({ value: count() })
+            .from(users)
+            .where(eq(users.companyId, company.id));
+
+          // Get active users (users who have created quotes in the last 30 days)
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+          const [{ value: activeUsers }] = await db
+            .select({ value: count(users.id, { distinct: true }) })
+            .from(users)
+            .innerJoin(quotes, eq(quotes.userId, users.id))
+            .where(
+              and(
+                eq(users.companyId, company.id),
+                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
+              )
+            );
+
+          // Get total quotes
+          const [{ value: quoteCount }] = await db
+            .select({ value: count() })
+            .from(quotes)
+            .where(eq(quotes.companyId, company.id));
+
+          // Get recent quotes (last 30 days)
+          const [{ value: recentQuotes }] = await db
+            .select({ value: count() })
+            .from(quotes)
+            .where(
+              and(
+                eq(quotes.companyId, company.id),
+                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
+              )
+            );
+
+          return {
+            id: company.id,
+            name: company.name,
+            userCount,
+            activeUsers,
+            quoteCount,
+            recentQuotes,
+          };
+        })
+      );
+
+      res.json(companyMetrics);
+    } catch (error) {
+      console.error('Error fetching company metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   return httpServer;
 }

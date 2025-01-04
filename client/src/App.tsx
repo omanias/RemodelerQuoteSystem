@@ -15,6 +15,7 @@ import { AdminPermissions } from "@/pages/AdminPermissions";
 import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 import { Companies } from "@/pages/Companies";
+import { SuperAdminDashboard } from "@/pages/SuperAdminDashboard";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
@@ -33,11 +34,16 @@ function App() {
     return <Login />;
   }
 
+  // For SUPER_ADMIN and MULTI_ADMIN, show super admin dashboard as home
+  const homePage = ["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)
+    ? SuperAdminDashboard
+    : Dashboard;
+
   // Show main application once authenticated
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Dashboard} />
+        <Route path="/" component={homePage} />
         <Route path="/quotes" component={Quotes} />
         <Route path="/quotes/new" component={QuoteDetail} />
         <Route path="/quotes/:id" component={QuoteDetail} />
