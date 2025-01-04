@@ -24,6 +24,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
+// Define types for the note
+interface Note {
+  id: number;
+  content: string;
+  contactId: number;
+  userId: number;
+  type: 'CONTACT' | 'QUOTE';
+  quoteId?: number;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+}
+
 const contactFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -76,7 +94,8 @@ export function ContactDetail() {
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to create contact');
       }
 
       return response.json();
@@ -109,7 +128,8 @@ export function ContactDetail() {
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update contact');
       }
 
       return response.json();
@@ -158,7 +178,7 @@ export function ContactDetail() {
   };
 
   // Add notes query
-  const { data: notes = [], isLoading: isLoadingNotes } = useQuery({
+  const { data: notes = [], isLoading: isLoadingNotes } = useQuery<Note[]>({
     queryKey: [`/api/contacts/${id}/notes`],
     enabled: !!id
   });
@@ -175,7 +195,8 @@ export function ContactDetail() {
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add note');
       }
 
       return response.json();
@@ -580,7 +601,7 @@ export function ContactDetail() {
                   <p className="text-muted-foreground">No notes available</p>
                 ) : (
                   <div className="space-y-4">
-                    {notes.map((note:any) => (
+                    {notes.map((note) => (
                       <div
                         key={note.id}
                         className="flex flex-col space-y-2 p-4 border rounded-lg"
@@ -589,7 +610,7 @@ export function ContactDetail() {
                           <div className="flex items-center space-x-2">
                             <Avatar>
                               <AvatarFallback>
-                                {note.user.name.split(' ').map(n => n[0]).join('')}
+                                {note.user.name.split(' ').map((n) => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div>
