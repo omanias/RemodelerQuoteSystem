@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, FileText, Package,
   LogOut, Settings, Users, UserCircle2,
-  Building2
+  Building2, Share2
 } from "lucide-react";
 
 type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
@@ -29,6 +29,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { name: "Quotes", href: "/quotes", icon: FileText },
     { name: "Contacts", href: "/contacts", icon: UserCircle2 },
     { name: "Products", href: "/products", icon: Package },
+    { name: "Workflows", href: "/workflows", icon: Share2 },
   ];
 
   // Add Companies menu item for SUPER_ADMIN and MULTI_ADMIN

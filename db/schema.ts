@@ -82,6 +82,33 @@ export const PermissionType = {
   DELETE: 'DELETE'
 } as const;
 
+// Add new workflow-related enums
+export const WorkflowTriggerType = {
+  QUOTE_CREATED: 'QUOTE_CREATED',
+  QUOTE_UPDATED: 'QUOTE_UPDATED',
+  QUOTE_STATUS_CHANGED: 'QUOTE_STATUS_CHANGED',
+  CONTACT_CREATED: 'CONTACT_CREATED',
+  CONTACT_UPDATED: 'CONTACT_UPDATED',
+  LEAD_STATUS_CHANGED: 'LEAD_STATUS_CHANGED',
+  TASK_CREATED: 'TASK_CREATED',
+  TASK_COMPLETED: 'TASK_COMPLETED'
+} as const;
+
+export const WorkflowActionType = {
+  SEND_EMAIL: 'SEND_EMAIL',
+  CREATE_TASK: 'CREATE_TASK',
+  UPDATE_LEAD_STATUS: 'UPDATE_LEAD_STATUS',
+  UPDATE_QUOTE_STATUS: 'UPDATE_QUOTE_STATUS',
+  ASSIGN_USER: 'ASSIGN_USER',
+  CREATE_NOTE: 'CREATE_NOTE'
+} as const;
+
+export const WorkflowStatus = {
+  ACTIVE: 'ACTIVE',
+  INACTIVE: 'INACTIVE',
+  DRAFT: 'DRAFT'
+} as const;
+
 // Tables
 export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
@@ -322,6 +349,60 @@ export const contactPhotos = pgTable("contact_photos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Add new workflow-related tables
+export const workflows = pgTable("workflows", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().$type<keyof typeof WorkflowStatus>(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
+  createdBy: integer("created_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowTriggers = pgTable("workflow_triggers", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  triggerType: text("trigger_type").notNull().$type<keyof typeof WorkflowTriggerType>(),
+  conditions: jsonb("conditions"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowActions = pgTable("workflow_actions", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  actionType: text("action_type").notNull().$type<keyof typeof WorkflowActionType>(),
+  config: jsonb("config").notNull(),
+  order: integer("order").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowExecutions = pgTable("workflow_executions", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  triggerId: integer("trigger_id")
+    .references(() => workflowTriggers.id)
+    .notNull(),
+  status: text("status").notNull(),
+  error: text("error"),
+  metadata: jsonb("metadata"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 // Add notes table after contactPhotos and before companyAccess
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
@@ -494,6 +575,46 @@ export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   }),
 }));
 
+// Add workflow relations
+export const workflowsRelations = relations(workflows, ({ many, one }) => ({
+  company: one(companies, {
+    fields: [workflows.companyId],
+    references: [companies.id],
+  }),
+  createdByUser: one(users, {
+    fields: [workflows.createdBy],
+    references: [users.id],
+  }),
+  triggers: many(workflowTriggers),
+  actions: many(workflowActions),
+  executions: many(workflowExecutions),
+}));
+
+export const workflowTriggersRelations = relations(workflowTriggers, ({ one }) => ({
+  workflow: one(workflows, {
+    fields: [workflowTriggers.workflowId],
+    references: [workflows.id],
+  }),
+}));
+
+export const workflowActionsRelations = relations(workflowActions, ({ one }) => ({
+  workflow: one(workflows, {
+    fields: [workflowActions.workflowId],
+    references: [workflows.id],
+  }),
+}));
+
+export const workflowExecutionsRelations = relations(workflowExecutions, ({ one }) => ({
+  workflow: one(workflows, {
+    fields: [workflowExecutions.workflowId],
+    references: [workflows.id],
+  }),
+  trigger: one(workflowTriggers, {
+    fields: [workflowExecutions.triggerId],
+    references: [workflowTriggers.id],
+  }),
+}));
+
 // Add notes relations after contactPhotosRelations
 export const notesRelations = relations(notes, ({ one }) => ({
   contact: one(contacts, {
@@ -567,6 +688,16 @@ export type NewCompanyAccess = typeof companyAccess.$inferInsert;
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 
+// Add new types for workflows
+export type Workflow = typeof workflows.$inferSelect;
+export type NewWorkflow = typeof workflows.$inferInsert;
+export type WorkflowTrigger = typeof workflowTriggers.$inferSelect;
+export type NewWorkflowTrigger = typeof workflowTriggers.$inferInsert;
+export type WorkflowAction = typeof workflowActions.$inferSelect;
+export type NewWorkflowAction = typeof workflowActions.$inferInsert;
+export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
+export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
+
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
@@ -600,3 +731,13 @@ export const selectCompanyAccessSchema = createSelectSchema(companyAccess);
 // Add Note schemas at the end of the schemas section
 export const insertNoteSchema = createInsertSchema(notes);
 export const selectNoteSchema = createSelectSchema(notes);
+
+// Add Zod schemas for workflows
+export const insertWorkflowSchema = createInsertSchema(workflows);
+export const selectWorkflowSchema = createSelectSchema(workflows);
+export const insertWorkflowTriggerSchema = createInsertSchema(workflowTriggers);
+export const selectWorkflowTriggerSchema = createSelectSchema(workflowTriggers);
+export const insertWorkflowActionSchema = createInsertSchema(workflowActions);
+export const selectWorkflowActionSchema = createSelectSchema(workflowActions);
+export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutions);
+export const selectWorkflowExecutionSchema = createSelectSchema(workflowExecutions);
