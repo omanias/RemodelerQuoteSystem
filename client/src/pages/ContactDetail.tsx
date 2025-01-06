@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 // Define types for the note
 interface Note {
@@ -229,26 +230,88 @@ export function ContactDetail() {
     noteForm.reset();
   };
 
+  // Add delete contact mutation
+  const deleteContact = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/contacts/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to delete contact');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/contacts'] });
+      toast({
+        title: "Success",
+        description: "Contact deleted successfully",
+      });
+      navigate('/contacts');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+
   if (isLoadingContact) {
     return <div>Loading...</div>;
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/contacts">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
-          </h1>
-          <p className="text-muted-foreground">
-            {contact ? contact.primaryEmail : 'Create a new contact'}
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/contacts">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {contact ? `${contact.firstName} ${contact.lastName}` : 'New Contact'}
+            </h1>
+            <p className="text-muted-foreground">
+              {contact ? contact.primaryEmail : 'Create a new contact'}
+            </p>
+          </div>
         </div>
+
+        {contact && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="icon">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete the contact
+                  and all associated data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteContact.mutate()}>
+                  Delete Contact
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">

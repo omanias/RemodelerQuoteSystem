@@ -548,6 +548,41 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Delete contact
+  app.delete("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify contact exists and belongs to company
+      const [existingContact] = await db
+        .select()
+        .from(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingContact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Delete the contact (related records will be deleted via CASCADE)
+      await db
+        .delete(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, companyId)
+        ));
+
+      console.log(`Contact ${contactId} successfully deleted for company ${companyId}`);
+      res.json({ message: "Contact deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
@@ -962,8 +997,7 @@ export function registerRoutes(app: Express): Server {
       const companyId = req.company!.id;
 
       // First verify contact belongs to company
-      const [contact] = await db
-        .select()
+      const [contact] = await db        .select()
         .from(contacts)
         .where(and(
           eq(contacts.id, contactId),
