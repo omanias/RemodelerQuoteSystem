@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Building2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useState } from "react";
 
 const companySettingsSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -48,6 +49,7 @@ type CompanySettingsValues = z.infer<typeof companySettingsSchema>;
 export function CompanySettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const { data: company, isLoading } = useQuery({
     queryKey: ["/api/companies/current"],
@@ -89,6 +91,7 @@ export function CompanySettings() {
       const response = await fetch("/api/companies/current", {
         method: "PUT",
         body: formData,
+        credentials: "include"
       });
 
       if (!response.ok) {
@@ -104,6 +107,8 @@ export function CompanySettings() {
         title: "Success",
         description: "Company settings updated successfully",
       });
+      // Clear preview after successful upload
+      setPreviewImage(null);
     },
     onError: (error: Error) => {
       toast({
@@ -117,7 +122,13 @@ export function CompanySettings() {
   const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setPreviewImage(previewUrl);
       form.setValue("logo", file);
+
+      // Cleanup preview URL when component unmounts
+      return () => URL.revokeObjectURL(previewUrl);
     }
   };
 
@@ -131,10 +142,11 @@ export function CompanySettings() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" encType="multipart/form-data">
         <div className="flex items-center gap-6">
           <Avatar className="h-24 w-24">
-            <AvatarImage src={company?.logo} alt={company?.name} />
+            {/* Show preview image if available, otherwise show company logo, fallback to icon */}
+            <AvatarImage src={previewImage || company?.logo} alt={company?.name} />
             <AvatarFallback>
               <Building2 className="h-12 w-12" />
             </AvatarFallback>
