@@ -312,14 +312,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         paymentMethod: data.paymentMethod,
         subtotal: parseNumber(subtotal),
         total: parseNumber(total),
-        downPaymentValue: parseNumber(downPayment),
+        downPaymentType: data.downPaymentType,
+        downPaymentValue: parseNumber(data.downPaymentValue),
         remainingBalance: parseNumber(remainingBalance),
         discountType: data.discountType,
         discountValue: parseNumber(data.discountValue),
         discountCode: data.discountCode,
         taxRate: parseNumber(data.taxRate),
         taxAmount: parseNumber(tax),
-        downPaymentType: data.downPaymentType,
         notes: data.notes,
         content: {
           products: formattedProducts,
@@ -1008,7 +1008,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
         {status === QuoteStatus.ACCEPTED && !quote?.signature && (
           <SignatureCanvas
-            isOpen={showSignature}            onClose={() => setShowSignature(false)}
+            isOpen={showSignature}
+            onClose={() => setShowSignature(false)}
             onSave={handleSignatureSave}
             title="Sign Quote"
             description="Please sign below to accept this quote. Your signature will be recorded with a timestamp and other verification data."
@@ -1020,9 +1021,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             <CardContent className="pt-6">
               <h3 className="font-semibold mb-2">Signature Information</h3>
               <div className="space-y-2">
-                <img 
-                  src={quote.signature.data} 
-                  alt="Signature" 
+                <img
+                  src={quote.signature.data}
+                  alt="Signature"
                   className="border rounded p-2 max-w-md"
                 />
                 <p className="text-sm text-muted-foreground">

@@ -409,6 +409,7 @@ export const quotes = pgTable("quotes", {
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
   taxRate: decimal("tax_rate", { precision: 10, scale: 2 }),
   remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
+  paymentMethod: text("payment_method"),
   notes: text("notes"),
   userId: integer("user_id")
     .references(() => users.id)
