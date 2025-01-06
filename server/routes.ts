@@ -993,10 +993,9 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.get("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+  app.get("/api/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const contactId = parseInt(reqparams.id);
-      const companyId = req.company!.id;
+      const contactId = parseInt(req.paramsid);      const companyId = req.company!.id;
 
       // First verify contact belongs to company
       const [contact] = await db        .select()
@@ -1341,29 +1340,32 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Create new contact
   app.post("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const {
         firstName,
         lastName,
         primaryEmail,
-        secondaryEmail,
         primaryPhone,
-        mobilePhone,
+        primaryAddress,
         leadStatus,
         leadSource,
         propertyType,
-        primaryAddress,
-        projectAddress,
         projectTimeline,
         budgetRangeMin,
         budgetRangeMax,
         productInterests,
-        notes,
         assignedUserId,
-        companyId,
+        categoryId,
       } = req.body;
+
+      // Validate required fields
+      if (!firstName || !lastName || !primaryEmail || !primaryPhone || !primaryAddress) {
+        return res.status(400).json({ 
+          message: "Missing required fields", 
+          required: ["firstName", "lastName", "primaryEmail", "primaryPhone", "primaryAddress"]
+        });
+      }
 
       // Create the contact
       const [newContact] = await db
@@ -1372,21 +1374,19 @@ export function registerRoutes(app: Express): Server {
           firstName,
           lastName,
           primaryEmail,
-          secondaryEmail: secondaryEmail || null,
           primaryPhone,
-          mobilePhone: mobilePhone || null,
-          leadStatus: leadStatus as keyof typeof LeadStatus,
-          leadSource: leadSource as keyof typeof LeadSource,
-          propertyType: propertyType as keyof typeof PropertyType,
           primaryAddress,
-          projectAddress: projectAddress || null,
+          leadStatus: leadStatus || LeadStatus.NEW,
+          leadSource: leadSource || LeadSource.WEBSITE,
+          propertyType: propertyType || PropertyType.SINGLE_FAMILY,
           projectTimeline: projectTimeline || null,
           budgetRangeMin: budgetRangeMin ? parseFloat(budgetRangeMin) : null,
           budgetRangeMax: budgetRangeMax ? parseFloat(budgetRangeMax) : null,
-          productInterests,
+          productInterests: productInterests || "None specified",
           assignedUserId: assignedUserId || req.session.userId,
+          categoryId: categoryId || null,
+          tags: [], // Initialize with empty array
           companyId: req.company!.id,
-          notes: notes || null,
         })
         .returning();
 
@@ -1402,7 +1402,7 @@ export function registerRoutes(app: Express): Server {
               role: true,
             }
           },
-          category: true
+          category: true,
         },
         limit: 1
       });
