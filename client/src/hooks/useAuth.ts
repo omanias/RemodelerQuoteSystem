@@ -9,7 +9,7 @@ export type AuthUser = {
   role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
   companyId: number;
   status: 'ACTIVE' | 'INACTIVE';
-  companyName?: string; // Added company name
+  companyName?: string;
 };
 
 type LoginCredentials = {
@@ -21,23 +21,36 @@ type LoginCredentials = {
 export function useAuth() {
   const [, setLocation] = useLocation();
 
+  // Enhanced auth state management with proper error handling
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/user", {
-        credentials: "include",
-      });
+      try {
+        const res = await fetch("/api/auth/user", {
+          credentials: "include",
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+        });
 
-      if (!res.ok) {
-        if (res.status === 401) {
-          return null;
+        if (!res.ok) {
+          if (res.status === 401) {
+            return null;
+          }
+          throw new Error(await res.text());
         }
-        throw new Error(await res.text());
-      }
 
-      return res.json() as Promise<AuthUser>;
+        return res.json() as Promise<AuthUser>;
+      } catch (error) {
+        console.error('Auth check error:', error);
+        return null;
+      }
     },
-    retry: false
+    retry: false,
+    gcTime: 0, // Disable garbage collection
+    staleTime: 30000 // Consider data stale after 30 seconds
   });
 
   const loginMutation = useMutation({
@@ -48,7 +61,11 @@ export function useAuth() {
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
         body: JSON.stringify(credentials),
         credentials: "include",
       });
@@ -72,6 +89,10 @@ export function useAuth() {
       const res = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
       });
 
       if (!res.ok) {

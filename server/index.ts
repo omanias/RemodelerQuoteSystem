@@ -1,10 +1,60 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import session from "express-session";
+import MemoryStore from "memorystore";
+import passport from "passport";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Set up session store
+const MemoryStoreSession = MemoryStore(session);
+
+// Enhanced session configuration for production
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  store: new MemoryStoreSession({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  }),
+  name: 'sessionId', // Custom cookie name
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // Only send cookies over HTTPS in production
+    httpOnly: true,
+    sameSite: 'lax' as const, // Using lax for better compatibility while maintaining security
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    path: '/'
+  }
+};
+
+// Trust proxies in production
+if (app.get("env") === "production") {
+  app.set("trust proxy", 1);
+  // Ensure cookie secure flag is set in production
+  sessionConfig.cookie.secure = true;
+}
+
+// Initialize session middleware with appropriate settings
+app.use(session(sessionConfig));
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Enhanced security headers for production
+app.use((req, res, next) => {
+  // Security headers
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'X-XSS-Protection': '1; mode=block',
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+    'Cache-Control': 'no-store, max-age=0',
+    'Pragma': 'no-cache'
+  });
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -47,17 +97,12 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client
   const PORT = 5000;
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
