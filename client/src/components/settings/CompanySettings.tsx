@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Building2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Company } from "@db/schema";
 
 const companySettingsSchema = z.object({
@@ -19,30 +19,16 @@ const companySettingsSchema = z.object({
   phone: z.string().optional(),
   tollFree: z.string().optional(),
   fax: z.string().optional(),
-  email: z.string().email("Invalid email address").optional(),
-  website: z.string().url("Invalid website URL").optional(),
+  email: z.string().email("Invalid email address").optional().nullable(),
+  website: z.string().url("Invalid website URL").optional().nullable(),
   streetAddress: z.string().optional(),
   suite: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
   zipCode: z.string().optional(),
   taxId: z.string().optional(),
-  businessHours: z.object({
-    monday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    tuesday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    wednesday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    thursday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    friday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    saturday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-    sunday: z.object({ open: z.string().optional(), close: z.string().optional(), closed: z.boolean().optional() }).optional(),
-  }).optional(),
-  socialMedia: z.object({
-    facebook: z.string().url("Invalid Facebook URL").optional(),
-    twitter: z.string().url("Invalid Twitter URL").optional(),
-    linkedin: z.string().url("Invalid LinkedIn URL").optional(),
-    instagram: z.string().url("Invalid Instagram URL").optional(),
-    youtube: z.string().url("Invalid YouTube URL").optional(),
-  }).optional(),
+  businessHours: z.record(z.any()).optional(),
+  socialMedia: z.record(z.string().url().optional()).optional(),
 });
 
 type CompanySettingsValues = z.infer<typeof companySettingsSchema>;
@@ -59,32 +45,58 @@ export function CompanySettings() {
   const form = useForm<CompanySettingsValues>({
     resolver: zodResolver(companySettingsSchema),
     defaultValues: {
-      name: company?.name || "",
-      phone: company?.phone || "",
-      tollFree: company?.tollFree || "",
-      fax: company?.fax || "",
-      email: company?.email || "",
-      website: company?.website || "",
-      streetAddress: company?.streetAddress || "",
-      suite: company?.suite || "",
-      city: company?.city || "",
-      state: company?.state || "",
-      zipCode: company?.zipCode || "",
-      taxId: company?.taxId || "",
-      businessHours: company?.businessHours || {},
-      socialMedia: company?.socialMedia || {},
+      name: "",
+      phone: "",
+      tollFree: "",
+      fax: "",
+      email: "",
+      website: "",
+      streetAddress: "",
+      suite: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      taxId: "",
+      businessHours: {},
+      socialMedia: {},
     },
   });
+
+  // Initialize form with company data when it's available
+  useEffect(() => {
+    if (company) {
+      form.reset({
+        name: company.name || "",
+        phone: company.phone || "",
+        tollFree: company.tollFree || "",
+        fax: company.fax || "",
+        email: company.email || "",
+        website: company.website || "",
+        streetAddress: company.streetAddress || "",
+        suite: company.suite || "",
+        city: company.city || "",
+        state: company.state || "",
+        zipCode: company.zipCode || "",
+        taxId: company.taxId || "",
+        businessHours: company.businessHours || {},
+        socialMedia: company.socialMedia || {},
+      });
+    }
+  }, [company]);
 
   const updateCompany = useMutation({
     mutationFn: async (data: CompanySettingsValues) => {
       const formData = new FormData();
+
+      // Add all form fields to FormData
       Object.entries(data).forEach(([key, value]) => {
         if (key === 'logo' && value instanceof File) {
           formData.append('logo', value);
         } else if (key === 'businessHours' || key === 'socialMedia') {
-          formData.append(key, JSON.stringify(value));
-        } else if (value) {
+          if (value && Object.keys(value).length > 0) {
+            formData.append(key, JSON.stringify(value));
+          }
+        } else if (value !== null && value !== undefined && value !== '') {
           formData.append(key, value.toString());
         }
       });
@@ -108,8 +120,6 @@ export function CompanySettings() {
         title: "Success",
         description: "Company settings updated successfully",
       });
-      // Clear preview after successful upload
-      setPreviewImage(null);
     },
     onError: (error: Error) => {
       toast({
@@ -134,7 +144,6 @@ export function CompanySettings() {
   };
 
   const onSubmit = (data: CompanySettingsValues) => {
-    console.log('Submitting company settings:', data);
     updateCompany.mutate(data);
   };
 
@@ -147,11 +156,16 @@ export function CompanySettings() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" encType="multipart/form-data">
         <div className="flex items-center gap-6">
           <Avatar className="h-24 w-24">
-            {/* Show preview image if available, otherwise show company logo, fallback to icon */}
-            <AvatarImage src={previewImage || company?.logo} alt={company?.name} />
-            <AvatarFallback>
-              <Building2 className="h-12 w-12" />
-            </AvatarFallback>
+            {(previewImage || company?.logo) ? (
+              <AvatarImage 
+                src={previewImage || (company?.logo ? `${company.logo}?${Date.now()}` : undefined)} 
+                alt={company?.name || 'Company Logo'} 
+              />
+            ) : (
+              <AvatarFallback>
+                <Building2 className="h-12 w-12" />
+              </AvatarFallback>
+            )}
           </Avatar>
           <div>
             <Button type="button" variant="outline" onClick={() => document.getElementById("logo-upload")?.click()}>

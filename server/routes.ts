@@ -11,7 +11,8 @@ import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } fro
 import { count } from "drizzle-orm";
 import { setupWebSocket } from "./websocket";
 import multer from "multer";
-import { storage } from "./storage";
+import { storage, UPLOADS_PATH } from "./storage";
+import express from "express";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -47,6 +48,9 @@ declare module 'express-session' {
 const upload = multer({ storage });
 
 export function registerRoutes(app: Express): Server {
+  // Serve uploaded files statically
+  app.use('/uploads', express.static(UPLOADS_PATH));
+
   const httpServer = createServer(app);
 
   // Setup WebSocket server
@@ -817,7 +821,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update current company endpoint
+  // Update company endpoint
   app.put("/api/companies/current", requireAuth, requireCompanyAccess, upload.single('logo'), async (req, res) => {
     try {
       const companyId = req.company!.id;
@@ -839,6 +843,7 @@ export function registerRoutes(app: Express): Server {
       } = req.body;
 
       const logoFile = req.file;
+      console.log('Received logo file:', logoFile);
 
       // Parse JSON strings back to objects
       const parsedBusinessHours = businessHours ? JSON.parse(businessHours) : undefined;
@@ -868,6 +873,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(companies.id, companyId))
         .returning();
 
+      console.log('Updated company:', updatedCompany);
       res.json(updatedCompany);
     } catch (error) {
       console.error('Error updating company:', error);
@@ -974,13 +980,13 @@ export function registerRoutes(app: Express): Server {
       });
 
       res.json(notesData);
-    } catch (error) {
+    } catch(error) {
       console.error('Error fetching contact notes:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
-app.post("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+  app.post("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const contactId = parseInt(req.params.id);
       const companyId = req.company!.id;
