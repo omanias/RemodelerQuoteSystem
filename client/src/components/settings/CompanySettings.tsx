@@ -11,6 +11,7 @@ import { Building2, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState } from "react";
+import type { Company } from "@db/schema";
 
 const companySettingsSchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -51,7 +52,7 @@ export function CompanySettings() {
   const queryClient = useQueryClient();
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
-  const { data: company, isLoading } = useQuery({
+  const { data: company, isLoading } = useQuery<Company>({
     queryKey: ["/api/companies/current"],
   });
 
@@ -133,6 +134,7 @@ export function CompanySettings() {
   };
 
   const onSubmit = (data: CompanySettingsValues) => {
+    console.log('Submitting company settings:', data);
     updateCompany.mutate(data);
   };
 

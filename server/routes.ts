@@ -821,8 +821,28 @@ export function registerRoutes(app: Express): Server {
   app.put("/api/companies/current", requireAuth, requireCompanyAccess, upload.single('logo'), async (req, res) => {
     try {
       const companyId = req.company!.id;
-      const { name } = req.body;
+      const {
+        name,
+        phone,
+        tollFree,
+        fax,
+        email,
+        website,
+        streetAddress,
+        suite,
+        city,
+        state,
+        zipCode,
+        taxId,
+        businessHours,
+        socialMedia
+      } = req.body;
+
       const logoFile = req.file;
+
+      // Parse JSON strings back to objects
+      const parsedBusinessHours = businessHours ? JSON.parse(businessHours) : undefined;
+      const parsedSocialMedia = socialMedia ? JSON.parse(socialMedia) : undefined;
 
       // Update company details
       const [updatedCompany] = await db
@@ -830,17 +850,25 @@ export function registerRoutes(app: Express): Server {
         .set({
           name: name || req.company!.name,
           logo: logoFile ? `/uploads/${logoFile.filename}` : req.company!.logo,
+          phone: phone || null,
+          tollFree: tollFree || null,
+          fax: fax || null,
+          email: email || null,
+          website: website || null,
+          streetAddress: streetAddress || null,
+          suite: suite || null,
+          city: city || null,
+          state: state || null,
+          zipCode: zipCode || null,
+          taxId: taxId || null,
+          businessHours: parsedBusinessHours,
+          socialMedia: parsedSocialMedia,
           updatedAt: new Date(),
         })
         .where(eq(companies.id, companyId))
         .returning();
 
-      res.json({
-        id: updatedCompany.id,
-        name: updatedCompany.name,
-        logo: updatedCompany.logo,
-        settings: updatedCompany.settings
-      });
+      res.json(updatedCompany);
     } catch (error) {
       console.error('Error updating company:', error);
       res.status(500).json({ message: "Server error" });
@@ -853,12 +881,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "No company context found" });
       }
 
-      res.json({
-        id: req.company.id,
-        name: req.company.name,
-        subdomain: req.company.subdomain,
-        settings: req.company.settings
-      });
+      // Get fresh data from database to ensure we have the latest
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, req.company.id))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      res.json(company);
     } catch (error) {
       console.error('Error fetching current company:', error);
       res.status(500).json({ message: "Server error" });
@@ -946,7 +980,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.post("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
+app.post("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const contactId = parseInt(req.params.id);
       const companyId = req.company!.id;
