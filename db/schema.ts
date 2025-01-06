@@ -416,6 +416,16 @@ export const quotes = pgTable("quotes", {
   companyId: integer("company_id")
     .references(() => companies.id, { onDelete: 'cascade' })
     .notNull(),
+  signature: jsonb("signature").$type<{
+    data: string;
+    timestamp: string;
+    metadata: {
+      browserInfo: string;
+      ipAddress: string;
+      signedAt: string;
+      timezone: string;
+    };
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

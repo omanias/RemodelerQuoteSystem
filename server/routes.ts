@@ -464,6 +464,10 @@ export function registerRoutes(app: Express): Server {
         remainingBalance
       } = req.body;
 
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
+      }
+
       // First verify quote exists and belongs to company
       const [existingQuote] = await db
         .select()
@@ -750,7 +754,6 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Server error" });
     }
   });
-
 
 
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -1053,59 +1056,41 @@ export function registerRoutes(app: Express): Server {
   // Modify the quotes creation endpoint to add notes
   app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const { contactId, templateId, categoryId, content, clientName, status } = req.body;
+      const { contactId, templateId, categoryId, content, clientName, status, subtotal, total, notes, signature } = req.body;
       const userId = req.session.userId;
       const companyId = req.company!.id;
 
-      // If creating from contact, get the contact's email
-      let clientEmail = null;
-      if (contactId) {
-        const [contact] = await db
-          .select()
-          .from(contacts)
-          .where(eq(contacts.id, contactId))
-          .limit(1);
-
-        if (contact) {
-          clientEmail = contact.primaryEmail;
-        }
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
       }
 
-      // Generate a quote number (you might want to implement a more sophisticated system)
+      // Generate a unique quote number
       const quoteNumber = `Q${Date.now()}`;
 
-      // Insert the quote
+      // Create the quote
       const [newQuote] = await db
         .insert(quotes)
         .values({
           number: quoteNumber,
-          categoryId,
-          templateId,
-          contactId,
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
+          contactId: contactId ? parseInt(contactId) : null,
           clientName,
-          clientEmail: clientEmail || 'temp@example.com', // Provide a default if not available
-          status,
+          clientEmail: req.body.clientEmail || '',
+          clientPhone: req.body.clientPhone || '',
+          clientAddress: req.body.clientAddress || '',
+          status: status || "DRAFT",
           content,
+          subtotal: parseFloat(subtotal),
+          total: parseFloat(total),
+          notes,
           userId,
           companyId,
-          subtotal: 0, // You'll need to calculate these based on your business logic
-          total: 0,
+          signature,
         })
         .returning();
 
-      // Add a note for the contact when a quote is created
-      if (contactId) {
-        await db
-          .insert(notes)
-          .values({
-            content: `Quote #${quoteNumber} created`,
-            contactId,
-            userId,
-            type: "QUOTE" as const,
-            quoteId: newQuote.id
-          });
-      }
-
+      // Get full quote data with relations
       const [quoteWithRelations] = await db.query.quotes.findMany({
         where: eq(quotes.id, newQuote.id),
         with: {
@@ -1126,99 +1111,99 @@ export function registerRoutes(app: Express): Server {
 
       res.json(quoteWithRelations);
     } catch (error) {
-      console.error('Error in quote creation:', error);
+      console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
-  app.get("/api/admin/company-metrics", requireAuth, async (req, res) => {
+  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      // Only SUPER_ADMIN and MULTI_ADMIN can access this endpoint
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, req.session.userId))
-        .limit(1);
+      const quoteId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
+      const {
+        categoryId,
+        templateId,
+        contactId,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
+        status,
+        content,
+        subtotal,
+        total,
+        notes,
+        signature,
+      } = req.body;
 
-      if (!user || !["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)) {
-        return res.status(403).json({ message: "Insufficient permissions" });
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
       }
 
-      // For MULTI_ADMIN, only return metrics for accessible companies
-      const companyQuery = user.role === "SUPER_ADMIN"
-        ? db.select().from(companies)
-        : db.select()
-          .from(companies)
-          .innerJoin(
-            companyAccess,
-            and(
-              eq(companyAccess.companyId, companies.id),
-              eq(companyAccess.userId, user.id)
-            )
-          );
+      // First verify quote exists and belongs to company
+      const [existingQuote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
+        .limit(1);
 
-      const companiesData = await companyQuery;
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
 
-      // Gather metrics for each company
-      const companyMetrics = await Promise.all(
-        companiesData.map(async (company) => {
-          // Get total users
-          const [{ value: userCount }] = await db
-            .select({ value: count() })
-            .from(users)
-            .where(eq(users.companyId, company.id));
-
-          // Get active users (users who have created quotes in the last 30 days)
-          const thirtyDaysAgo = new Date();
-          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-          const [{ value: activeUsers }] = await db
-            .select({ value: count(users.id, { distinct: true }) })
-            .from(users)
-            .innerJoin(quotes, eq(quotes.userId, users.id))
-            .where(
-              and(
-                eq(users.companyId, company.id),
-                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
-              )
-            );
-
-          // Get total quotes
-          const [{ value: quoteCount }] = await db
-            .select({ value: count() })
-            .from(quotes)
-            .where(eq(quotes.companyId, company.id));
-
-          // Get recent quotes (last 30 days)
-          const [{ value: recentQuotes }] = await db
-            .select({ value: count() })
-            .from(quotes)
-            .where(
-              and(
-                eq(quotes.companyId, company.id),
-                sql`${quotes.createdAt} > ${thirtyDaysAgo}`
-              )
-            );
-
-          return {
-            id: company.id,
-            name: company.name,
-            userCount,
-            activeUsers,
-            quoteCount,
-            recentQuotes,
-          };
+      // Update the quote
+      const [updatedQuote] = await db
+        .update(quotes)
+        .set({
+          categoryId: categoryId ? parseInt(categoryId) : existingQuote.categoryId,
+          templateId: templateId ? parseInt(templateId) : existingQuote.templateId,
+          contactId: contactId ? parseInt(contactId) : existingQuote.contactId,
+          clientName: clientName || existingQuote.clientName,
+          clientEmail: clientEmail || existingQuote.clientEmail,
+          clientPhone: clientPhone || existingQuote.clientPhone,
+          clientAddress: clientAddress || existingQuote.clientAddress,
+          status: status || existingQuote.status,
+          content: content || existingQuote.content,
+          subtotal: subtotal ? parseFloat(subtotal) : existingQuote.subtotal,
+          total: total ? parseFloat(total) : existingQuote.total,
+          notes: notes || existingQuote.notes,
+          signature: signature || existingQuote.signature,
+          userId,
+          updatedAt: new Date(),
         })
-      );
+        .where(eq(quotes.id, quoteId))
+        .returning();
 
-      res.json(companyMetrics);
+      // Get full quote data with relations
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, updatedQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(quoteWithRelations);
     } catch (error) {
-      console.error('Error fetching company metrics:', error);
+      console.error('Error updating quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
-  // First verify quote belongs to company
   app.get("/api/quotes/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
