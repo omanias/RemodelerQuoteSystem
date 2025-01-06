@@ -123,8 +123,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            .fontSize(10)
            .fillColor('#000000')
            .text(header, xPos, tableTop + 5, {
-             width: columnWidths[i],
-             align: i > 1 ? 'right' : 'left'
+              width: columnWidths[i],
+              align: i > 1 ? 'right' : 'left'
            });
         xPos += columnWidths[i];
       });
@@ -139,8 +139,12 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         content = [];
       }
 
+      // Draw table lines
+      doc.lineWidth(0.5)
+         .strokeColor('#e5e7eb');
+
       if (Array.isArray(content)) {
-        content.forEach((item: any) => {
+        content.forEach((item: any, index: number) => {
           // Handle null/undefined values
           const name = item.name || '';
           const description = item.description || '';
@@ -153,9 +157,16 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
             doc.heightOfString(description, { width: columnWidths[1] })
           );
 
+          // Draw row background
+          if (index % 2 === 0) {
+            doc.rect(50, yPos - 5, 495, itemHeight + 10)
+               .fill('#f9fafb');
+          }
+
           xPos = 60;
           doc.font('Helvetica')
              .fontSize(10)
+             .fillColor('#000000')
              .text(name, xPos, yPos, { width: columnWidths[0] });
 
           xPos += columnWidths[0];
@@ -226,22 +237,33 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            ].join('\n'));
       }
 
-      // Terms and Conditions on new page
-      if (quote.template?.termsAndConditions) {
+      // Category and Template Information
+      if (quote.template?.name) {
         doc.addPage()
            .font('Helvetica-Bold')
            .fontSize(14)
-           .text('Terms and Conditions', { align: 'center' })
+           .text('Project Information', { align: 'center' })
            .moveDown()
            .font('Helvetica')
-           .fontSize(10)
-           .text(quote.template.termsAndConditions, {
-             align: 'left',
-             columns: 1,
-             columnGap: 15,
-             height: 700,
-             continued: true
-           });
+           .fontSize(12)
+           .text(`Template: ${quote.template.name}`)
+           .moveDown(0.5);
+
+        if (quote.template?.termsAndConditions) {
+          doc.font('Helvetica-Bold')
+             .fontSize(14)
+             .text('Terms and Conditions', { align: 'center' })
+             .moveDown()
+             .font('Helvetica')
+             .fontSize(10)
+             .text(quote.template.termsAndConditions, {
+               align: 'left',
+               columns: 1,
+               columnGap: 15,
+               height: 700,
+               continued: true
+             });
+        }
       }
 
       // Signature Section
