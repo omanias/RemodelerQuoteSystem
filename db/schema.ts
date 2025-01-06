@@ -203,6 +203,42 @@ export const companies = pgTable("companies", {
   name: text("name").notNull(),
   subdomain: text("subdomain").notNull().unique(),
   logo: text("logo"),
+
+  // Business Contact Information
+  phone: text("phone"),
+  tollFree: text("toll_free"),
+  fax: text("fax"),
+  email: text("email"),
+  website: text("website"),
+
+  // Physical Address
+  streetAddress: text("street_address"),
+  suite: text("suite"),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+
+  // Business Details
+  taxId: text("tax_id"),
+  businessHours: jsonb("business_hours").$type<{
+    monday?: { open?: string; close?: string; closed?: boolean };
+    tuesday?: { open?: string; close?: string; closed?: boolean };
+    wednesday?: { open?: string; close?: string; closed?: boolean };
+    thursday?: { open?: string; close?: string; closed?: boolean };
+    friday?: { open?: string; close?: string; closed?: boolean };
+    saturday?: { open?: string; close?: string; closed?: boolean };
+    sunday?: { open?: string; close?: string; closed?: boolean };
+  }>(),
+
+  // Social Media
+  socialMedia: jsonb("social_media").$type<{
+    facebook?: string;
+    twitter?: string;
+    linkedin?: string;
+    instagram?: string;
+    youtube?: string;
+  }>(),
+
   settings: jsonb("settings").$type<{
     notifications?: {
       email?: {
