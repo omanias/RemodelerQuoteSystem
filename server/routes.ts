@@ -10,6 +10,8 @@ import { promisify } from "util";
 import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } from "./middleware/company";
 import { count } from "drizzle-orm";
 import { setupWebSocket } from "./websocket";
+import multer from "multer";
+import { storage } from "./storage";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -41,6 +43,8 @@ declare module 'express-session' {
     accessibleCompanyIds?: number[];
   }
 }
+
+const upload = multer({ storage });
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -813,7 +817,36 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add current company endpoint
+  // Update current company endpoint
+  app.put("/api/companies/current", requireAuth, requireCompanyAccess, upload.single('logo'), async (req, res) => {
+    try {
+      const companyId = req.company!.id;
+      const { name } = req.body;
+      const logoFile = req.file;
+
+      // Update company details
+      const [updatedCompany] = await db
+        .update(companies)
+        .set({
+          name: name || req.company!.name,
+          logo: logoFile ? `/uploads/${logoFile.filename}` : req.company!.logo,
+          updatedAt: new Date(),
+        })
+        .where(eq(companies.id, companyId))
+        .returning();
+
+      res.json({
+        id: updatedCompany.id,
+        name: updatedCompany.name,
+        logo: updatedCompany.logo,
+        settings: updatedCompany.settings
+      });
+    } catch (error) {
+      console.error('Error updating company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/companies/current", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       if (!req.company) {
@@ -942,8 +975,7 @@ export function registerRoutes(app: Express): Server {
       const [newNote] = await db
         .insert(notes)
         .values({
-          content,
-          contactId,
+          content,          contactId,
           userId,
           type: "CONTACT" as const
         })
