@@ -36,24 +36,34 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       // Professional Header with Logo and Company Info
       const headerTop = 45;
       if (company.logo) {
-        const logoPath = path.join(process.cwd(), 'public', company.logo);
-        if (fs.existsSync(logoPath)) {
-          doc.image(logoPath, 50, headerTop, { width: 150 });
+        try {
+          // Check both absolute path and relative to uploads directory
+          const uploadDir = path.join(process.cwd(), 'uploads');
+          const logoPath = path.join(uploadDir, path.basename(company.logo));
+
+          if (fs.existsSync(logoPath)) {
+            doc.image(logoPath, 50, headerTop, { width: 150 });
+          } else {
+            console.warn(`Company logo not found at path: ${logoPath}`);
+          }
+        } catch (logoError) {
+          console.error('Error loading company logo:', logoError);
+          // Continue without the logo
         }
       }
 
       // Company Info Block
       doc.font('Helvetica-Bold')
          .fontSize(20)
-         .text(company.name, 250, headerTop);
+         .text(company.name || '', 250, headerTop);
 
       // Company Contact Info in a styled block
       const contactInfo = [
         company.streetAddress,
         company.suite ? `Suite ${company.suite}` : null,
-        `${company.city}, ${company.state} ${company.zipCode}`,
+        company.city && company.state ? `${company.city}, ${company.state} ${company.zipCode || ''}` : null,
         '',
-        `Tel: ${company.phone}`,
+        company.phone ? `Tel: ${company.phone}` : null,
         company.tollFree ? `Toll Free: ${company.tollFree}` : null,
         company.fax ? `Fax: ${company.fax}` : null,
         company.email,
@@ -121,32 +131,48 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Quote Items
       let yPos = tableTop + 25;
-      const content = JSON.parse(quote.content as string);
-      content.forEach((item: any) => {
-        const itemHeight = Math.max(
-          doc.heightOfString(item.name, { width: columnWidths[0] }),
-          doc.heightOfString(item.description || '', { width: columnWidths[1] })
-        );
+      let content;
+      try {
+        content = typeof quote.content === 'string' ? JSON.parse(quote.content) : quote.content;
+      } catch (error) {
+        console.error('Error parsing quote content:', error);
+        content = [];
+      }
 
-        xPos = 60;
-        doc.font('Helvetica')
-           .fontSize(10)
-           .text(item.name, xPos, yPos, { width: columnWidths[0] });
+      if (Array.isArray(content)) {
+        content.forEach((item: any) => {
+          // Handle null/undefined values
+          const name = item.name || '';
+          const description = item.description || '';
+          const quantity = item.quantity?.toString() || '0';
+          const unitPrice = Number(item.unitPrice || 0).toFixed(2);
+          const total = Number(item.total || 0).toFixed(2);
 
-        xPos += columnWidths[0];
-        doc.text(item.description || '', xPos, yPos, { width: columnWidths[1] });
+          const itemHeight = Math.max(
+            doc.heightOfString(name, { width: columnWidths[0] }),
+            doc.heightOfString(description, { width: columnWidths[1] })
+          );
 
-        xPos += columnWidths[1];
-        doc.text(item.quantity.toString(), xPos, yPos, { width: columnWidths[2], align: 'right' });
+          xPos = 60;
+          doc.font('Helvetica')
+             .fontSize(10)
+             .text(name, xPos, yPos, { width: columnWidths[0] });
 
-        xPos += columnWidths[2];
-        doc.text(`$${Number(item.unitPrice).toFixed(2)}`, xPos, yPos, { width: columnWidths[3], align: 'right' });
+          xPos += columnWidths[0];
+          doc.text(description, xPos, yPos, { width: columnWidths[1] });
 
-        xPos += columnWidths[3];
-        doc.text(`$${Number(item.total).toFixed(2)}`, xPos, yPos, { width: columnWidths[4], align: 'right' });
+          xPos += columnWidths[1];
+          doc.text(quantity, xPos, yPos, { width: columnWidths[2], align: 'right' });
 
-        yPos += itemHeight + 10;
-      });
+          xPos += columnWidths[2];
+          doc.text(`$${unitPrice}`, xPos, yPos, { width: columnWidths[3], align: 'right' });
+
+          xPos += columnWidths[3];
+          doc.text(`$${total}`, xPos, yPos, { width: columnWidths[4], align: 'right' });
+
+          yPos += itemHeight + 10;
+        });
+      }
 
       // Financial Summary Box
       doc.rect(320, yPos + 20, 225, 120)
@@ -157,11 +183,9 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
          .fontSize(10);
 
       // Subtotal
-      const subtotal = Number(quote.subtotal);
-      if (subtotal) {
-        doc.text('Subtotal:', 330, summaryStartY)
-           .text(`$${subtotal.toFixed(2)}`, 495, summaryStartY, { align: 'right' });
-      }
+      const subtotal = Number(quote.subtotal || 0);
+      doc.text('Subtotal:', 330, summaryStartY)
+         .text(`$${subtotal.toFixed(2)}`, 495, summaryStartY, { align: 'right' });
 
       // Discount if applicable
       let currentY = summaryStartY + 20;
@@ -182,7 +206,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       }
 
       // Total
-      const total = Number(quote.total);
+      const total = Number(quote.total || 0);
       doc.font('Helvetica-Bold')
          .text('Total:', 330, currentY)
          .text(`$${total.toFixed(2)}`, 495, currentY, { align: 'right' });
@@ -203,7 +227,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       }
 
       // Terms and Conditions on new page
-      if (quote.template.termsAndConditions) {
+      if (quote.template?.termsAndConditions) {
         doc.addPage()
            .font('Helvetica-Bold')
            .fontSize(14)
@@ -234,23 +258,29 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
         const signatureData = quote.signature.data;
         if (signatureData) {
-          // Convert base64 to image and add to PDF
-          const imgBuffer = Buffer.from(signatureData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-          doc.image(imgBuffer, { width: 200, align: 'center' });
+          try {
+            // Convert base64 to image and add to PDF
+            const imgBuffer = Buffer.from(signatureData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+            doc.image(imgBuffer, { width: 200, align: 'center' });
 
-          doc.moveDown(0.5)
-             .fontSize(10)
-             .text(`Signed by: ${quote.clientName}`, { align: 'center' })
-             .text(`Date: ${new Date(quote.signature.timestamp).toLocaleString()}`, { align: 'center' })
-             .moveDown(0.5)
-             .fontSize(8)
-             .fillColor('#666666')
-             .text(`Document signed electronically. IP Address: ${quote.signature.metadata.ipAddress}`, { align: 'center' });
+            doc.moveDown(0.5)
+               .fontSize(10)
+               .text(`Signed by: ${quote.clientName}`, { align: 'center' })
+               .text(`Date: ${new Date(quote.signature.timestamp).toLocaleDateString()}`, { align: 'center' })
+               .moveDown(0.5)
+               .fontSize(8)
+               .fillColor('#666666')
+               .text(`Document signed electronically. IP Address: ${quote.signature.metadata.ipAddress}`, { align: 'center' });
+          } catch (signatureError) {
+            console.error('Error adding signature to PDF:', signatureError);
+            // Continue without the signature image
+          }
         }
       }
 
       doc.end();
     } catch (error) {
+      console.error('Error generating PDF:', error);
       reject(error);
     }
   });
