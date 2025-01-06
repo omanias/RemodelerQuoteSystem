@@ -49,14 +49,19 @@ const contactFormSchema = z.object({
   primaryEmail: z.string().email("Invalid email address"),
   secondaryEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
   primaryPhone: z.string().min(1, "Phone number is required"),
-  secondaryPhone: z.string().optional(),
+  mobilePhone: z.string().optional(),
   leadStatus: z.enum([LeadStatus.NEW, LeadStatus.CONTACTED, LeadStatus.QUOTE_SENT, LeadStatus.PROJECT_STARTED, LeadStatus.COMPLETED, LeadStatus.LOST]),
   leadSource: z.enum([LeadSource.WEBSITE, LeadSource.REFERRAL, LeadSource.SOCIAL_MEDIA, LeadSource.HOME_SHOW, LeadSource.ADVERTISEMENT, LeadSource.OTHER]),
   propertyType: z.enum([PropertyType.SINGLE_FAMILY, PropertyType.MULTI_FAMILY, PropertyType.COMMERCIAL]),
   primaryAddress: z.string().min(1, "Address is required"),
+  projectAddress: z.string().optional(),
   projectTimeline: z.string(),
-  budget: z.string(),
+  budgetRangeMin: z.number().optional(),
+  budgetRangeMax: z.number().optional(),
+  productInterests: z.string().min(1, "Product interests are required"),
   notes: z.string().optional(),
+  assignedUserId: z.number().optional(),
+  companyId: z.number().optional(),
 });
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
@@ -91,7 +96,12 @@ export function ContactDetail() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          // Add required fields that are not in the form
+          assignedUserId: 1, // This should be replaced with the current user's ID or a selected user
+          companyId: 1, // This should be replaced with the current company's ID
+        }),
       });
 
       if (!response.ok) {
@@ -125,7 +135,12 @@ export function ContactDetail() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          ...data,
+          // Add required fields that are not in the form
+          assignedUserId: contact?.assignedUserId || 1,
+          companyId: contact?.companyId || 1,
+        }),
       });
 
       if (!response.ok) {
@@ -159,14 +174,19 @@ export function ContactDetail() {
       primaryEmail: "",
       secondaryEmail: "",
       primaryPhone: "",
-      secondaryPhone: "",
+      mobilePhone: "",
       leadStatus: LeadStatus.NEW,
       leadSource: LeadSource.WEBSITE,
       propertyType: PropertyType.SINGLE_FAMILY,
       primaryAddress: "",
+      projectAddress: "",
       projectTimeline: "",
-      budget: "",
+      budgetRangeMin: undefined,
+      budgetRangeMax: undefined,
+      productInterests: "",
       notes: "",
+      assignedUserId: undefined,
+      companyId: undefined,
     },
   });
 
@@ -399,10 +419,10 @@ export function ContactDetail() {
                   />
                   <FormField
                     control={form.control}
-                    name="secondaryPhone"
+                    name="mobilePhone"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Secondary Phone</FormLabel>
+                        <FormLabel>Mobile Phone</FormLabel>
                         <FormControl>
                           <Input {...field} type="tel" />
                         </FormControl>
@@ -497,6 +517,19 @@ export function ContactDetail() {
                   />
                   <FormField
                     control={form.control}
+                    name="projectAddress"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Project Address (if different from primary)</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="projectTimeline"
                     render={({ field }) => (
                       <FormItem>
@@ -510,10 +543,44 @@ export function ContactDetail() {
                   />
                   <FormField
                     control={form.control}
-                    name="budget"
+                    name="budgetRangeMin"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Budget</FormLabel>
+                        <FormLabel>Minimum Budget</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="budgetRangeMax"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Maximum Budget</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="productInterests"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Interests</FormLabel>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
