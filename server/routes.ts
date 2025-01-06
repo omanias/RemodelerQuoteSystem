@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications, QuoteStatus } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -52,7 +52,185 @@ export function registerRoutes(app: Express): Server {
   // Apply company middleware to all routes
   app.use(companyMiddleware);
 
-  // Update quote routes
+  // Auth routes
+  app.post("/api/auth/login", async (req, res) => {
+    const { companyId, email, password } = req.body;
+
+    if (!companyId || !email || !password) {
+      return res.status(400).json({ message: "Company ID, email and password are required" });
+    }
+
+    try {
+      // First verify company exists
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(401).json({ message: "Company not found" });
+      }
+
+      // Then find user
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      req.session.userId = user.id;
+      req.session.userRole = user.role;
+      req.session.companyId = companyId;
+
+      // For MULTI_ADMIN, get their accessible companies
+      if (user.role === UserRole.MULTI_ADMIN) {
+        const accessibleCompanies = await db
+          .select({ companyId: companyAccess.companyId })
+          .from(companyAccess)
+          .where(eq(companyAccess.userId, user.id));
+
+        req.session.accessibleCompanyIds = accessibleCompanies.map(c => c.companyId);
+      }
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        companyId: req.session.companyId,
+        accessibleCompanyIds: req.session.accessibleCompanyIds
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session?.destroy((err) => {
+      if (err) {
+        console.error('Logout error:', err);
+        return res.status(500).json({ message: "Error during logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/user", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        companyId: req.session.companyId,
+        accessibleCompanyIds: req.session.accessibleCompanyIds
+      });
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Create new quote
+  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { contactId, templateId, categoryId, content, clientName, status, subtotal, total, notes, signature } = req.body;
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
+
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
+      }
+
+      // Generate a unique quote number
+      const quoteNumber = `Q${Date.now()}`;
+
+      let signatureData = null;
+      if (signature) {
+        signatureData = {
+          data: signature.data,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            browserInfo: req.headers['user-agent'] || 'unknown',
+            ipAddress: req.ip || 'unknown',
+            signedAt: new Date().toISOString(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          }
+        };
+      }
+
+      // Create the quote
+      const [newQuote] = await db
+        .insert(quotes)
+        .values({
+          number: quoteNumber,
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
+          contactId: contactId ? parseInt(contactId) : null,
+          clientName,
+          clientEmail: req.body.clientEmail || '',
+          clientPhone: req.body.clientPhone || '',
+          clientAddress: req.body.clientAddress || '',
+          status: (status || "DRAFT") as keyof typeof QuoteStatus,
+          content,
+          subtotal: parseFloat(subtotal),
+          total: parseFloat(total),
+          notes,
+          userId,
+          companyId,
+          signature: signatureData,
+        })
+        .returning();
+
+      // Get full quote data with relations
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, newQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      res.json(quoteWithRelations);
+    } catch (error) {
+      console.error('Error creating quote:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update quote
   app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
@@ -127,7 +305,7 @@ export function registerRoutes(app: Express): Server {
           clientEmail: clientEmail || existingQuote.clientEmail,
           clientPhone: clientPhone || existingQuote.clientPhone,
           clientAddress: clientAddress || existingQuote.clientAddress,
-          status: status || existingQuote.status,
+          status: (status || existingQuote.status) as keyof typeof QuoteStatus,
           content: content || existingQuote.content,
           subtotal: parseNumeric(subtotal, existingQuote.subtotal),
           total: parseNumeric(total, existingQuote.total),
@@ -209,69 +387,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Create new quote
-  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const { contactId, templateId, categoryId, content, clientName, status, subtotal, total, notes, signature } = req.body;
-      const userId = req.session.userId;
-      const companyId = req.company!.id;
-
-      if (!templateId) {
-        return res.status(400).json({ message: "Template ID is required" });
-      }
-
-      // Generate a unique quote number
-      const quoteNumber = `Q${Date.now()}`;
-
-      // Create the quote
-      const [newQuote] = await db
-        .insert(quotes)
-        .values({
-          number: quoteNumber,
-          categoryId: parseInt(categoryId),
-          templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : null,
-          clientName,
-          clientEmail: req.body.clientEmail || '',
-          clientPhone: req.body.clientPhone || '',
-          clientAddress: req.body.clientAddress || '',
-          status: status || "DRAFT",
-          content,
-          subtotal: parseFloat(subtotal),
-          total: parseFloat(total),
-          notes,
-          userId,
-          companyId,
-          signature,
-        })
-        .returning();
-
-      // Get full quote data with relations
-      const [quoteWithRelations] = await db.query.quotes.findMany({
-        where: eq(quotes.id, newQuote.id),
-        with: {
-          contact: true,
-          template: true,
-          category: true,
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            }
-          }
-        },
-        limit: 1
-      });
-
-      res.json(quoteWithRelations);
-    } catch (error) {
-      console.error('Error creating quote:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
   // Get all quotes
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
@@ -295,6 +410,45 @@ export function registerRoutes(app: Express): Server {
       res.json(quotesData);
     } catch (error) {
       console.error('Error fetching quotes:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Get quote by ID
+  app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, parseInt(req.params.id)),
+          eq(quotes.companyId, req.company!.id)
+        ),
+        with: {
+          contact: true,
+          template: {
+            with: {
+              category: true
+            }
+          },
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      res.json(quoteData);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -397,6 +551,7 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Server error" });
     }
   });
+
 
 
   app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -529,43 +684,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const [quoteData] = await db.query.quotes.findMany({
-        where: and(
-          eq(quotes.id, parseInt(req.params.id)),
-          eq(quotes.companyId, req.company!.id)
-        ),
-        with: {
-          contact: true,
-          template: {
-            with: {
-              category: true
-            }
-          },
-          category: true,
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            }
-          }
-        },
-        limit: 1
-      });
-
-      if (!quoteData) {
-        return res.status(404).json({ message: "Quote not found" });
-      }
-
-      res.json(quoteData);
-    } catch (error) {
-      console.error('Error fetching quote:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
 
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
@@ -1178,5 +1296,5 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
+  return httpServer;
 }
