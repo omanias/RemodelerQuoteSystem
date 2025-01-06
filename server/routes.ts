@@ -995,10 +995,12 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const contactId = parseInt(req.paramsid);      const companyId = req.company!.id;
+      const contactId = parseInt(req.params.id);
+      const companyId = req.company!.id;
 
       // First verify contact belongs to company
-      const [contact] = await db        .select()
+      const [contact] = await db
+        .select()
         .from(contacts)
         .where(and(
           eq(contacts.id, contactId),
@@ -1357,6 +1359,7 @@ export function registerRoutes(app: Express): Server {
         productInterests,
         assignedUserId,
         categoryId,
+        tags = [] // Default to empty array if not provided
       } = req.body;
 
       // Validate required fields
@@ -1382,10 +1385,10 @@ export function registerRoutes(app: Express): Server {
           projectTimeline: projectTimeline || null,
           budgetRangeMin: budgetRangeMin ? parseFloat(budgetRangeMin) : null,
           budgetRangeMax: budgetRangeMax ? parseFloat(budgetRangeMax) : null,
-          productInterests: productInterests || "None specified",
+          productInterests: productInterests || "",
           assignedUserId: assignedUserId || req.session.userId,
           categoryId: categoryId || null,
-          tags: [], // Initialize with empty array
+          tags: tags || [],
           companyId: req.company!.id,
         })
         .returning();
