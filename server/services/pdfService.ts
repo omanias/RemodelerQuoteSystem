@@ -17,7 +17,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       const doc = new PDFDocument({
         size: 'A4',
         margin: 50,
-        bufferPages: true, // Important for collecting all pages
+        bufferPages: true,
         autoFirstPage: true,
         info: {
           Title: `Quote ${quote.number}`,
@@ -112,7 +112,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Quote Items Table Header
       const tableTop = doc.y;
-      const tableHeaders = ['Product', 'Description', 'Qty', 'Unit Price', 'Total'];
+      const tableHeaders = ['Item', 'Description', 'Qty', 'Unit Price', 'Total'];
       const columnWidths = [150, 200, 50, 70, 70];
 
       // Draw table header
@@ -123,8 +123,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            .fontSize(10)
            .fillColor('#000000')
            .text(header, xPos, tableTop + 5, {
-              width: columnWidths[i],
-              align: i > 1 ? 'right' : 'left'
+             width: columnWidths[i],
+             align: i > 1 ? 'right' : 'left'
            });
         xPos += columnWidths[i];
       });
@@ -139,16 +139,11 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         content = [];
       }
 
-      // Draw table lines
-      doc.lineWidth(0.5)
-         .strokeColor('#e5e7eb');
-
       if (Array.isArray(content)) {
-        content.forEach((item: any, index: number) => {
-          // Format the product details with proper units
+        content.forEach((item: any) => {
+          // Handle null/undefined values
           const name = item.name || '';
-          const unitType = item.unitType || '';
-          const description = `Base Price: $${Number(item.basePrice || 0).toFixed(2)}/${unitType}`;
+          const description = item.description || '';
           const quantity = item.quantity?.toString() || '0';
           const unitPrice = Number(item.unitPrice || 0).toFixed(2);
           const total = Number(item.total || 0).toFixed(2);
@@ -158,16 +153,9 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
             doc.heightOfString(description, { width: columnWidths[1] })
           );
 
-          // Draw row background
-          if (index % 2 === 0) {
-            doc.rect(50, yPos - 5, 495, itemHeight + 10)
-               .fill('#f9fafb');
-          }
-
           xPos = 60;
           doc.font('Helvetica')
              .fontSize(10)
-             .fillColor('#000000')
              .text(name, xPos, yPos, { width: columnWidths[0] });
 
           xPos += columnWidths[0];
@@ -238,33 +226,22 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            ].join('\n'));
       }
 
-      // Category and Template Information
-      if (quote.template?.name) {
+      // Terms and Conditions on new page
+      if (quote.template?.termsAndConditions) {
         doc.addPage()
            .font('Helvetica-Bold')
            .fontSize(14)
-           .text('Project Information', { align: 'center' })
+           .text('Terms and Conditions', { align: 'center' })
            .moveDown()
            .font('Helvetica')
-           .fontSize(12)
-           .text(`Template: ${quote.template.name}`)
-           .moveDown(0.5);
-
-        if (quote.template?.termsAndConditions) {
-          doc.font('Helvetica-Bold')
-             .fontSize(14)
-             .text('Terms and Conditions', { align: 'center' })
-             .moveDown()
-             .font('Helvetica')
-             .fontSize(10)
-             .text(quote.template.termsAndConditions, {
-               align: 'left',
-               columns: 1,
-               columnGap: 15,
-               height: 700,
-               continued: true
-             });
-        }
+           .fontSize(10)
+           .text(quote.template.termsAndConditions, {
+             align: 'left',
+             columns: 1,
+             columnGap: 15,
+             height: 700,
+             continued: true
+           });
       }
 
       // Signature Section
@@ -301,7 +278,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         }
       }
 
-      // Finalize the document
       doc.end();
     } catch (error) {
       console.error('Error generating PDF:', error);

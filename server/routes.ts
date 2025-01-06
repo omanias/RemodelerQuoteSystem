@@ -990,7 +990,7 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "Notifications marked as read" });
     } catch (error) {
       console.error('Error marking notifications as read:', error);
-      res.status(500).json({ message: "Server error"});    }
+      res.status(500).json({ message: "Server error" });    }
   });
 
   app.get("/api/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -1465,24 +1465,20 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add PDF export route with proper error handling
+  // Add PDF export route
   app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
       const companyId = req.company!.id;
 
       // Get quote with all necessary relations
-      const [quote] = await db.query.quotes.findMany({
+      const [quoteData] = await db.query.quotes.findMany({
         where: and(
           eq(quotes.id, quoteId),
           eq(quotes.companyId, companyId)
         ),
         with: {
-          template: {
-            with: {
-              category: true
-            }
-          },
+          template: true,
           category: true,
           user: {
             columns: {
@@ -1496,18 +1492,19 @@ export function registerRoutes(app: Express): Server {
         limit: 1
       });
 
-      if (!quote) {
+      if (!quoteData) {
         return res.status(404).json({ message: "Quote not found" });
       }
 
+      // Generate PDF
       const pdfBuffer = await generateQuotePDF({
-        quote,
+        quote: quoteData,
         company: req.company!
       });
 
-      // Set proper headers for PDF download
+      // Set response headers
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="quote-${quote.number}.pdf"`);
+      res.setHeader('Content-Disposition', `attachment; filename="quote-${quoteData.number}.pdf"`);
       res.setHeader('Content-Length', pdfBuffer.length);
 
       // Send the PDF buffer
