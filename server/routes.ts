@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications, QuoteStatus } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications, QuoteStatus, LeadStatus, LeadSource, PropertyType } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -602,7 +602,8 @@ export function registerRoutes(app: Express): Server {
         budget,
         notes,
         assignedUserId,
-        categoryId
+        categoryId,
+        secondaryEmail
       } = req.body;
 
       // First verify contact belongs to company
@@ -637,6 +638,7 @@ export function registerRoutes(app: Express): Server {
           notes: notes || existingContact.notes,
           assignedUserId: assignedUserId ? parseInt(assignedUserId) : existingContact.assignedUserId,
           categoryId: categoryId ? parseInt(categoryId) : existingContact.categoryId,
+          secondaryEmail: secondaryEmail || existingContact.secondaryEmail,
           updatedAt: new Date(),
         })
         .where(eq(contacts.id, contactId))
@@ -993,7 +995,7 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const contactId = parseInt(req.params.id);
+      const contactId = parseInt(reqparams.id);
       const companyId = req.company!.id;
 
       // First verify contact belongs to company
@@ -1335,6 +1337,79 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "Quote deleted successfully" });
     } catch (error) {
       console.error('Error deleting quote:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Create new contact
+  app.post("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        firstName,
+        lastName,
+        primaryEmail,
+        secondaryEmail,
+        primaryPhone,
+        mobilePhone,
+        leadStatus,
+        leadSource,
+        propertyType,
+        primaryAddress,
+        projectAddress,
+        projectTimeline,
+        budgetRangeMin,
+        budgetRangeMax,
+        productInterests,
+        notes,
+        assignedUserId,
+        companyId,
+      } = req.body;
+
+      // Create the contact
+      const [newContact] = await db
+        .insert(contacts)
+        .values({
+          firstName,
+          lastName,
+          primaryEmail,
+          secondaryEmail: secondaryEmail || null,
+          primaryPhone,
+          mobilePhone: mobilePhone || null,
+          leadStatus: leadStatus as keyof typeof LeadStatus,
+          leadSource: leadSource as keyof typeof LeadSource,
+          propertyType: propertyType as keyof typeof PropertyType,
+          primaryAddress,
+          projectAddress: projectAddress || null,
+          projectTimeline: projectTimeline || null,
+          budgetRangeMin: budgetRangeMin ? parseFloat(budgetRangeMin) : null,
+          budgetRangeMax: budgetRangeMax ? parseFloat(budgetRangeMax) : null,
+          productInterests,
+          assignedUserId: assignedUserId || req.session.userId,
+          companyId: req.company!.id,
+          notes: notes || null,
+        })
+        .returning();
+
+      // Get full contact data with relations
+      const [contactWithRelations] = await db.query.contacts.findMany({
+        where: eq(contacts.id, newContact.id),
+        with: {
+          assignedUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          category: true
+        },
+        limit: 1
+      });
+
+      res.json(contactWithRelations);
+    } catch (error) {
+      console.error('Error creating contact:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
