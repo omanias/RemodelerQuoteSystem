@@ -37,35 +37,27 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       const headerTop = 45;
       if (company.logo) {
         try {
-          // Check both absolute path and relative to uploads directory
           const uploadDir = path.join(process.cwd(), 'uploads');
           const logoPath = path.join(uploadDir, path.basename(company.logo));
 
           if (fs.existsSync(logoPath)) {
-            doc.image(logoPath, 50, headerTop, { width: 150 });
+            doc.image(logoPath, 50, headerTop, { width: 100 });
           } else {
             console.warn(`Company logo not found at path: ${logoPath}`);
           }
         } catch (logoError) {
           console.error('Error loading company logo:', logoError);
-          // Continue without the logo
         }
       }
 
-      // Company Info Block
+      // Company Info Block (aligned to the right)
       doc.font('Helvetica-Bold')
-         .fontSize(20)
+         .fontSize(16)
          .text(company.name || '', 250, headerTop);
 
       // Company Contact Info in a styled block
       const contactInfo = [
-        company.streetAddress,
-        company.suite ? `Suite ${company.suite}` : null,
-        company.city && company.state ? `${company.city}, ${company.state} ${company.zipCode || ''}` : null,
-        '',
-        company.phone ? `Tel: ${company.phone}` : null,
-        company.tollFree ? `Toll Free: ${company.tollFree}` : null,
-        company.fax ? `Fax: ${company.fax}` : null,
+        company.phone && `Tel: ${company.phone}`,
         company.email,
         company.website
       ].filter(Boolean);
@@ -74,18 +66,21 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
          .fontSize(10)
          .text(contactInfo.join('\n'), 250, headerTop + 25);
 
-      // Quote Header
+      // Quote Title
       doc.moveDown(4)
          .font('Helvetica-Bold')
          .fontSize(24)
          .text('QUOTE', { align: 'center' })
          .moveDown(0.5);
 
-      // Quote Details Box
+      // Quote Details Boxes
       const quoteDetailsY = doc.y;
-      doc.rect(50, quoteDetailsY, 250, 80)
+
+      // QUOTE TO Box
+      doc.rect(50, quoteDetailsY, 250, 100)
          .stroke()
          .fontSize(10)
+         .font('Helvetica-Bold')
          .text('QUOTE TO:', 60, quoteDetailsY + 10)
          .font('Helvetica')
          .text([
@@ -95,8 +90,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            quote.clientAddress
          ].filter(Boolean).join('\n'), 60, quoteDetailsY + 30);
 
-      // Quote Info Box
-      doc.rect(320, quoteDetailsY, 225, 80)
+      // QUOTE DETAILS Box
+      doc.rect(320, quoteDetailsY, 225, 100)
          .stroke()
          .font('Helvetica-Bold')
          .text('QUOTE DETAILS:', 330, quoteDetailsY + 10)
@@ -108,14 +103,14 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
          ].join('\n'), 330, quoteDetailsY + 30);
 
       // Move down for content
-      doc.moveDown(3);
+      doc.moveDown(4);
 
       // Quote Items Table Header
       const tableTop = doc.y;
-      const tableHeaders = ['Item', 'Description', 'Qty', 'Unit Price', 'Total'];
-      const columnWidths = [150, 200, 50, 70, 70];
+      const tableHeaders = ['Item', 'Description', 'Unit Price', 'Quantity', 'Total'];
+      const columnWidths = [150, 140, 80, 60, 65];
 
-      // Draw table header
+      // Draw table header with light gray background
       doc.rect(50, tableTop, 495, 20).fill('#f3f4f6').stroke('#e5e7eb');
       let xPos = 60;
       tableHeaders.forEach((header, i) => {
@@ -124,7 +119,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            .fillColor('#000000')
            .text(header, xPos, tableTop + 5, {
              width: columnWidths[i],
-             align: i > 1 ? 'right' : 'left'
+             align: i >= 2 ? 'right' : 'left'
            });
         xPos += columnWidths[i];
       });
@@ -141,34 +136,63 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       if (Array.isArray(content)) {
         content.forEach((item: any) => {
-          // Handle null/undefined values
-          const name = item.name || '';
-          const description = item.description || '';
-          const quantity = item.quantity?.toString() || '0';
-          const unitPrice = Number(item.unitPrice || 0).toFixed(2);
-          const total = Number(item.total || 0).toFixed(2);
+          const {
+            name = '',
+            description = '',
+            unitPrice = 0,
+            quantity = 0,
+            unit = '',
+            total = 0
+          } = item;
+
+          const formattedUnitPrice = `$${Number(unitPrice).toFixed(2)}/${unit || 'unit'}`;
+          const formattedQuantity = `${Number(quantity).toFixed(2)} ${unit || ''}`.trim();
+          const formattedTotal = `$${Number(total).toFixed(2)}`;
 
           const itemHeight = Math.max(
             doc.heightOfString(name, { width: columnWidths[0] }),
             doc.heightOfString(description, { width: columnWidths[1] })
           );
 
+          // Alternate row background
+          const isEvenRow = content.indexOf(item) % 2 === 0;
+          if (isEvenRow) {
+            doc.rect(50, yPos - 2, 495, itemHeight + 4)
+               .fill('#f8fafc');
+          }
+
           xPos = 60;
           doc.font('Helvetica')
              .fontSize(10)
-             .text(name, xPos, yPos, { width: columnWidths[0] });
+             .fillColor('#000000');
 
+          // Item name
+          doc.text(name, xPos, yPos, { width: columnWidths[0] });
+
+          // Description
           xPos += columnWidths[0];
           doc.text(description, xPos, yPos, { width: columnWidths[1] });
 
+          // Unit Price
           xPos += columnWidths[1];
-          doc.text(quantity, xPos, yPos, { width: columnWidths[2], align: 'right' });
+          doc.text(formattedUnitPrice, xPos, yPos, { 
+            width: columnWidths[2], 
+            align: 'right' 
+          });
 
+          // Quantity
           xPos += columnWidths[2];
-          doc.text(`$${unitPrice}`, xPos, yPos, { width: columnWidths[3], align: 'right' });
+          doc.text(formattedQuantity, xPos, yPos, { 
+            width: columnWidths[3], 
+            align: 'right' 
+          });
 
+          // Total
           xPos += columnWidths[3];
-          doc.text(`$${total}`, xPos, yPos, { width: columnWidths[4], align: 'right' });
+          doc.text(formattedTotal, xPos, yPos, { 
+            width: columnWidths[4], 
+            align: 'right' 
+          });
 
           yPos += itemHeight + 10;
         });
@@ -191,7 +215,10 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       let currentY = summaryStartY + 20;
       if (quote.discountValue) {
         const discountValue = Number(quote.discountValue);
-        doc.text(`Discount (${quote.discountType}):`, 330, currentY)
+        const discountLabel = quote.discountType === 'PERCENTAGE' 
+          ? `Discount (${discountValue}%):`
+          : 'Discount (fixed):';
+        doc.text(discountLabel, 330, currentY)
            .text(`-$${discountValue.toFixed(2)}`, 495, currentY, { align: 'right' });
         currentY += 20;
       }
@@ -217,8 +244,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         const downPayment = Number(quote.downPaymentValue);
         const remainingBalance = Number(quote.remainingBalance || 0);
         doc.font('Helvetica')
-           .fontSize(9)
-           .text('Payment Terms:', 50, currentY)
+           .fontSize(10)
+           .text('Payment Terms:', 50, currentY + 20)
            .moveDown(0.5)
            .text([
              `Down Payment Required: $${downPayment.toFixed(2)} (${quote.downPaymentType})`,
@@ -244,7 +271,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            });
       }
 
-      // Signature Section
+      // Signature Section if available
       if (quote.signature) {
         doc.addPage()
            .font('Helvetica-Bold')
@@ -273,7 +300,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
                .text(`Document signed electronically. IP Address: ${quote.signature.metadata.ipAddress}`, { align: 'center' });
           } catch (signatureError) {
             console.error('Error adding signature to PDF:', signatureError);
-            // Continue without the signature image
           }
         }
       }
