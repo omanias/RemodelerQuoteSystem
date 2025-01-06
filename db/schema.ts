@@ -430,27 +430,6 @@ export const quotes = pgTable("quotes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Add new signatures table after the existing tables
-export const quoteSignatures = pgTable("quote_signatures", {
-  id: serial("id").primaryKey(),
-  quoteId: integer("quote_id")
-    .references(() => quotes.id, { onDelete: 'cascade' })
-    .notNull(),
-  signedBy: text("signed_by").notNull(),
-  signatureType: text("signature_type").notNull().$type<keyof typeof SignatureType>(),
-  signatureData: text("signature_data").notNull(), // Base64 encoded signature data
-  signedAt: timestamp("signed_at").defaultNow().notNull(),
-  ipAddress: text("ip_address").notNull(),
-  userAgent: text("user_agent"),
-  geoLocation: jsonb("geo_location"), // Optional location data
-  verified: boolean("verified").default(false).notNull(),
-  verificationToken: text("verification_token"),
-  verifiedAt: timestamp("verified_at"),
-  metadata: jsonb("metadata"), // Additional signature metadata
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
 export const tablePermissions = pgTable("table_permissions", {
   id: serial("id").primaryKey(),
   tableName: text("table_name").notNull(),
@@ -640,7 +619,7 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
   quotes: many(quotes),
 }));
 
-export const quotesRelations = relations(quotes, ({ one, many }) => ({
+export const quotesRelations = relations(quotes, ({ one }) => ({
   user: one(users, {
     fields: [quotes.userId],
     references: [users.id],
@@ -660,15 +639,6 @@ export const quotesRelations = relations(quotes, ({ one, many }) => ({
   company: one(companies, {
     fields: [quotes.companyId],
     references: [companies.id],
-  }),
-  signatures: many(quoteSignatures),
-}));
-
-// Add signatures relations
-export const quoteSignaturesRelations = relations(quoteSignatures, ({ one }) => ({
-  quote: one(quotes, {
-    fields: [quoteSignatures.quoteId],
-    references: [quotes.id],
   }),
 }));
 
@@ -857,8 +827,7 @@ export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
 export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
 
 // Add type definitions for signatures
-export type QuoteSignature = typeof quoteSignatures.$inferSelect;
-export type NewQuoteSignature = typeof quoteSignatures.$inferInsert;
+export type Signature = typeof quotes.$inferSelect['signature'];
 
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
@@ -905,5 +874,5 @@ export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutio
 export const selectWorkflowExecutionSchema = createSelectSchema(workflowExecutions);
 
 // Add Zod schemas for signatures
-export const insertQuoteSignatureSchema = createInsertSchema(quoteSignatures);
-export const selectQuoteSignatureSchema = createSelectSchema(quoteSignatures);
+export const insertQuoteSchemaWithSignature = createInsertSchema(quotes);
+export const selectQuoteSchemaWithSignature = createSelectSchema(quotes);

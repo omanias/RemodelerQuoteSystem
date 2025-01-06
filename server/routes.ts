@@ -1,40 +1,15 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications, quoteSignatures } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import createMemoryStore from "memorystore";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
-import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } from "./middleware/company";
-import { count } from "drizzle-orm";
 import { setupWebSocket } from "./websocket";
 import multer from "multer";
 import { storage, UPLOADS_PATH } from "./storage";
 import express from "express";
-
-const scryptAsync = promisify(scrypt);
-const MemoryStore = createMemoryStore(session);
-
-const crypto = {
-  hash: async (password: string) => {
-    const salt = randomBytes(16).toString('hex');
-    const derivedKey = await scryptAsync(password, salt, 64) as Buffer;
-    return `${derivedKey.toString('hex')}.${salt}`;
-  },
-  compare: async (supplied: string, stored: string) => {
-    try {
-      const [hashedPassword, salt] = stored.split('.');
-      const derivedKey = await scryptAsync(supplied, salt, 64) as Buffer;
-      const storedDerivedKey = Buffer.from(hashedPassword, 'hex');
-      return timingSafeEqual(derivedKey, storedDerivedKey);
-    } catch (error) {
-      console.error('Password comparison error:', error);
-      return false;
-    }
-  }
-};
+import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
 
 declare module 'express-session' {
   interface SessionData {
@@ -55,8 +30,10 @@ export function registerRoutes(app: Express): Server {
 
   // Setup WebSocket server
   const wsServer = setupWebSocket(httpServer, app);
+  app.set('wsServer', wsServer); // Make wsServer accessible in other routes
 
   // Setup session middleware before any routes
+  const MemoryStore = createMemoryStore(session);
   app.use(
     session({
       secret: process.env.REPL_ID || "quote-builder-secret",
@@ -75,140 +52,227 @@ export function registerRoutes(app: Express): Server {
   // Apply company middleware to all routes
   app.use(companyMiddleware);
 
-  // Auth routes
-  app.post("/api/auth/login", async (req, res) => {
-    const { companyId, email, password } = req.body;
-
-    if (!companyId || !email || !password) {
-      return res.status(400).json({ message: "Company ID, email and password are required" });
-    }
-
+  // Update quote routes
+  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      // First verify company exists
-      const [company] = await db
+      const quoteId = parseInt(req.params.id);
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
+      const {
+        status,
+        signature,
+        contactId,
+        templateId,
+        categoryId,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
+        content,
+        subtotal,
+        total,
+        notes,
+        downPaymentType,
+        downPaymentValue,
+        discountType,
+        discountValue,
+        taxRate,
+        remainingBalance
+      } = req.body;
+
+      // First verify quote exists and belongs to company
+      const [existingQuote] = await db
         .select()
-        .from(companies)
-        .where(eq(companies.id, companyId))
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
         .limit(1);
 
-      if (!company) {
-        return res.status(401).json({ message: "Company not found" });
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
       }
 
-      // Then find user
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-
-      if (!user) {
-        return res.status(401).json({ message: "Invalid email or password" });
+      // If status is being changed to ACCEPTED and signature is provided
+      let signatureData = existingQuote.signature;
+      if (status === "ACCEPTED" && signature) {
+        signatureData = {
+          data: signature.data,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            browserInfo: req.headers['user-agent'] || 'unknown',
+            ipAddress: req.ip || 'unknown',
+            signedAt: new Date().toISOString(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          }
+        };
       }
 
-      // Verify password
-      const isValidPassword = await crypto.compare(password, user.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ message: "Invalid email or password" });
-      }
+      // Parse numeric values with fallback to existing values
+      const parseNumeric = (value: any, fallback: number | null = null) => {
+        if (value === undefined || value === null || value === '') return fallback;
+        const parsed = parseFloat(value.toString());
+        return isNaN(parsed) ? fallback : parsed;
+      };
 
-      // For SUPER_ADMIN, allow access to all companies
-      if (user.role === UserRole.SUPER_ADMIN) {
-        req.session.userId = user.id;
-        req.session.userRole = user.role;
-        req.session.companyId = companyId;
-      }
-      // For MULTI_ADMIN, get their accessible companies
-      else if (user.role === UserRole.MULTI_ADMIN) {
-        const accessibleCompanies = await db
-          .select({ companyId: companyAccess.companyId })
-          .from(companyAccess)
-          .where(eq(companyAccess.userId, user.id));
+      // Update the quote
+      const [updatedQuote] = await db
+        .update(quotes)
+        .set({
+          contactId: contactId ? parseInt(contactId.toString()) : existingQuote.contactId,
+          templateId: templateId ? parseInt(templateId.toString()) : existingQuote.templateId,
+          categoryId: categoryId ? parseInt(categoryId.toString()) : existingQuote.categoryId,
+          clientName: clientName || existingQuote.clientName,
+          clientEmail: clientEmail || existingQuote.clientEmail,
+          clientPhone: clientPhone || existingQuote.clientPhone,
+          clientAddress: clientAddress || existingQuote.clientAddress,
+          status: status || existingQuote.status,
+          content: content || existingQuote.content,
+          subtotal: parseNumeric(subtotal, existingQuote.subtotal),
+          total: parseNumeric(total, existingQuote.total),
+          notes: notes || existingQuote.notes,
+          downPaymentType: downPaymentType || existingQuote.downPaymentType,
+          downPaymentValue: parseNumeric(downPaymentValue, existingQuote.downPaymentValue),
+          discountType: discountType || existingQuote.discountType,
+          discountValue: parseNumeric(discountValue, existingQuote.discountValue),
+          taxRate: parseNumeric(taxRate, existingQuote.taxRate),
+          remainingBalance: parseNumeric(remainingBalance, existingQuote.remainingBalance),
+          userId,
+          signature: signatureData,
+          updatedAt: new Date(),
+        })
+        .where(eq(quotes.id, quoteId))
+        .returning();
 
-        const accessibleCompanyIds = accessibleCompanies.map(c => c.companyId);
+      // If status has changed, create a notification
+      if (status && status !== existingQuote.status) {
+        const [notification] = await db
+          .insert(notifications)
+          .values({
+            type: "QUOTE_STATUS_CHANGED",
+            title: "Quote Status Updated",
+            message: `Quote #${existingQuote.number} status changed from ${existingQuote.status} to ${status}`,
+            userId: existingQuote.userId,
+            companyId,
+            deliveryMethod: "IN_APP",
+            data: {
+              quoteId,
+              oldStatus: existingQuote.status,
+              newStatus: status
+            }
+          })
+          .returning();
 
-        // Verify if user has access to the requested company
-        if (!accessibleCompanyIds.includes(companyId)) {
-          return res.status(403).json({ message: "Access denied to this company" });
+        // Send notification via WebSocket if available
+        if (req.app.get('wsServer')) {
+          const wsServer = req.app.get('wsServer');
+          wsServer.broadcast(existingQuote.userId, {
+            type: "NEW_NOTIFICATION",
+            payload: notification
+          });
         }
 
-        req.session.userId = user.id;
-        req.session.userRole = user.role;
-        req.session.companyId = companyId;
-        req.session.accessibleCompanyIds = accessibleCompanyIds;
-      }
-      // For regular users, verify they belong to the company
-      else {
-        if (user.companyId !== companyId) {
-          return res.status(403).json({ message: "Invalid company access" });
-        }
-
-        req.session.userId = user.id;
-        req.session.userRole = user.role;
-        req.session.companyId = companyId;
+        // Create a note for the status change
+        await db.insert(notes).values({
+          content: `Quote status changed from ${existingQuote.status} to ${status}`,
+          userId,
+          quoteId,
+          contactId: existingQuote.contactId!,
+          type: "QUOTE"
+        });
       }
 
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        companyId: req.session.companyId
+      // Get full quote data with relations
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, updatedQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
       });
+
+      res.json(quoteWithRelations);
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Error updating quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
-  app.post("/api/auth/logout", (req, res) => {
-    req.session?.destroy((err) => {
-      if (err) {
-        console.error('Logout error:', err);
-        return res.status(500).json({ message: "Error during logout" });
-      }
-      res.json({ message: "Logged out successfully" });
-    });
-  });
-
-  app.get("/api/auth/user", async (req, res) => {
-    if (!req.session?.userId) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-
+  // Create new quote
+  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, req.session.userId))
-        .limit(1);
+      const { contactId, templateId, categoryId, content, clientName, status, subtotal, total, notes, signature } = req.body;
+      const userId = req.session.userId;
+      const companyId = req.company!.id;
 
-      if (!user) {
-        return res.status(401).json({ message: "User not found" });
+      if (!templateId) {
+        return res.status(400).json({ message: "Template ID is required" });
       }
 
-      // For MULTI_ADMIN, include accessible company IDs
-      const accessibleCompanyIds = req.session.userRole === UserRole.MULTI_ADMIN
-        ? req.session.accessibleCompanyIds
-        : undefined;
+      // Generate a unique quote number
+      const quoteNumber = `Q${Date.now()}`;
 
-      res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        status: user.status,
-        companyId: req.session.companyId,
-        accessibleCompanyIds
+      // Create the quote
+      const [newQuote] = await db
+        .insert(quotes)
+        .values({
+          number: quoteNumber,
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
+          contactId: contactId ? parseInt(contactId) : null,
+          clientName,
+          clientEmail: req.body.clientEmail || '',
+          clientPhone: req.body.clientPhone || '',
+          clientAddress: req.body.clientAddress || '',
+          status: status || "DRAFT",
+          content,
+          subtotal: parseFloat(subtotal),
+          total: parseFloat(total),
+          notes,
+          userId,
+          companyId,
+          signature,
+        })
+        .returning();
+
+      // Get full quote data with relations
+      const [quoteWithRelations] = await db.query.quotes.findMany({
+        where: eq(quotes.id, newQuote.id),
+        with: {
+          contact: true,
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
       });
+
+      res.json(quoteWithRelations);
     } catch (error) {
-      console.error('Error fetching user:', error);
+      console.error('Error creating quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
 
-  // Protected data routes with company filtering
+  // Get all quotes
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quotesData = await db.query.quotes.findMany({
@@ -259,7 +323,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add detailed contact endpoint
   app.get("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const [contactData] = await db.query.contacts.findMany({
@@ -306,7 +369,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add endpoint to get quotes for a specific contact
   app.get("/api/contacts/:id/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quotesData = await db.query.quotes.findMany({
@@ -336,7 +398,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add PUT endpoint for updating contacts
+
   app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const contactId = parseInt(req.params.id);
@@ -433,169 +495,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update the quote update endpoint with proper types
-  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const quoteId = parseInt(req.params.id);
-      const userId = req.session.userId;
-      const companyId = req.company!.id;
-      const {
-        status,
-        signature,
-        contactId,
-        templateId,
-        categoryId,
-        clientName,
-        clientEmail,
-        clientPhone,
-        clientAddress,
-        content,
-        subtotal,
-        total,
-        notes,
-        paymentMethod,
-        discountType,
-        discountValue,
-        discountCode,
-        downPaymentType,
-        downPaymentValue,
-        taxRate,
-        taxAmount,
-        remainingBalance
-      } = req.body;
-
-      if (!templateId) {
-        return res.status(400).json({ message: "Template ID is required" });
-      }
-
-      // First verify quote exists and belongs to company
-      const [existingQuote] = await db
-        .select()
-        .from(quotes)
-        .where(and(
-          eq(quotes.id, quoteId),
-          eq(quotes.companyId, companyId)
-        ))
-        .limit(1);
-
-      if (!existingQuote) {
-        return res.status(404).json({ message: "Quote not found" });
-      }
-
-      // If status is being changed to ACCEPTED and signature is provided
-      if (status === "ACCEPTED" && signature) {
-        // Store the signature
-        await db.insert(quoteSignatures).values({
-          quoteId,
-          signedBy: existingQuote.clientName,
-          signatureType: "DRAWN" as const,
-          signatureData: signature,
-          ipAddress: req.ip || "",
-          userAgent: req.get("user-agent") || "",
-          geoLocation: req.headers["x-forwarded-for"]
-            ? { ip: req.headers["x-forwarded-for"] as string }
-            : null,
-        });
-      }
-
-      // Parse numeric values with fallback to existing values
-      const parseNumeric = (value: any, fallback: number | null = null) => {
-        if (value === undefined || value === null || value === '') return fallback;
-        const parsed = parseFloat(value.toString());
-        return isNaN(parsed) ? fallback : parsed;
-      };
-
-      // If status has changed, create a notification and send via WebSocket
-      if (status && status !== existingQuote.status) {
-        // Create a notification
-        const [notification] = await db
-          .insert(notifications)
-          .values({
-            type: "QUOTE_STATUS_CHANGED" as const,
-            title: "Quote Status Updated",
-            message: `Quote #${existingQuote.number} status changed from ${existingQuote.status} to ${status}`,
-            userId: existingQuote.userId,
-            companyId,
-            deliveryMethod: "IN_APP" as const,
-            data: {
-              quoteId,
-              oldStatus: existingQuote.status,
-              newStatus: status
-            }
-          })
-          .returning();
-
-        // Send notification via WebSocket
-        wsServer.broadcast(existingQuote.userId, {
-          type: "NEW_NOTIFICATION",
-          payload: notification
-        });
-
-        // Create a note for the status change
-        await db.insert(notes).values({
-          content: `Quote status changed from ${existingQuote.status} to ${status}`,
-          userId,
-          quoteId,
-          contactId: existingQuote.contactId!,
-          type: "QUOTE" as const
-        });
-      }
-
-      // Update the quote
-      const [updatedQuote] = await db
-        .update(quotes)
-        .set({
-          contactId: contactId ? parseInt(contactId.toString()) : existingQuote.contactId,
-          templateId: templateId ? parseInt(templateId.toString()) : existingQuote.templateId,
-          categoryId: categoryId ? parseInt(categoryId.toString()) : existingQuote.categoryId,
-          clientName: clientName || existingQuote.clientName,
-          clientEmail: clientEmail || existingQuote.clientEmail,
-          clientPhone: clientPhone || existingQuote.clientPhone,
-          clientAddress: clientAddress || existingQuote.clientAddress,
-          status: (status || existingQuote.status) as typeof existingQuote.status,
-          content: content || existingQuote.content,
-          subtotal: parseNumeric(subtotal, existingQuote.subtotal),
-          total: parseNumeric(total, existingQuote.total),
-          notes: notes || existingQuote.notes,
-          downPaymentType: downPaymentType || existingQuote.downPaymentType,
-          downPaymentValue: parseNumeric(downPaymentValue, existingQuote.downPaymentValue),
-          discountType: discountType || existingQuote.discountType,
-          discountValue: parseNumeric(discountValue, existingQuote.discountValue),
-          taxRate: parseNumeric(taxRate, existingQuote.taxRate),
-          remainingBalance: parseNumeric(remainingBalance, existingQuote.remainingBalance),
-          userId,
-          updatedAt: new Date(),
-        })
-        .where(eq(quotes.id, quoteId))
-        .returning();
-
-      // Get full quote data with relations
-      const [quoteWithRelations] = await db.query.quotes.findMany({
-        where: eq(quotes.id, updatedQuote.id),
-        with: {
-          contact: true,
-          template: true,
-          category: true,
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            }
-          },
-          signatures: true
-        },
-        limit: 1
-      });
-
-      res.json(quoteWithRelations);
-    } catch (error) {
-      console.error('Error updating quote:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productsData = await db.query.products.findMany({
@@ -612,7 +511,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Categories endpoint with proper relations
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const categoriesData = await db.query.categories.findMany({
@@ -631,7 +529,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add detailed quote endpoint
   app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const [quoteData] = await db.query.quotes.findMany({
@@ -670,7 +567,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update users endpoint to include proper company filtering
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       let userQuery = db
@@ -712,7 +608,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add the delete user endpoint after the /api/users GET endpoint
   app.delete("/api/users/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
@@ -755,7 +650,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const templatesData = await db.query.templates.findMany({
@@ -772,7 +666,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update the company query and access checks with proper SQL types
   app.get("/api/companies", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
@@ -833,7 +726,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update company endpoint
   app.put("/api/companies/current", requireAuth, requireCompanyAccess, upload.single('logo'), async (req, res) => {
     try {
       const companyId = req.company!.id;
@@ -917,7 +809,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add notification routes
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
       const userNotifications = await db.query.notifications.findMany({
@@ -952,7 +843,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add notes endpoints
   app.get("/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const contactId = parseInt(req.params.id);
@@ -1026,7 +916,7 @@ export function registerRoutes(app: Express): Server {
         .values({
           content, contactId,
           userId,
-          type: "CONTACT" as const
+          type: "CONTACT"
         })
         .returning();
 
@@ -1049,157 +939,6 @@ export function registerRoutes(app: Express): Server {
       res.json(noteWithUser);
     } catch (error) {
       console.error('Error creating contact note:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  // Modify the quotes creation endpoint to add notes
-  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const { contactId, templateId, categoryId, content, clientName, status, subtotal, total, notes, signature } = req.body;
-      const userId = req.session.userId;
-      const companyId = req.company!.id;
-
-      if (!templateId) {
-        return res.status(400).json({ message: "Template ID is required" });
-      }
-
-      // Generate a unique quote number
-      const quoteNumber = `Q${Date.now()}`;
-
-      // Create the quote
-      const [newQuote] = await db
-        .insert(quotes)
-        .values({
-          number: quoteNumber,
-          categoryId: parseInt(categoryId),
-          templateId: parseInt(templateId),
-          contactId: contactId ? parseInt(contactId) : null,
-          clientName,
-          clientEmail: req.body.clientEmail || '',
-          clientPhone: req.body.clientPhone || '',
-          clientAddress: req.body.clientAddress || '',
-          status: status || "DRAFT",
-          content,
-          subtotal: parseFloat(subtotal),
-          total: parseFloat(total),
-          notes,
-          userId,
-          companyId,
-          signature,
-        })
-        .returning();
-
-      // Get full quote data with relations
-      const [quoteWithRelations] = await db.query.quotes.findMany({
-        where: eq(quotes.id, newQuote.id),
-        with: {
-          contact: true,
-          template: true,
-          category: true,
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            }
-          }
-        },
-        limit: 1
-      });
-
-      res.json(quoteWithRelations);
-    } catch (error) {
-      console.error('Error creating quote:', error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const quoteId = parseInt(req.params.id);
-      const userId = req.session.userId;
-      const companyId = req.company!.id;
-      const {
-        categoryId,
-        templateId,
-        contactId,
-        clientName,
-        clientEmail,
-        clientPhone,
-        clientAddress,
-        status,
-        content,
-        subtotal,
-        total,
-        notes,
-        signature,
-      } = req.body;
-
-      if (!templateId) {
-        return res.status(400).json({ message: "Template ID is required" });
-      }
-
-      // First verify quote exists and belongs to company
-      const [existingQuote] = await db
-        .select()
-        .from(quotes)
-        .where(and(
-          eq(quotes.id, quoteId),
-          eq(quotes.companyId, companyId)
-        ))
-        .limit(1);
-
-      if (!existingQuote) {
-        return res.status(404).json({ message: "Quote not found" });
-      }
-
-      // Update the quote
-      const [updatedQuote] = await db
-        .update(quotes)
-        .set({
-          categoryId: categoryId ? parseInt(categoryId) : existingQuote.categoryId,
-          templateId: templateId ? parseInt(templateId) : existingQuote.templateId,
-          contactId: contactId ? parseInt(contactId) : existingQuote.contactId,
-          clientName: clientName || existingQuote.clientName,
-          clientEmail: clientEmail || existingQuote.clientEmail,
-          clientPhone: clientPhone || existingQuote.clientPhone,
-          clientAddress: clientAddress || existingQuote.clientAddress,
-          status: status || existingQuote.status,
-          content: content || existingQuote.content,
-          subtotal: subtotal ? parseFloat(subtotal) : existingQuote.subtotal,
-          total: total ? parseFloat(total) : existingQuote.total,
-          notes: notes || existingQuote.notes,
-          signature: signature || existingQuote.signature,
-          userId,
-          updatedAt: new Date(),
-        })
-        .where(eq(quotes.id, quoteId))
-        .returning();
-
-      // Get full quote data with relations
-      const [quoteWithRelations] = await db.query.quotes.findMany({
-        where: eq(quotes.id, updatedQuote.id),
-        with: {
-          contact: true,
-          template: true,
-          category: true,
-          user: {
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              role: true,
-            }
-          }
-        },
-        limit: 1
-      });
-
-      res.json(quoteWithRelations);
-    } catch (error) {
-      console.error('Error updating quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -1266,7 +1005,6 @@ export function registerRoutes(app: Express): Server {
         ))
         .limit(1);
 
-
       if (!quote) {
         return res.status(404).json({ message: "Quote not found" });
       }
@@ -1279,7 +1017,7 @@ export function registerRoutes(app: Express): Server {
           quoteId,
           userId,
           contactId: contactId || quote.contactId,
-          type: "QUOTE" as const
+          type: "QUOTE"
         })
         .returning();
 
@@ -1394,5 +1132,51 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  return httpServer;
+  app.post("/api/auth/logout", (req, res) => {
+    req.session?.destroy((err) => {
+      if (err) {
+        console.error('Logout error:', err);
+        return res.status(500).json({ message: "Error during logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/user", async (req, res) => {
+    if (!req.session?.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      // For MULTI_ADMIN, include accessible company IDs
+      const accessibleCompanyIds = req.session.userRole === UserRole.MULTI_ADMIN
+        ? req.session.accessibleCompanyIds
+        : undefined;
+
+      res.json({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        status: user.status,
+        companyId: req.session.companyId,
+        accessibleCompanyIds
+      });
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+
 }
