@@ -13,12 +13,22 @@ interface GenerateQuotePDFParams {
 export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParams): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
+      // Create a document with proper settings
       const doc = new PDFDocument({
         size: 'A4',
         margin: 50,
         bufferPages: true,
+        autoFirstPage: true,
+        info: {
+          Title: `Quote ${quote.number}`,
+          Author: company.name,
+          Subject: 'Quote Document',
+          Keywords: 'quote, estimate, proposal',
+          CreationDate: new Date()
+        }
       });
 
+      // Collect chunks in a buffer
       const chunks: Buffer[] = [];
       doc.on('data', chunk => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));

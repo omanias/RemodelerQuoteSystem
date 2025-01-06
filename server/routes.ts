@@ -1465,5 +1465,55 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add PDF export route
+  app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // Get quote with all necessary relations
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ),
+        with: {
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateQuotePDF({
+        quote: quoteData,
+        company: req.company!
+      });
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="quote-${quoteData.number}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // Send the PDF buffer
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
+
   return httpServer;
 }
