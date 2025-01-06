@@ -152,19 +152,19 @@ export function registerRoutes(app: Express): Server {
   // Create new quote
   app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const { 
-        contactId, 
-        templateId, 
-        categoryId, 
-        content, 
+      const {
+        contactId,
+        templateId,
+        categoryId,
+        content,
         clientName,
         clientEmail,
         clientPhone,
-        clientAddress, 
-        status, 
-        subtotal, 
-        total, 
-        notes, 
+        clientAddress,
+        status,
+        subtotal,
+        total,
+        notes,
         signature,
         downPaymentType,
         downPaymentValue,
@@ -1265,6 +1265,42 @@ export function registerRoutes(app: Express): Server {
       res.json(company);
     } catch (error) {
       console.error('Error fetching current company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Delete quote
+  app.delete("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify quote exists and belongs to company
+      const [existingQuote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Delete the quote directly since we have ON DELETE CASCADE
+      await db
+        .delete(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ));
+
+      console.log(`Quote ${quoteId} successfully deleted for company ${companyId}`);
+      res.json({ message: "Quote deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting quote:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
