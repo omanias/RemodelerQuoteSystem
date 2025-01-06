@@ -17,7 +17,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       const doc = new PDFDocument({
         size: 'A4',
         margin: 50,
-        bufferPages: true,
+        bufferPages: true, // Important for collecting all pages
         autoFirstPage: true,
         info: {
           Title: `Quote ${quote.number}`,
@@ -301,6 +301,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         }
       }
 
+      // Finalize the document
       doc.end();
     } catch (error) {
       console.error('Error generating PDF:', error);
