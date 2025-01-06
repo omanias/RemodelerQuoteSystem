@@ -6,25 +6,29 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-const emailTemplateSchema = z.object({
-  quoteCreated: z.string(),
-  quoteSent: z.string(),
-  quoteAccepted: z.string(),
-  quoteRejected: z.string(),
-  quoteRevised: z.string(),
-  paymentReceived: z.string(),
+const templateSchema = z.object({
+  email: z.object({
+    quoteCreated: z.string(),
+    quoteSent: z.string(),
+    quoteAccepted: z.string(),
+    quoteRejected: z.string(),
+    quoteRevised: z.string(),
+    paymentReceived: z.string(),
+  }),
+  sms: z.object({
+    quoteCreated: z.string(),
+    quoteSent: z.string(),
+    quoteAccepted: z.string(),
+    quoteRejected: z.string(),
+    quoteRevised: z.string(),
+    paymentReceived: z.string(),
+  }),
 });
 
-type EmailTemplateValues = z.infer<typeof emailTemplateSchema>;
+type TemplateValues = z.infer<typeof templateSchema>;
 
 const TEMPLATE_VARIABLES = [
   { label: "Client Name", value: "{{clientName}}" },
@@ -34,29 +38,48 @@ const TEMPLATE_VARIABLES = [
   { label: "Sales Rep Name", value: "{{salesRepName}}" },
 ];
 
-export function EmailTemplates() {
+const TEMPLATE_TYPES = [
+  { id: "quoteCreated", label: "Quote Created" },
+  { id: "quoteSent", label: "Quote Sent" },
+  { id: "quoteAccepted", label: "Quote Accepted" },
+  { id: "quoteRejected", label: "Quote Rejected" },
+  { id: "quoteRevised", label: "Quote Revised" },
+  { id: "paymentReceived", label: "Payment Received" },
+] as const;
+
+export function MessageTemplates() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: templates, isLoading } = useQuery<EmailTemplateValues>({
-    queryKey: ["/api/settings/email-templates"],
+  const { data: templates, isLoading } = useQuery<TemplateValues>({
+    queryKey: ["/api/settings/message-templates"],
   });
 
-  const form = useForm<EmailTemplateValues>({
-    resolver: zodResolver(emailTemplateSchema),
+  const form = useForm<TemplateValues>({
+    resolver: zodResolver(templateSchema),
     defaultValues: {
-      quoteCreated: templates?.quoteCreated || "",
-      quoteSent: templates?.quoteSent || "",
-      quoteAccepted: templates?.quoteAccepted || "",
-      quoteRejected: templates?.quoteRejected || "",
-      quoteRevised: templates?.quoteRevised || "",
-      paymentReceived: templates?.paymentReceived || "",
+      email: {
+        quoteCreated: templates?.email.quoteCreated || "",
+        quoteSent: templates?.email.quoteSent || "",
+        quoteAccepted: templates?.email.quoteAccepted || "",
+        quoteRejected: templates?.email.quoteRejected || "",
+        quoteRevised: templates?.email.quoteRevised || "",
+        paymentReceived: templates?.email.paymentReceived || "",
+      },
+      sms: {
+        quoteCreated: templates?.sms?.quoteCreated || "",
+        quoteSent: templates?.sms?.quoteSent || "",
+        quoteAccepted: templates?.sms?.quoteAccepted || "",
+        quoteRejected: templates?.sms?.quoteRejected || "",
+        quoteRevised: templates?.sms?.quoteRevised || "",
+        paymentReceived: templates?.sms?.paymentReceived || "",
+      },
     },
   });
 
   const updateTemplates = useMutation({
-    mutationFn: async (data: EmailTemplateValues) => {
-      const response = await fetch("/api/settings/email-templates", {
+    mutationFn: async (data: TemplateValues) => {
+      const response = await fetch("/api/settings/message-templates", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -67,16 +90,16 @@ export function EmailTemplates() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || "Failed to update email templates");
+        throw new Error(error.message || "Failed to update message templates");
       }
 
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/settings/email-templates"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/settings/message-templates"] });
       toast({
         title: "Success",
-        description: "Email templates updated successfully",
+        description: "Message templates updated successfully",
       });
     },
     onError: (error: Error) => {
@@ -88,18 +111,18 @@ export function EmailTemplates() {
     },
   });
 
-  const onSubmit = (data: EmailTemplateValues) => {
+  const onSubmit = (data: TemplateValues) => {
     updateTemplates.mutate(data);
   };
 
-  const insertVariable = (variable: string, fieldName: keyof EmailTemplateValues) => {
+  const insertVariable = (variable: string, fieldName: string) => {
     const textarea = document.querySelector(`textarea[name="${fieldName}"]`) as HTMLTextAreaElement;
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
       const text = form.getValues(fieldName);
       const newText = text.substring(0, start) + variable + text.substring(end);
-      form.setValue(fieldName, newText);
+      form.setValue(fieldName as any, newText);
     }
   };
 
@@ -125,7 +148,7 @@ export function EmailTemplates() {
                   onClick={() => {
                     const activeField = document.activeElement as HTMLTextAreaElement;
                     if (activeField?.name) {
-                      insertVariable(variable.value, activeField.name as keyof EmailTemplateValues);
+                      insertVariable(variable.value, activeField.name);
                     }
                   }}
                 >
@@ -136,115 +159,62 @@ export function EmailTemplates() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <FormField
-            control={form.control}
-            name="quoteCreated"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quote Created Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a quote is created..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <Tabs defaultValue="email" className="w-full">
+          <TabsList className="w-full grid grid-cols-2">
+            <TabsTrigger value="email">Email Templates</TabsTrigger>
+            <TabsTrigger value="sms">SMS Templates</TabsTrigger>
+          </TabsList>
 
-          <FormField
-            control={form.control}
-            name="quoteSent"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quote Sent Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a quote is sent..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <TabsContent value="email" className="mt-6">
+            <div className="space-y-6">
+              {TEMPLATE_TYPES.map((type) => (
+                <FormField
+                  key={`email-${type.id}`}
+                  control={form.control}
+                  name={`email.${type.id}`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{type.label} Template</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={4}
+                          placeholder={`Enter the email template for when a quote is ${type.id.toLowerCase()}...`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
+          </TabsContent>
 
-          <FormField
-            control={form.control}
-            name="quoteAccepted"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quote Accepted Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a quote is accepted..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="quoteRejected"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quote Rejected Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a quote is rejected..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="quoteRevised"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quote Revised Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a quote is revised..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="paymentReceived"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Payment Received Template</FormLabel>
-                <FormControl>
-                  <Textarea
-                    {...field}
-                    rows={4}
-                    placeholder="Enter the email template for when a payment is received..."
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
+          <TabsContent value="sms" className="mt-6">
+            <div className="space-y-6">
+              {TEMPLATE_TYPES.map((type) => (
+                <FormField
+                  key={`sms-${type.id}`}
+                  control={form.control}
+                  name={`sms.${type.id}`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{type.label} Template</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={2}
+                          placeholder={`Enter the SMS template for when a quote is ${type.id.toLowerCase()}...`}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         <Button type="submit" disabled={updateTemplates.isPending}>
           Save Changes

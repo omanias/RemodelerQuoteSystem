@@ -1,6 +1,6 @@
 import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { relations, type SQL, sql, type Many } from "drizzle-orm";
+import { relations, type SQL, sql } from "drizzle-orm";
 
 // Add NotificationType enum
 export const NotificationType = {
@@ -9,6 +9,13 @@ export const NotificationType = {
   TASK_ASSIGNED: 'TASK_ASSIGNED',
   TASK_COMPLETED: 'TASK_COMPLETED',
   WORKFLOW_TRIGGERED: 'WORKFLOW_TRIGGERED'
+} as const;
+
+// Add DeliveryMethod enum
+export const DeliveryMethod = {
+  EMAIL: 'EMAIL',
+  SMS: 'SMS',
+  IN_APP: 'IN_APP'
 } as const;
 
 // Enums
@@ -126,6 +133,7 @@ export const notifications = pgTable("notifications", {
   message: text("message").notNull(),
   read: boolean("read").default(false).notNull(),
   data: jsonb("data"),
+  deliveryMethod: text("delivery_method").notNull().$type<keyof typeof DeliveryMethod>(),
   userId: integer("user_id")
     .references(() => users.id)
     .notNull(),
@@ -133,6 +141,8 @@ export const notifications = pgTable("notifications", {
     .references(() => companies.id, { onDelete: 'cascade' })
     .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  sentAt: timestamp("sent_at"),
+  error: text("error"),
 });
 
 export const workflows = pgTable("workflows", {
@@ -192,7 +202,38 @@ export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   subdomain: text("subdomain").notNull().unique(),
-  settings: jsonb("settings"),
+  logo: text("logo"),
+  settings: jsonb("settings").$type<{
+    notifications?: {
+      email?: {
+        templates?: {
+          quoteCreated?: string;
+          quoteSent?: string;
+          quoteAccepted?: string;
+          quoteRejected?: string;
+          quoteRevised?: string;
+          paymentReceived?: string;
+        };
+        enabled?: boolean;
+      };
+      sms?: {
+        templates?: {
+          quoteCreated?: string;
+          quoteSent?: string;
+          quoteAccepted?: string;
+          quoteRejected?: string;
+          quoteRevised?: string;
+          paymentReceived?: string;
+        };
+        enabled?: boolean;
+        apiKey?: string;
+        fromNumber?: string;
+      };
+      inApp?: {
+        enabled?: boolean;
+      };
+    };
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -463,6 +504,7 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   templates: many(templates),
   contacts: many(contacts),
   quotes: many(quotes),
+  notifications: many(notifications),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({

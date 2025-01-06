@@ -17,6 +17,14 @@ const notificationPreferencesSchema = z.object({
     quoteRevised: z.boolean(),
     paymentReceived: z.boolean(),
   }),
+  smsNotifications: z.object({
+    quoteCreated: z.boolean(),
+    quoteSent: z.boolean(),
+    quoteAccepted: z.boolean(),
+    quoteRejected: z.boolean(),
+    quoteRevised: z.boolean(),
+    paymentReceived: z.boolean(),
+  }),
   inAppNotifications: z.object({
     quoteCreated: z.boolean(),
     quoteSent: z.boolean(),
@@ -56,6 +64,14 @@ export function NotificationPreferences() {
         quoteRejected: preferences?.emailNotifications.quoteRejected || false,
         quoteRevised: preferences?.emailNotifications.quoteRevised || false,
         paymentReceived: preferences?.emailNotifications.paymentReceived || false,
+      },
+      smsNotifications: {
+        quoteCreated: preferences?.smsNotifications?.quoteCreated || false,
+        quoteSent: preferences?.smsNotifications?.quoteSent || false,
+        quoteAccepted: preferences?.smsNotifications?.quoteAccepted || false,
+        quoteRejected: preferences?.smsNotifications?.quoteRejected || false,
+        quoteRevised: preferences?.smsNotifications?.quoteRevised || false,
+        paymentReceived: preferences?.smsNotifications?.paymentReceived || false,
       },
       inAppNotifications: {
         quoteCreated: preferences?.inAppNotifications.quoteCreated || false,
@@ -122,6 +138,30 @@ export function NotificationPreferences() {
                   key={`email-${type.id}`}
                   control={form.control}
                   name={`emailNotifications.${type.id}`}
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between space-y-0">
+                      <FormLabel className="flex-1">{type.label}</FormLabel>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-medium mb-4">SMS Notifications</h3>
+            <div className="space-y-4">
+              {NOTIFICATION_TYPES.map((type) => (
+                <FormField
+                  key={`sms-${type.id}`}
+                  control={form.control}
+                  name={`smsNotifications.${type.id}`}
                   render={({ field }) => (
                     <FormItem className="flex items-center justify-between space-y-0">
                       <FormLabel className="flex-1">{type.label}</FormLabel>

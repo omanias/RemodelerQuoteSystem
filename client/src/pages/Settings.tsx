@@ -2,7 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CompanySettings } from "@/components/settings/CompanySettings";
 import { QuoteSettings } from "@/components/settings/QuoteSettings";
-import { EmailTemplates } from "@/components/settings/EmailTemplates";
+import { MessageTemplates } from "@/components/settings/EmailTemplates";
 import { NotificationPreferences } from "@/components/settings/NotificationPreferences";
 
 export function Settings() {
@@ -19,7 +19,7 @@ export function Settings() {
         <TabsList className="w-full justify-start">
           <TabsTrigger value="company">Company Settings</TabsTrigger>
           <TabsTrigger value="quotes">Quote Settings</TabsTrigger>
-          <TabsTrigger value="email">Email Templates</TabsTrigger>
+          <TabsTrigger value="email">Message Templates</TabsTrigger>
           <TabsTrigger value="notifications">Notification Preferences</TabsTrigger>
         </TabsList>
 
@@ -48,10 +48,10 @@ export function Settings() {
         <TabsContent value="email">
           <Card>
             <CardHeader>
-              <CardTitle>Email Templates</CardTitle>
+              <CardTitle>Message Templates</CardTitle>
             </CardHeader>
             <CardContent>
-              <EmailTemplates />
+              <MessageTemplates />
             </CardContent>
           </Card>
         </TabsContent>
