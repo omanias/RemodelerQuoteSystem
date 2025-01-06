@@ -138,6 +138,11 @@ export function registerRoutes(app: Express): Server {
         return res.status(401).json({ message: "User not found" });
       }
 
+      // For MULTI_ADMIN, include accessible company IDs
+      const accessibleCompanyIds = req.session.userRole === UserRole.MULTI_ADMIN
+        ? req.session.accessibleCompanyIds
+        : undefined;
+
       res.json({
         id: user.id,
         email: user.email,
@@ -145,7 +150,7 @@ export function registerRoutes(app: Express): Server {
         role: user.role,
         status: user.status,
         companyId: req.session.companyId,
-        accessibleCompanyIds: req.session.accessibleCompanyIds
+        accessibleCompanyIds
       });
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -405,6 +410,33 @@ export function registerRoutes(app: Express): Server {
             }
           }
         },
+        columns: {
+          id: true,
+          number: true,
+          categoryId: true,
+          templateId: true,
+          contactId: true,
+          clientName: true,
+          clientEmail: true,
+          clientPhone: true,
+          clientAddress: true,
+          status: true,
+          content: true,
+          subtotal: true,
+          total: true,
+          downPaymentValue: true,
+          downPaymentType: true,
+          discountType: true,
+          discountValue: true,
+          taxRate: true,
+          remainingBalance: true,
+          notes: true,
+          userId: true,
+          companyId: true,
+          signature: true,
+          createdAt: true,
+          updatedAt: true
+        },
         orderBy: (quotesTable, { desc }) => [desc(quotesTable.updatedAt)],
       });
       res.json(quotesData);
@@ -438,6 +470,33 @@ export function registerRoutes(app: Express): Server {
               role: true,
             }
           }
+        },
+        columns: {
+          id: true,
+          number: true,
+          categoryId: true,
+          templateId: true,
+          contactId: true,
+          clientName: true,
+          clientEmail: true,
+          clientPhone: true,
+          clientAddress: true,
+          status: true,
+          content: true,
+          subtotal: true,
+          total: true,
+          downPaymentValue: true,
+          downPaymentType: true,
+          discountType: true,
+          discountValue: true,
+          taxRate: true,
+          remainingBalance: true,
+          notes: true,
+          userId: true,
+          companyId: true,
+          signature: true,
+          createdAt: true,
+          updatedAt: true
         },
         limit: 1
       });
@@ -551,7 +610,6 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Server error" });
     }
   });
-
 
 
   app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
