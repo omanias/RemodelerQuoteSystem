@@ -125,6 +125,14 @@ export const WorkflowStatus = {
   DRAFT: 'DRAFT'
 } as const;
 
+// Add new signature-related types after the existing enums
+export const SignatureType = {
+  DRAWN: 'DRAWN',
+  TYPED: 'TYPED',
+  ELECTRONIC: 'ELECTRONIC'
+} as const;
+
+
 // Tables
 export const notifications = pgTable("notifications", {
   id: serial("id").primaryKey(),
@@ -412,6 +420,27 @@ export const quotes = pgTable("quotes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Add new signatures table after the existing tables
+export const quoteSignatures = pgTable("quote_signatures", {
+  id: serial("id").primaryKey(),
+  quoteId: integer("quote_id")
+    .references(() => quotes.id, { onDelete: 'cascade' })
+    .notNull(),
+  signedBy: text("signed_by").notNull(),
+  signatureType: text("signature_type").notNull().$type<keyof typeof SignatureType>(),
+  signatureData: text("signature_data").notNull(), // Base64 encoded signature data
+  signedAt: timestamp("signed_at").defaultNow().notNull(),
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  geoLocation: jsonb("geo_location"), // Optional location data
+  verified: boolean("verified").default(false).notNull(),
+  verificationToken: text("verification_token"),
+  verifiedAt: timestamp("verified_at"),
+  metadata: jsonb("metadata"), // Additional signature metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const tablePermissions = pgTable("table_permissions", {
   id: serial("id").primaryKey(),
   tableName: text("table_name").notNull(),
@@ -601,7 +630,7 @@ export const contactsRelations = relations(contacts, ({ one, many }) => ({
   quotes: many(quotes),
 }));
 
-export const quotesRelations = relations(quotes, ({ one }) => ({
+export const quotesRelations = relations(quotes, ({ one, many }) => ({
   user: one(users, {
     fields: [quotes.userId],
     references: [users.id],
@@ -621,6 +650,15 @@ export const quotesRelations = relations(quotes, ({ one }) => ({
   company: one(companies, {
     fields: [quotes.companyId],
     references: [companies.id],
+  }),
+  signatures: many(quoteSignatures),
+}));
+
+// Add signatures relations
+export const quoteSignaturesRelations = relations(quoteSignatures, ({ one }) => ({
+  quote: one(quotes, {
+    fields: [quoteSignatures.quoteId],
+    references: [quotes.id],
   }),
 }));
 
@@ -808,6 +846,10 @@ export type NewWorkflowAction = typeof workflowActions.$inferInsert;
 export type WorkflowExecution = typeof workflowExecutions.$inferSelect;
 export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
 
+// Add type definitions for signatures
+export type QuoteSignature = typeof quoteSignatures.$inferSelect;
+export type NewQuoteSignature = typeof quoteSignatures.$inferInsert;
+
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
@@ -833,8 +875,7 @@ export const insertContactDocumentSchema = createInsertSchema(contactDocuments);
 export const selectContactDocumentSchema = createSelectSchema(contactDocuments);
 export const insertContactPhotoSchema = createInsertSchema(contactPhotos);
 export const selectContactPhotoSchema = createSelectSchema(contactPhotos);
-export const insertContactCustomFieldSchema = createInsertSchema(contactCustomFields);
-export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFields);
+
 export const insertCompanyAccessSchema = createInsertSchema(companyAccess);
 export const selectCompanyAccessSchema = createSelectSchema(companyAccess);
 
@@ -852,3 +893,7 @@ export const insertWorkflowActionSchema = createInsertSchema(workflowActions);
 export const selectWorkflowActionSchema = createSelectSchema(workflowActions);
 export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutions);
 export const selectWorkflowExecutionSchema = createSelectSchema(workflowExecutions);
+
+// Add Zod schemas for signatures
+export const insertQuoteSignatureSchema = createInsertSchema(quoteSignatures);
+export const selectQuoteSignatureSchema = createSelectSchema(quoteSignatures);

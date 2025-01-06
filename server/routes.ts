@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications, quoteSignatures } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -433,13 +433,15 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add PUT endpoint for updating quotes
+  // Update the quote update endpoint with proper types
   app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
       const userId = req.session.userId;
       const companyId = req.company!.id;
       const {
+        status,
+        signature,
         contactId,
         templateId,
         categoryId,
@@ -447,7 +449,6 @@ export function registerRoutes(app: Express): Server {
         clientEmail,
         clientPhone,
         clientAddress,
-        status,
         content,
         subtotal,
         total,
@@ -477,6 +478,22 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Quote not found" });
       }
 
+      // If status is being changed to ACCEPTED and signature is provided
+      if (status === "ACCEPTED" && signature) {
+        // Store the signature
+        await db.insert(quoteSignatures).values({
+          quoteId,
+          signedBy: existingQuote.clientName,
+          signatureType: "DRAWN" as const,
+          signatureData: signature,
+          ipAddress: req.ip || "",
+          userAgent: req.get("user-agent") || "",
+          geoLocation: req.headers["x-forwarded-for"]
+            ? { ip: req.headers["x-forwarded-for"] as string }
+            : null,
+        });
+      }
+
       // Parse numeric values with fallback to existing values
       const parseNumeric = (value: any, fallback: number | null = null) => {
         if (value === undefined || value === null || value === '') return fallback;
@@ -490,11 +507,12 @@ export function registerRoutes(app: Express): Server {
         const [notification] = await db
           .insert(notifications)
           .values({
-            type: "QUOTE_STATUS_CHANGED",
+            type: "QUOTE_STATUS_CHANGED" as const,
             title: "Quote Status Updated",
             message: `Quote #${existingQuote.number} status changed from ${existingQuote.status} to ${status}`,
-            userId: existingQuote.userId, // Notify the quote owner
+            userId: existingQuote.userId,
             companyId,
+            deliveryMethod: "IN_APP" as const,
             data: {
               quoteId,
               oldStatus: existingQuote.status,
@@ -514,18 +532,7 @@ export function registerRoutes(app: Express): Server {
           content: `Quote status changed from ${existingQuote.status} to ${status}`,
           userId,
           quoteId,
-          contactId: existingQuote.contactId,
-          type: "QUOTE" as const
-        });
-      }
-
-      // If notes field has changed, create a note
-      if (notes && notes !== existingQuote.notes) {
-        await db.insert(notes).values({
-          content: notes,
-          userId,
-          quoteId,
-          contactId: existingQuote.contactId,
+          contactId: existingQuote.contactId!,
           type: "QUOTE" as const
         });
       }
@@ -534,26 +541,23 @@ export function registerRoutes(app: Express): Server {
       const [updatedQuote] = await db
         .update(quotes)
         .set({
-          contactId: contactId ? parseInt(contactId) : existingQuote.contactId,
-          templateId: templateId ? parseInt(templateId) : existingQuote.templateId,
-          categoryId: categoryId ? parseInt(categoryId) : existingQuote.categoryId,
+          contactId: contactId ? parseInt(contactId.toString()) : existingQuote.contactId,
+          templateId: templateId ? parseInt(templateId.toString()) : existingQuote.templateId,
+          categoryId: categoryId ? parseInt(categoryId.toString()) : existingQuote.categoryId,
           clientName: clientName || existingQuote.clientName,
           clientEmail: clientEmail || existingQuote.clientEmail,
           clientPhone: clientPhone || existingQuote.clientPhone,
           clientAddress: clientAddress || existingQuote.clientAddress,
-          status: status || existingQuote.status,
+          status: (status || existingQuote.status) as typeof existingQuote.status,
           content: content || existingQuote.content,
           subtotal: parseNumeric(subtotal, existingQuote.subtotal),
           total: parseNumeric(total, existingQuote.total),
           notes: notes || existingQuote.notes,
-          paymentMethod: paymentMethod || existingQuote.paymentMethod,
-          discountType: discountType || existingQuote.discountType,
-          discountValue: parseNumeric(discountValue, existingQuote.discountValue),
-          discountCode: discountCode || existingQuote.discountCode,
           downPaymentType: downPaymentType || existingQuote.downPaymentType,
           downPaymentValue: parseNumeric(downPaymentValue, existingQuote.downPaymentValue),
+          discountType: discountType || existingQuote.discountType,
+          discountValue: parseNumeric(discountValue, existingQuote.discountValue),
           taxRate: parseNumeric(taxRate, existingQuote.taxRate),
-          taxAmount: parseNumeric(taxAmount, existingQuote.taxAmount),
           remainingBalance: parseNumeric(remainingBalance, existingQuote.remainingBalance),
           userId,
           updatedAt: new Date(),
@@ -575,7 +579,8 @@ export function registerRoutes(app: Express): Server {
               email: true,
               role: true,
             }
-          }
+          },
+          signatures: true
         },
         limit: 1
       });
@@ -747,6 +752,7 @@ export function registerRoutes(app: Express): Server {
   });
 
 
+
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const templatesData = await db.query.templates.findMany({
@@ -763,14 +769,14 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add endpoint to get accessible companies for SUPER_ADMIN and MULTI_ADMIN
+  // Update the company query and access checks with proper SQL types
   app.get("/api/companies", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.id, userId))
+        .where(sql`${users.id} = ${userId}`)
         .limit(1);
 
       if (!user) {
@@ -792,17 +798,21 @@ export function registerRoutes(app: Express): Server {
           .select({
             id: companies.id,
             name: companies.name,
-            // add other company fields as needed
+            subdomain: companies.subdomain,
+            logo: companies.logo,
+            phone: companies.phone,
+            email: companies.email,
+            website: companies.website,
+            createdAt: companies.createdAt,
+            updatedAt: companies.updatedAt
           })
-          .from(companies)
+          .from(companyAccess)
           .innerJoin(
-            companyAccess,
-            and(
-              eq(companyAccess.companyId, companies.id),
-              eq(companyAccess.userId, userId)
-            )
+            companies,
+            sql`${companyAccess.companyId} = ${companies.id} AND ${companyAccess.userId} = ${userId}`
           )
           .orderBy(companies.name);
+
         return res.json(accessibleCompanies);
       }
 
@@ -810,11 +820,10 @@ export function registerRoutes(app: Express): Server {
       const [userCompany] = await db
         .select()
         .from(companies)
-        .where(eq(companies.id, user.companyId))
+        .where(sql`${companies.id} = ${user.companyId}`)
         .limit(1);
 
       return res.json(userCompany ? [userCompany] : []);
-
     } catch (error) {
       console.error('Error fetching companies:', error);
       res.status(500).json({ message: "Server error" });
@@ -909,7 +918,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/notifications", requireAuth, async (req, res) => {
     try {
       const userNotifications = await db.query.notifications.findMany({
-        where: eq(notifications.userId, req.session.userId),
+        where: sql`${notifications.userId} = ${req.session.userId}`,
         orderBy: (notificationsTable, { desc }) => [desc(notificationsTable.createdAt)],
       });
 
@@ -931,10 +940,7 @@ export function registerRoutes(app: Express): Server {
       await db
         .update(notifications)
         .set({ read: true })
-        .where(and(
-          eq(notifications.userId, req.session.userId),
-          inArray(notifications.id, notificationIds)
-        ));
+        .where(sql`${notifications.userId} = ${req.session.userId} AND ${notifications.id} = ANY(${notificationIds})`);
 
       res.json({ message: "Notifications marked as read" });
     } catch (error) {
@@ -963,7 +969,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Contact not found" });
       }
 
-      // Get all notes for this contact, including quote-related notes
+      // Get all notes for this contact, including quoterelated notes
       const notesData = await db.query.notes.findMany({
         where: eq(notes.contactId, contactId),
         with: {
@@ -980,7 +986,7 @@ export function registerRoutes(app: Express): Server {
       });
 
       res.json(notesData);
-    } catch(error) {
+    } catch (error) {
       console.error('Error fetching contact notes:', error);
       res.status(500).json({ message: "Server error" });
     }
@@ -1015,7 +1021,7 @@ export function registerRoutes(app: Express): Server {
       const [newNote] = await db
         .insert(notes)
         .values({
-          content,          contactId,
+          content, contactId,
           userId,
           type: "CONTACT" as const
         })
@@ -1142,14 +1148,14 @@ export function registerRoutes(app: Express): Server {
       const companyQuery = user.role === "SUPER_ADMIN"
         ? db.select().from(companies)
         : db.select()
-            .from(companies)
-            .innerJoin(
-              companyAccess,
-              and(
-                eq(companyAccess.companyId, companies.id),
-                eq(companyAccess.userId, user.id)
-              )
-            );
+          .from(companies)
+          .innerJoin(
+            companyAccess,
+            and(
+              eq(companyAccess.companyId, companies.id),
+              eq(companyAccess.userId, user.id)
+            )
+          );
 
       const companiesData = await companyQuery;
 
@@ -1288,7 +1294,7 @@ export function registerRoutes(app: Express): Server {
           quoteId,
           userId,
           contactId: contactId || quote.contactId,
-          type: "QUOTE"
+          type: "QUOTE" as const
         })
         .returning();
 
@@ -1333,14 +1339,14 @@ export function registerRoutes(app: Express): Server {
       const companyQuery = user.role === "SUPER_ADMIN"
         ? db.select().from(companies)
         : db.select()
-            .from(companies)
-            .innerJoin(
-              companyAccess,
-              and(
-                eq(companyAccess.companyId, companies.id),
-                eq(companyAccess.userId, user.id)
-              )
-            );
+          .from(companies)
+          .innerJoin(
+            companyAccess,
+            and(
+              eq(companyAccess.companyId, companies.id),
+              eq(companyAccess.userId, user.id)
+            )
+          );
 
       const companiesData = await companyQuery;
 
