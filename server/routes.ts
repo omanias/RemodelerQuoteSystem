@@ -989,8 +989,7 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "Notifications marked as read" });
     } catch (error) {
       console.error('Error marking notifications as read:', error);
-      res.status(500).json({ message: "Server error" });
-    }
+      res.status(500).json({ message: "Server error" });    }
   });
 
   app.get("/api/api/contacts/:id/notes", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -1350,27 +1349,24 @@ export function registerRoutes(app: Express): Server {
         primaryEmail,
         primaryPhone,
         primaryAddress,
-        leadStatus,
-        leadSource,
-        propertyType,
-        projectTimeline,
-        budgetRangeMin,
-        budgetRangeMax,
-        productInterests,
-        assignedUserId,
-        categoryId,
-        tags = [] // Default to empty array if not provided
+        leadStatus = LeadStatus.NEW,
+        leadSource = LeadSource.OTHER,
+        propertyType = PropertyType.SINGLE_FAMILY,
+        productInterests = "None specified",
+        secondaryEmail = null,
+        mobilePhone = null,
+        projectAddress = null,
+        categoryId = null
       } = req.body;
 
       // Validate required fields
       if (!firstName || !lastName || !primaryEmail || !primaryPhone || !primaryAddress) {
-        return res.status(400).json({ 
-          message: "Missing required fields", 
-          required: ["firstName", "lastName", "primaryEmail", "primaryPhone", "primaryAddress"]
+        return res.status(400).json({
+          message: "First name, last name, primary email, primary phone, and primary address are required"
         });
       }
 
-      // Create the contact
+      // Create the contact with defaults for required fields
       const [newContact] = await db
         .insert(contacts)
         .values({
@@ -1379,17 +1375,17 @@ export function registerRoutes(app: Express): Server {
           primaryEmail,
           primaryPhone,
           primaryAddress,
-          leadStatus: leadStatus || LeadStatus.NEW,
-          leadSource: leadSource || LeadSource.WEBSITE,
-          propertyType: propertyType || PropertyType.SINGLE_FAMILY,
-          projectTimeline: projectTimeline || null,
-          budgetRangeMin: budgetRangeMin ? parseFloat(budgetRangeMin) : null,
-          budgetRangeMax: budgetRangeMax ? parseFloat(budgetRangeMax) : null,
-          productInterests: productInterests || "",
-          assignedUserId: assignedUserId || req.session.userId,
-          categoryId: categoryId || null,
-          tags: tags || [],
+          leadStatus,
+          leadSource,
+          propertyType,
+          productInterests,
+          assignedUserId: req.session.userId,
           companyId: req.company!.id,
+          secondaryEmail,
+          mobilePhone,
+          projectAddress,
+          categoryId,
+          tags: [], // Default empty array since it's notNull
         })
         .returning();
 
