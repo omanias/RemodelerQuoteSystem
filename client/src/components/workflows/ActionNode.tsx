@@ -11,7 +11,10 @@ export const WorkflowActionNode = memo(({ data, isConnectable }: any) => {
         <CardTitle className="text-sm font-medium">Action</CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0">
-        <Select value={data.type} onValueChange={(value) => data.onChange?.({ type: value })}>
+        <Select 
+          value={data.type} 
+          onValueChange={(value) => data.onChange?.({ type: value })}
+        >
           <SelectTrigger>
             <SelectValue placeholder="Select action type" />
           </SelectTrigger>
@@ -40,4 +43,4 @@ export const WorkflowActionNode = memo(({ data, isConnectable }: any) => {
   );
 });
 
-ActionNode.displayName = 'ActionNode';
+WorkflowActionNode.displayName = 'WorkflowActionNode';

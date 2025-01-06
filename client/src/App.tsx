@@ -16,6 +16,8 @@ import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 import { Companies } from "@/pages/Companies";
 import { SuperAdminDashboard } from "@/pages/SuperAdminDashboard";
+// Import the Workflows page
+import WorkflowsPage from "@/pages/workflows";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
@@ -55,6 +57,8 @@ function App() {
         <Route path="/users" component={Users} />
         <Route path="/permissions" component={AdminPermissions} />
         <Route path="/companies" component={Companies} />
+        {/* Add the workflows route */}
+        <Route path="/workflows" component={WorkflowsPage} />
       </Switch>
     </Layout>
   );

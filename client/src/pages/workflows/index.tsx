@@ -39,7 +39,14 @@ export default function WorkflowsPage() {
       data: { 
         label: 'New Trigger',
         type: 'QUOTE_CREATED',
-        conditions: {}
+        conditions: {},
+        onChange: (data: any) => {
+          setNodes((nds) =>
+            nds.map((node) =>
+              node.id === newNode.id ? { ...node, data: { ...node.data, ...data } } : node
+            )
+          );
+        },
       },
     };
     setNodes((nds) => [...nds, newNode]);
@@ -53,7 +60,14 @@ export default function WorkflowsPage() {
       data: { 
         label: 'New Action',
         type: 'SEND_EMAIL',
-        config: {}
+        config: {},
+        onChange: (data: any) => {
+          setNodes((nds) =>
+            nds.map((node) =>
+              node.id === newNode.id ? { ...node, data: { ...node.data, ...data } } : node
+            )
+          );
+        },
       },
     };
     setNodes((nds) => [...nds, newNode]);
