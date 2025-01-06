@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { db } from "@db";
-import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes } from "@db/schema";
+import { users, companies, quotes, contacts, products, categories, templates, companyAccess, UserRole, UserStatus, notes, notifications } from "@db/schema";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
 import { createServer, type Server } from "http";
 import session from "express-session";
@@ -9,6 +9,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { companyMiddleware, requireAuth, requireCompanyAccess, requireRole } from "./middleware/company";
 import { count } from "drizzle-orm";
+import { setupWebSocket } from "./websocket";
 
 const scryptAsync = promisify(scrypt);
 const MemoryStore = createMemoryStore(session);
@@ -43,6 +44,9 @@ declare module 'express-session' {
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
+
+  // Setup WebSocket server
+  const wsServer = setupWebSocket(httpServer, app);
 
   // Setup session middleware before any routes
   app.use(
@@ -472,8 +476,32 @@ export function registerRoutes(app: Express): Server {
         return isNaN(parsed) ? fallback : parsed;
       };
 
-      // If status has changed, create a note
+      // If status has changed, create a notification and send via WebSocket
       if (status && status !== existingQuote.status) {
+        // Create a notification
+        const [notification] = await db
+          .insert(notifications)
+          .values({
+            type: "QUOTE_STATUS_CHANGED",
+            title: "Quote Status Updated",
+            message: `Quote #${existingQuote.number} status changed from ${existingQuote.status} to ${status}`,
+            userId: existingQuote.userId, // Notify the quote owner
+            companyId,
+            data: {
+              quoteId,
+              oldStatus: existingQuote.status,
+              newStatus: status
+            }
+          })
+          .returning();
+
+        // Send notification via WebSocket
+        wsServer.broadcast(existingQuote.userId, {
+          type: "NEW_NOTIFICATION",
+          payload: notification
+        });
+
+        // Create a note for the status change
         await db.insert(notes).values({
           content: `Quote status changed from ${existingQuote.status} to ${status}`,
           userId,
@@ -800,6 +828,44 @@ export function registerRoutes(app: Express): Server {
       });
     } catch (error) {
       console.error('Error fetching current company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add notification routes
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userNotifications = await db.query.notifications.findMany({
+        where: eq(notifications.userId, req.session.userId),
+        orderBy: (notificationsTable, { desc }) => [desc(notificationsTable.createdAt)],
+      });
+
+      res.json(userNotifications);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/notifications/mark-read", requireAuth, async (req, res) => {
+    try {
+      const { notificationIds } = req.body;
+
+      if (!Array.isArray(notificationIds)) {
+        return res.status(400).json({ message: "Invalid notification IDs" });
+      }
+
+      await db
+        .update(notifications)
+        .set({ read: true })
+        .where(and(
+          eq(notifications.userId, req.session.userId),
+          inArray(notifications.id, notificationIds)
+        ));
+
+      res.json({ message: "Notifications marked as read" });
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
       res.status(500).json({ message: "Server error" });
     }
   });

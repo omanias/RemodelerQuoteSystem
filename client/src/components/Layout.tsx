@@ -3,6 +3,7 @@ import { Sidebar, SidebarProvider } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
+import { NotificationsMenu } from "@/components/ui/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, FileText, Package,
@@ -93,6 +94,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   </p>
                   <p className="text-xs text-muted-foreground">{user.role}</p>
                 </div>
+                <NotificationsMenu />
                 <Button
                   variant="ghost"
                   size="icon"

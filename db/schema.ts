@@ -2,6 +2,15 @@ import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } fr
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations, type SQL, sql, type Many } from "drizzle-orm";
 
+// Add NotificationType enum
+export const NotificationType = {
+  QUOTE_STATUS_CHANGED: 'QUOTE_STATUS_CHANGED',
+  LEAD_STATUS_CHANGED: 'LEAD_STATUS_CHANGED',
+  TASK_ASSIGNED: 'TASK_ASSIGNED',
+  TASK_COMPLETED: 'TASK_COMPLETED',
+  WORKFLOW_TRIGGERED: 'WORKFLOW_TRIGGERED'
+} as const;
+
 // Enums
 export const UserRole = {
   SUPER_ADMIN: 'SUPER_ADMIN',
@@ -110,6 +119,75 @@ export const WorkflowStatus = {
 } as const;
 
 // Tables
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  type: text("type").notNull().$type<keyof typeof NotificationType>(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  read: boolean("read").default(false).notNull(),
+  data: jsonb("data"),
+  userId: integer("user_id")
+    .references(() => users.id)
+    .notNull(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const workflows = pgTable("workflows", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().$type<keyof typeof WorkflowStatus>(),
+  companyId: integer("company_id")
+    .references(() => companies.id, { onDelete: 'cascade' })
+    .notNull(),
+  createdBy: integer("created_by")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowTriggers = pgTable("workflow_triggers", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  triggerType: text("trigger_type").notNull().$type<keyof typeof WorkflowTriggerType>(),
+  conditions: jsonb("conditions"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowActions = pgTable("workflow_actions", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  actionType: text("action_type").notNull().$type<keyof typeof WorkflowActionType>(),
+  config: jsonb("config").notNull(),
+  order: integer("order").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const workflowExecutions = pgTable("workflow_executions", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id")
+    .references(() => workflows.id, { onDelete: 'cascade' })
+    .notNull(),
+  triggerId: integer("trigger_id")
+    .references(() => workflowTriggers.id)
+    .notNull(),
+  status: text("status").notNull(),
+  error: text("error"),
+  metadata: jsonb("metadata"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 export const companies = pgTable("companies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -349,61 +427,6 @@ export const contactPhotos = pgTable("contact_photos", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Add new workflow-related tables
-export const workflows = pgTable("workflows", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  status: text("status").notNull().$type<keyof typeof WorkflowStatus>(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdBy: integer("created_by")
-    .references(() => users.id)
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const workflowTriggers = pgTable("workflow_triggers", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  triggerType: text("trigger_type").notNull().$type<keyof typeof WorkflowTriggerType>(),
-  conditions: jsonb("conditions"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const workflowActions = pgTable("workflow_actions", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  actionType: text("action_type").notNull().$type<keyof typeof WorkflowActionType>(),
-  config: jsonb("config").notNull(),
-  order: integer("order").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const workflowExecutions = pgTable("workflow_executions", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  triggerId: integer("trigger_id")
-    .references(() => workflowTriggers.id)
-    .notNull(),
-  status: text("status").notNull(),
-  error: text("error"),
-  metadata: jsonb("metadata"),
-  startedAt: timestamp("started_at").defaultNow().notNull(),
-  completedAt: timestamp("completed_at"),
-});
-
-// Add notes table after contactPhotos and before companyAccess
 export const notes = pgTable("notes", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
@@ -575,7 +598,17 @@ export const contactPhotosRelations = relations(contactPhotos, ({ one }) => ({
   }),
 }));
 
-// Add workflow relations
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  company: one(companies, {
+    fields: [notifications.companyId],
+    references: [companies.id],
+  }),
+}));
+
 export const workflowsRelations = relations(workflows, ({ many, one }) => ({
   company: one(companies, {
     fields: [workflows.companyId],
@@ -615,7 +648,6 @@ export const workflowExecutionsRelations = relations(workflowExecutions, ({ one 
   }),
 }));
 
-// Add notes relations after contactPhotosRelations
 export const notesRelations = relations(notes, ({ one }) => ({
   contact: one(contacts, {
     fields: [notes.contactId],
@@ -653,7 +685,6 @@ export const companyAccessRelations = relations(companyAccess, ({ one }) => ({
   }),
 }));
 
-
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -684,11 +715,12 @@ export type NewTablePermission = typeof tablePermissions.$inferInsert;
 export type CompanyAccess = typeof companyAccess.$inferSelect;
 export type NewCompanyAccess = typeof companyAccess.$inferInsert;
 
-// Add Note types at the end of the types section
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 
-// Add new types for workflows
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
+
 export type Workflow = typeof workflows.$inferSelect;
 export type NewWorkflow = typeof workflows.$inferInsert;
 export type WorkflowTrigger = typeof workflowTriggers.$inferSelect;
@@ -728,11 +760,12 @@ export const selectContactCustomFieldSchema = createSelectSchema(contactCustomFi
 export const insertCompanyAccessSchema = createInsertSchema(companyAccess);
 export const selectCompanyAccessSchema = createSelectSchema(companyAccess);
 
-// Add Note schemas at the end of the schemas section
 export const insertNoteSchema = createInsertSchema(notes);
 export const selectNoteSchema = createSelectSchema(notes);
 
-// Add Zod schemas for workflows
+export const insertNotificationSchema = createInsertSchema(notifications);
+export const selectNotificationSchema = createSelectSchema(notifications);
+
 export const insertWorkflowSchema = createInsertSchema(workflows);
 export const selectWorkflowSchema = createSelectSchema(workflows);
 export const insertWorkflowTriggerSchema = createInsertSchema(workflowTriggers);
