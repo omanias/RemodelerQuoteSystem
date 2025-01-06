@@ -10,6 +10,7 @@ import multer from "multer";
 import { storage, UPLOADS_PATH } from "./storage";
 import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
+import { generateQuotePDF } from './services/pdfService';
 
 declare module 'express-session' {
   interface SessionData {
@@ -1410,6 +1411,57 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error creating contact:', error);
       res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add this route after other quote-related routes
+  app.get("/api/quotes/:id/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // Get quote with template data
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ),
+        with: {
+          template: true,
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Get company data
+      const [companyData] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!companyData) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateQuotePDF({
+        quote: quoteData,
+        company: companyData
+      });
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="quote-${quoteData.number}.pdf"`);
+
+      // Send PDF buffer
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating quote PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
     }
   });
 
