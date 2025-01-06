@@ -112,7 +112,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Quote Items Table Header
       const tableTop = doc.y;
-      const tableHeaders = ['Item', 'Description', 'Qty', 'Unit Price', 'Total'];
+      const tableHeaders = ['Product', 'Description', 'Qty', 'Unit Price', 'Total'];
       const columnWidths = [150, 200, 50, 70, 70];
 
       // Draw table header
@@ -145,9 +145,10 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       if (Array.isArray(content)) {
         content.forEach((item: any, index: number) => {
-          // Handle null/undefined values
+          // Format the product details with proper units
           const name = item.name || '';
-          const description = item.description || '';
+          const unitType = item.unitType || '';
+          const description = `Base Price: $${Number(item.basePrice || 0).toFixed(2)}/${unitType}`;
           const quantity = item.quantity?.toString() || '0';
           const unitPrice = Number(item.unitPrice || 0).toFixed(2);
           const total = Number(item.total || 0).toFixed(2);

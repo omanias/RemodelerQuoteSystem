@@ -1478,7 +1478,11 @@ export function registerRoutes(app: Express): Server {
           eq(quotes.companyId, companyId)
         ),
         with: {
-          template: true,
+          template: {
+            with: {
+              category: true
+            }
+          },
           category: true,
           user: {
             columns: {
