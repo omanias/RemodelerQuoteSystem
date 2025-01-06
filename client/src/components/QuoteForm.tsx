@@ -26,8 +26,8 @@ import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
+import { SignatureCanvas } from "@/components/SignatureCanvas";
 
-// Keep the schema and interfaces unchanged
 const quoteFormSchema = z.object({
   contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
@@ -45,6 +45,16 @@ const quoteFormSchema = z.object({
   downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
   templateId: z.string().min(1, "Template is required"),
+  signature: z.object({
+    data: z.string(),
+    timestamp: z.string(),
+    metadata: z.object({
+      browserInfo: z.string(),
+      ipAddress: z.string(),
+      signedAt: z.string(),
+      timezone: z.string(),
+    }),
+  }).optional(),
 });
 
 interface QuoteFormProps {
@@ -106,7 +116,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return [];
   });
 
-  // Keep all queries and form setup
   const { data: contacts = [] } = useQuery<Contact[]>({
     queryKey: ["/api/contacts"],
   });
@@ -138,6 +147,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       downPaymentValue: quote?.downPaymentValue?.toString() || "0",
       notes: quote?.notes || "",
       templateId: quote?.templateId?.toString() || "",
+      signature: quote?.signature || undefined,
     },
   });
 
@@ -322,6 +332,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             tax: parseNumber(tax)
           },
         },
+        signature: data.signature,
       };
 
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
@@ -372,7 +383,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     mutation.mutate(data);
   };
 
-  // Auto-save mutation
   const autoSaveMutation = useMutation({
     mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
       if (!quote?.id) return; // Only auto-save existing quotes
@@ -436,6 +446,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               tax: parseNumber(tax)
             },
           },
+          signature: data.signature,
         }),
         credentials: "include",
       });
@@ -479,11 +490,37 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return () => subscription.unsubscribe();
   }, [form, quote?.id, debouncedAutoSave]);
 
+  const [showSignature, setShowSignature] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  const handleSignatureSave = (signatureData: {
+    data: string;
+    timestamp: string;
+    metadata: {
+      browserInfo: string;
+      ipAddress: string;
+      signedAt: string;
+      timezone: string;
+    };
+  }) => {
+    const formData = form.getValues();
+    mutation.mutate({
+      ...formData,
+      signature: signatureData,
+    });
+  };
+
+  const status = form.watch("status");
+  useEffect(() => {
+    if (status === QuoteStatus.ACCEPTED && !quote?.signature) {
+      setShowSignature(true);
+    }
+  }, [status, quote?.signature]);
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* User Info Card */}
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -496,7 +533,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Contact Information */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -591,7 +627,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Category and Template Selection */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Details</h3>
@@ -651,7 +686,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Products Selection */}
         {form.watch("categoryId") && (
           <Card>
             <CardContent className="pt-6">
@@ -765,7 +799,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Quote Settings */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Settings</h3>
@@ -942,7 +975,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Calculations Card */}
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-2">
@@ -973,6 +1005,36 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             </div>
           </CardContent>
         </Card>
+
+        {status === QuoteStatus.ACCEPTED && !quote?.signature && (
+          <SignatureCanvas
+            isOpen={showSignature}            onClose={() => setShowSignature(false)}
+            onSave={handleSignatureSave}
+            title="Sign Quote"
+            description="Please sign below to accept this quote. Your signature will be recorded with a timestamp and other verification data."
+          />
+        )}
+
+        {quote?.signature && (
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-2">Signature Information</h3>
+              <div className="space-y-2">
+                <img 
+                  src={quote.signature.data} 
+                  alt="Signature" 
+                  className="border rounded p-2 max-w-md"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Signed on: {new Date(quote.signature.timestamp).toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Timezone: {quote.signature.metadata.timezone}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button type="submit" disabled={mutation.isPending}>

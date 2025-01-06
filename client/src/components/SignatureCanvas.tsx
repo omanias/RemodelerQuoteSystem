@@ -13,9 +13,16 @@ import { toast } from "@/hooks/use-toast";
 interface SignatureCanvasProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (signature: string) => void;
+  onSave: (signature: { data: string; timestamp: string; metadata: SignatureMetadata }) => void;
   title?: string;
   description?: string;
+}
+
+interface SignatureMetadata {
+  browserInfo: string;
+  ipAddress: string;
+  signedAt: string;
+  timezone: string;
 }
 
 export function SignatureCanvas({
@@ -33,7 +40,7 @@ export function SignatureCanvas({
     setIsEmpty(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isEmpty) {
       toast({
         title: "Error",
@@ -45,7 +52,19 @@ export function SignatureCanvas({
 
     const signatureData = signaturePad.current?.toDataURL();
     if (signatureData) {
-      onSave(signatureData);
+      // Create signature metadata
+      const metadata: SignatureMetadata = {
+        browserInfo: navigator.userAgent,
+        ipAddress: "Captured on server", // This will be replaced with actual IP on server
+        signedAt: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+
+      onSave({
+        data: signatureData,
+        timestamp: new Date().toISOString(),
+        metadata,
+      });
       handleClear();
       onClose();
     }
@@ -63,6 +82,7 @@ export function SignatureCanvas({
             ref={signaturePad}
             canvasProps={{
               className: "signature-canvas w-full h-64 border rounded",
+              style: { width: "100%", height: "256px" }
             }}
             onBegin={() => setIsEmpty(false)}
           />
