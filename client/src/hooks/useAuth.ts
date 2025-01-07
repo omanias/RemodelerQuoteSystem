@@ -1,12 +1,13 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { UserRole } from "@db/schema";
 
 export type AuthUser = {
   id: number;
   email: string;
   name: string;
-  role: 'ADMIN' | 'MANAGER' | 'SALES_REP';
+  role: keyof typeof UserRole;
   companyId: number;
   status: 'ACTIVE' | 'INACTIVE';
   companyName?: string;

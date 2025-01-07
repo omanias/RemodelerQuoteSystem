@@ -10,8 +10,7 @@ import {
   LogOut, Settings, Users, UserCircle2,
   Building2, Share2
 } from "lucide-react";
-
-type UserRole = "SUPER_ADMIN" | "MULTI_ADMIN" | "ADMIN" | "MANAGER" | "SALES_REP";
+import { UserRole } from "@db/schema";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
@@ -34,12 +33,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   // Add Companies menu item for SUPER_ADMIN and MULTI_ADMIN
-  if (["SUPER_ADMIN", "MULTI_ADMIN"].includes(user.role)) {
+  if (user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN") {
     navigation.push({ name: "Companies", href: "/companies", icon: Building2 });
   }
 
   // Show additional menu items for admin roles
-  if (["SUPER_ADMIN", "MULTI_ADMIN", "ADMIN"].includes(user.role)) {
+  if (user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN" || user.role === "ADMIN") {
     navigation.push({ name: "Users", href: "/users", icon: Users });
     navigation.push({ name: "Settings", href: "/settings", icon: Settings });
   }

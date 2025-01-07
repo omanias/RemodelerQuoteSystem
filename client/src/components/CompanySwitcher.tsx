@@ -14,15 +14,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
+import { UserRole } from "@db/schema"; //Corrected import path
 
 interface Company {
   id: number;
   name: string;
 }
-
-// Assuming UserRole is defined in schema.ts and imported accordingly.  Adjust path as needed.
-import { UserRole } from '@/schema';
-
 
 export function CompanySwitcher() {
   const { user } = useAuth();
