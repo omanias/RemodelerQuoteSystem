@@ -118,15 +118,15 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            .fontSize(10)
            .fillColor('#000000')
            .text(header, xPos, tableTop + 5, {
-             width: columnWidths[i],
-             align: i >= 2 ? 'right' : 'left'
+              width: columnWidths[i],
+              align: i >= 2 ? 'right' : 'left'
            });
         xPos += columnWidths[i];
       });
 
       // Quote Products
       let yPos = tableTop + 25;
-      const products = quote.content?.products || [];
+      const products = (quote.content as { products?: any[] })?.products || [];
 
       products.forEach((product: any, index: number) => {
         const isEvenRow = index % 2 === 0;
@@ -181,8 +181,17 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
           align: 'right'
         });
 
-        // Increased spacing between products from 20 to 35 for better readability
-        yPos += itemHeight + 35;
+        // Increased spacing between products from 35 to 45 for better readability
+        yPos += itemHeight + 45;
+
+        // Add a subtle separator line between products if not the last item
+        if (index < products.length - 1) {
+          doc.strokeColor('#e5e7eb')
+             .moveTo(50, yPos - 20)
+             .lineTo(545, yPos - 20)
+             .stroke()
+             .strokeColor('#000000');
+        }
       });
 
       // Financial Summary Box

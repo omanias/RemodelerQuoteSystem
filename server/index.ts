@@ -70,7 +70,7 @@ if (app.get("env") === "development") {
   });
 }
 
-// Request logging middleware with better error handling
+// Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -105,17 +105,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Global error handler with detailed logging
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Unhandled error:', err);
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  res.status(status).json({ 
-    message, 
-    error: app.get('env') === 'development' ? err.stack : undefined 
-  });
-});
-
 (async () => {
   try {
     // Verify database connection before starting
@@ -131,18 +120,11 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       serveStatic(app);
     }
 
-    // Start server on port 5000 with proper error handling
+    // ALWAYS serve the app on port 5000
+    // this serves both the API and the client
     const PORT = 5000;
     server.listen(PORT, "0.0.0.0", () => {
-      log(`Server running on port ${PORT}`);
-    }).on('error', (error: any) => {
-      if (error.code === 'EADDRINUSE') {
-        log(`Error: Port ${PORT} is already in use. Please ensure no other instance of the application is running.`);
-        process.exit(1);
-      } else {
-        console.error('Server error:', error);
-        process.exit(1);
-      }
+      log(`serving on port ${PORT}`);
     });
 
   } catch (error) {
