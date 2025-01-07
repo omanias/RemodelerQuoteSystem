@@ -4,27 +4,51 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       queryFn: async ({ queryKey }) => {
-        const res = await fetch(queryKey[0] as string, {
-          credentials: "include",
-        });
+        try {
+          const res = await fetch(queryKey[0] as string, {
+            credentials: "include",
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+          });
 
-        if (!res.ok) {
-          if (res.status >= 500) {
-            throw new Error(`${res.status}: ${res.statusText}`);
+          if (!res.ok) {
+            const errorText = await res.text();
+            if (res.status >= 500) {
+              console.error(`Server error: ${res.status}`, errorText);
+              throw new Error(`Server error: ${res.status}`);
+            }
+
+            throw new Error(errorText || `Request failed with status ${res.status}`);
           }
 
-          throw new Error(`${res.status}: ${await res.text()}`);
-        }
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            return res.json();
+          }
 
-        return res.json();
+          throw new Error('Response is not JSON');
+        } catch (error) {
+          console.error('Query error:', error);
+          throw error;
+        }
+      },
+      retry: (failureCount, error) => {
+        if (error instanceof Error && error.message.includes('401')) {
+          return false; // Don't retry auth failures
+        }
+        return failureCount < 2;
       },
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,
-      retry: false,
     },
     mutations: {
       retry: false,
+      onError: (error) => {
+        console.error('Mutation error:', error);
+      }
     }
   },
 });
