@@ -26,10 +26,9 @@ const sessionConfig = {
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'lax' as const,
+    sameSite: 'none' as const,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: '/',
-    domain: undefined // Allow the browser to set this automatically
   }
 };
 
@@ -42,6 +41,22 @@ app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
+// CORS configuration
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (origin.endsWith('.replit.dev') || origin.includes('localhost'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 // Security headers middleware
 app.use((req, res, next) => {
   res.set({
@@ -49,26 +64,9 @@ app.use((req, res, next) => {
     'X-Frame-Options': 'DENY',
     'X-XSS-Protection': '1; mode=block',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
-    'Cache-Control': 'no-store, max-age=0',
-    'Pragma': 'no-cache'
   });
   next();
 });
-
-// Enable CORS for development
-if (app.get("env") === "development") {
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With');
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200);
-    } else {
-      next();
-    }
-  });
-}
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -113,15 +111,12 @@ app.use((req, res, next) => {
 
     const server = registerRoutes(app);
 
-    // Development setup
     if (app.get("env") === "development") {
       await setupVite(app, server);
     } else {
       serveStatic(app);
     }
 
-    // ALWAYS serve the app on port 5000
-    // this serves both the API and the client
     const PORT = 5000;
     server.listen(PORT, "0.0.0.0", () => {
       log(`serving on port ${PORT}`);
