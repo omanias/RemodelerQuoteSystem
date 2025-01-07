@@ -1011,8 +1011,7 @@ export function registerRoutes(app: Express): Server {
           fax: fax || null,
           email: email || null,
           website: website || null,
-          streetAddress: streetAddress || null,
-          suite: suite || null,
+          streetAddress: streetAddress || null,          suite: suite || null,
           city: city || null,
           state: state || null,
           zipCode: zipCode || null,
@@ -1608,6 +1607,40 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error generating PDF:', error);
       res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
+  // Add product deletion route
+  app.delete("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify product exists and belongs to company
+      const [existingProduct] = await db
+        .select()
+        .from(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Delete the product
+      await db
+        .delete(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ));
+
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      res.status(500).json({ message: "Server error" });
     }
   });
 
