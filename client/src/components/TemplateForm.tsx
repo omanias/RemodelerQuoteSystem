@@ -35,8 +35,21 @@ const templateSchema = z.object({
 
 type TemplateFormData = z.infer<typeof templateSchema>;
 
+interface Category {
+  id: number;
+  name: string;
+  description?: string;
+}
+
 interface TemplateFormProps {
-  template?: any;
+  template?: {
+    id: number;
+    name: string;
+    categoryId: number;
+    termsAndConditions?: string;
+    isDefault: boolean;
+    imageUrls?: string[];
+  };
   onSuccess?: () => void;
 }
 
@@ -45,8 +58,8 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
   const queryClient = useQueryClient();
   const [images, setImages] = useState<string[]>(template?.imageUrls || []);
 
-  // Fetch categories
-  const { data: categories = [] } = useQuery({
+  // Fetch categories with proper typing
+  const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
 
@@ -91,8 +104,7 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
           }
         }
 
-        const result = await response.json();
-        return result;
+        return response.json();
       } catch (error: any) {
         throw new Error(error.message || "An unexpected error occurred");
       }
@@ -160,8 +172,11 @@ export function TemplateForm({ template, onSuccess }: TemplateFormProps) {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {categories.map((category: any) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
+                  {categories.map((category: Category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
