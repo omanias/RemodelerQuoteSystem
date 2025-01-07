@@ -1831,5 +1831,113 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.post("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations,
+      } = req.body;
+
+      // Validate required fields
+      if (!name || !categoryId) {
+        return res.status(400).json({ message: "Name and category are required" });
+      }
+
+      // Create the product with proper type handling
+      const [newProduct] = await db
+        .insert(products)
+        .values({
+          name,
+          categoryId: parseInt(categoryId.toString()),
+          basePrice: parseFloat(basePrice.toString()),
+          cost: parseFloat(cost.toString()),
+          unit: unit || null,
+          isActive: isActive ?? true,
+          variations: variations || [],
+          companyId: req.company!.id,
+        })
+        .returning();
+
+      // Get product with relations
+      const [productWithRelations] = await db.query.products.findMany({
+        where: eq(products.id, newProduct.id),
+        with: {
+          category: true,
+        },
+        limit: 1,
+      });
+
+      res.json(productWithRelations);
+    } catch (error) {
+      console.error('Error creating product:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+      const {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations,
+      } = req.body;
+
+      // First verify product exists and belongs to company
+      const [existingProduct] = await db
+        .select()
+        .from(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Update the product
+      const [updatedProduct] = await db
+        .update(products)
+        .set({
+          name: name || existingProduct.name,
+          categoryId: categoryId ? parseInt(categoryId.toString()) : existingProduct.categoryId,
+          basePrice: basePrice ? parseFloat(basePrice.toString()) : existingProduct.basePrice,
+          cost: cost ? parseFloat(cost.toString()) : existingProduct.cost,
+          unit: unit || existingProduct.unit,
+          isActive: isActive ?? existingProduct.isActive,
+          variations: variations || existingProduct.variations,
+          updatedAt: new Date(),
+        })
+        .where(eq(products.id, productId))
+        .returning();
+
+      // Get product with relations
+      const [productWithRelations] = await db.query.products.findMany({
+        where: eq(products.id, updatedProduct.id),
+        with: {
+          category: true,
+        },
+        limit: 1,
+      });
+
+      res.json(productWithRelations);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   return httpServer;
 }

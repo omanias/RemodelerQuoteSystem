@@ -102,29 +102,41 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         })),
       };
 
-      const response = await fetch(
-        product ? `/api/products/${product.id}` : "/api/products",
-        {
-          method: product ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-          },
-          body: JSON.stringify(formattedData),
-          credentials: "include",
-        }
-      );
+      try {
+        const response = await fetch(
+          product ? `/api/products/${product.id}` : "/api/products",
+          {
+            method: product ? "PUT" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: JSON.stringify(formattedData),
+            credentials: "include",
+          }
+        );
 
-      if (!response.ok) {
-        if (response.headers.get("content-type")?.includes("application/json")) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to save product");
+        // First check if the response is JSON
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          // If not JSON, get the text and throw a formatted error
+          const errorText = await response.text();
+          throw new Error("Server returned an invalid response. Please try again.");
         }
-        const errorText = await response.text();
-        throw new Error(errorText || "An unexpected error occurred");
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to save product");
+        }
+
+        return data;
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("An unexpected error occurred");
       }
-
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
