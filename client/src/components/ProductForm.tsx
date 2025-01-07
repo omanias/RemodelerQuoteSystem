@@ -91,27 +91,47 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      const response = await fetch(
-        product ? `/api/products/${product.id}` : "/api/products",
-        {
-          method: product ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...data,
-            categoryId: parseInt(data.categoryId),
-            basePrice: parseFloat(data.basePrice),
-            cost: parseFloat(data.cost),
-            variations,
-          }),
-          credentials: "include",
+      try {
+        const response = await fetch(
+          product ? `/api/products/${product.id}` : "/api/products",
+          {
+            method: product ? "PUT" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              ...data,
+              categoryId: parseInt(data.categoryId),
+              basePrice: parseFloat(data.basePrice),
+              cost: parseFloat(data.cost),
+              variations: variations.map(v => ({
+                ...v,
+                price: parseFloat(v.price)
+              })),
+            }),
+            credentials: "include",
+          }
+        );
+
+        if (!response.ok) {
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Failed to save product");
+          } else {
+            const errorText = await response.text();
+            throw new Error("Server error: Please try again later");
+          }
         }
-      );
 
-      if (!response.ok) {
-        throw new Error(await response.text());
+        return response.json();
+      } catch (error: any) {
+        if (error instanceof Error) {
+          throw error;
+        }
+        throw new Error("An unexpected error occurred");
       }
-
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
