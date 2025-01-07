@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, ArrowLeft } from "lucide-react";
+import { Plus, ArrowLeft, Edit } from "lucide-react";
 import { Link } from "wouter";
 
 interface Template {
@@ -36,9 +36,20 @@ interface Template {
 
 export function Templates() {
   const [open, setOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const { data: templates = [] } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
   });
+
+  const handleEdit = (template: Template) => {
+    setSelectedTemplate(template);
+    setOpen(true);
+  };
+
+  const handleDialogClose = () => {
+    setOpen(false);
+    setSelectedTemplate(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -56,17 +67,22 @@ export function Templates() {
           </p>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={handleDialogClose}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" /> New Template
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create New Template</DialogTitle>
+              <DialogTitle>
+                {selectedTemplate ? "Edit Template" : "Create New Template"}
+              </DialogTitle>
             </DialogHeader>
-            <TemplateForm onSuccess={() => setOpen(false)} />
+            <TemplateForm 
+              template={selectedTemplate}
+              onSuccess={handleDialogClose}
+            />
           </DialogContent>
         </Dialog>
       </div>
@@ -79,6 +95,7 @@ export function Templates() {
               <TableHead>Category</TableHead>
               <TableHead>Default</TableHead>
               <TableHead>Last Updated</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,6 +110,16 @@ export function Templates() {
                 </TableCell>
                 <TableCell>
                   {new Date(template.updatedAt).toLocaleDateString()}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEdit(template)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
