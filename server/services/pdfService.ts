@@ -249,7 +249,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            ].join('\n'));
       }
 
-      // Terms and Conditions on new page
+      // Terms and Conditions
       if (quote.template?.termsAndConditions) {
         doc.addPage()
            .font('Helvetica-Bold')
@@ -269,8 +269,14 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Signature Section if available
       if (quote.signature) {
-        doc.addPage()
-           .font('Helvetica-Bold')
+        // If we were already on a terms page, add some spacing
+        if (quote.template?.termsAndConditions) {
+          doc.moveDown(4);
+        } else {
+          doc.addPage();
+        }
+
+        doc.font('Helvetica-Bold')
            .fontSize(14)
            .text('Authorization', { align: 'center' })
            .moveDown()
