@@ -727,7 +727,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       let userQuery = db
@@ -1010,7 +1009,7 @@ export function registerRoutes(app: Express): Server {
       const parsedBusinessHours = businessHours ? JSON.parse(businessHours) : undefined;
       const parsedSocialMedia = socialMedia ? JSON.parse(socialMedia) : undefined;
 
-            // Update company details
+      // Update company details
       const [updatedCompany] = await db
         .update(companies)
         .set({
@@ -1772,6 +1771,63 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error removing user from company:', error);
       res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Replace the existing user creation route with improved error handling
+  app.post("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { name, email, password, role, status, companyId } = req.body;
+
+      // Validate required fields
+      if (!name || !email || !password || !role || !status) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // For non-super-admin users, force company assignment to their own company
+      const assignedCompanyId = req.session.userRole === UserRole.SUPER_ADMIN
+        ? (companyId || req.company!.id)
+        : req.company!.id;
+
+      // Check if email already exists
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+
+      // Create the user with proper company assignment
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          name,
+          email,
+          password, // Note: In production, ensure password is hashed
+          role: role as keyof typeof UserRole,
+          status: status as keyof typeof UserStatus,
+          companyId: assignedCompanyId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        });
+
+      res.json(newUser);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: "Server error creating user" });
     }
   });
 
