@@ -137,7 +137,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
         // Alternate row background
         if (isEvenRow) {
-          doc.rect(50, yPos - 2, 495, itemHeight + 4)
+          doc.rect(50, yPos - 4, 495, itemHeight + 8)
              .fill('#f8fafc');
         }
 
@@ -181,7 +181,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
           align: 'right'
         });
 
-        yPos += itemHeight + 10;
+        // Increased spacing between products from 10 to 20
+        yPos += itemHeight + 20;
       });
 
       // Financial Summary Box
