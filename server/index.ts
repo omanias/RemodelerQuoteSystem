@@ -4,70 +4,47 @@ import { setupVite, serveStatic, log } from "./vite";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import passport from "passport";
-import rateLimit from 'express-rate-limit';
-import cors from 'cors';
-import helmet from 'helmet';
 
 const app = express();
-
-// Trust proxy - must be first
-app.set("trust proxy", 1);
-
-// Basic security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-    },
-  },
-}));
-
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Set up session store with enhanced security
+// Set up session store
 const MemoryStoreSession = MemoryStore(session);
 
-// Check for required session secret in production
-if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
-  throw new Error('SESSION_SECRET must be set in production');
-}
-
-// Enhanced session configuration
+// Enhanced session configuration for production
 const sessionConfig = {
-  secret: process.env.SESSION_SECRET || 'dev-secret-key',
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
   resave: false,
   saveUninitialized: false,
   store: new MemoryStoreSession({
     checkPeriod: 86400000 // prune expired entries every 24h
   }),
+  name: 'sessionId', // Custom cookie name
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production', // Only send cookies over HTTPS in production
     httpOnly: true,
-    sameSite: 'lax' as const,
+    sameSite: 'lax' as const, // Using lax for better compatibility while maintaining security
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    path: '/',
-    domain: process.env.NODE_ENV === 'production' ? process.env.COOKIE_DOMAIN : undefined
+    path: '/'
   }
 };
 
+// Trust proxies in production
+if (app.get("env") === "production") {
+  app.set("trust proxy", 1);
+  // Ensure cookie secure flag is set in production
+  sessionConfig.cookie.secure = true;
+}
+
+// Initialize session middleware with appropriate settings
 app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// CORS configuration - after session middleware
-const corsOptions = {
-  origin: true, // reflect the request origin
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-app.use(cors(corsOptions));
-
-// Enhanced security headers
+// Enhanced security headers for production
 app.use((req, res, next) => {
+  // Security headers
   res.set({
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
@@ -79,18 +56,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate limiting - after security headers
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply rate limiting to API routes only
-app.use('/api/', limiter);
-
-// Request logging middleware with sensitive data filtering
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -98,13 +63,7 @@ app.use((req, res, next) => {
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    // Filter out sensitive data before logging
-    const sanitizedBody = { ...bodyJson };
-    if (sanitizedBody.password) delete sanitizedBody.password;
-    if (sanitizedBody.token) delete sanitizedBody.token;
-    if (sanitizedBody.secret) delete sanitizedBody.secret;
-
-    capturedJsonResponse = sanitizedBody;
+    capturedJsonResponse = bodyJson;
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
@@ -130,28 +89,22 @@ app.use((req, res, next) => {
 (async () => {
   const server = registerRoutes(app);
 
-  // Global error handler
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    console.error('Uncaught error:', err);
+    throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on port 5000
-  // this serves both the API and the client
-  const PORT = Number(process.env.PORT) || 5000;
+  const PORT = 5000;
   server.listen(PORT, "0.0.0.0", () => {
-    log(`Server running in ${app.get("env")} mode on port ${PORT}`);
+    log(`serving on port ${PORT}`);
   });
 })();
