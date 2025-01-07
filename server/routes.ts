@@ -10,7 +10,21 @@ import multer from "multer";
 import { storage, UPLOADS_PATH } from "./storage";
 import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
-import { generateQuotePDF } from './services/pdfService';
+
+// Add custom interface for Request to include user property
+declare module 'express' {
+  interface Request {
+    user?: {
+      id: number;
+      role: keyof typeof UserRole;
+      companyId: number;
+    };
+    company?: {
+      id: number;
+      name: string;
+    };
+  }
+}
 
 declare module 'express-session' {
   interface SessionData {
@@ -28,10 +42,6 @@ export function registerRoutes(app: Express): Server {
   app.use('/uploads', express.static(UPLOADS_PATH));
 
   const httpServer = createServer(app);
-
-  // Setup WebSocket server
-  const wsServer = setupWebSocket(httpServer, app);
-  app.set('wsServer', wsServer);
 
   // Setup session middleware before any routes
   const MemoryStore = createMemoryStore(session);
@@ -1000,7 +1010,7 @@ export function registerRoutes(app: Express): Server {
       const parsedBusinessHours = businessHours ? JSON.parse(businessHours) : undefined;
       const parsedSocialMedia = socialMedia ? JSON.parse(socialMedia) : undefined;
 
-      // Update company details
+            // Update company details
       const [updatedCompany] = await db
         .update(companies)
         .set({
@@ -1640,6 +1650,127 @@ export function registerRoutes(app: Express): Server {
       res.json({ message: "Product deleted successfully" });
     } catch (error) {
       console.error('Error deleting product:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  // Add new endpoints for company user management
+  app.get("/api/companies/:id/users", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can view users across companies
+      if (req.session.userRole !== UserRole.SUPER_ADMIN &&
+        req.session.userRole !== UserRole.MULTI_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const companyUsers = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        })
+        .from(users)
+        .where(eq(users.companyId, companyId))
+        .orderBy(users.name);
+
+      res.json(companyUsers);
+    } catch (error) {
+      console.error('Error fetching company users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add user to company
+  app.post("/api/companies/:id/users", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN can modify user-company relationships
+      if (req.session.userRole !== UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      // Verify company exists
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Verify user exists and update their company
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          companyId,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, parseInt(userId)))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error assigning user to company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Remove user from company
+  app.delete("/api/companies/:id/users/:userId", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN can modify user-company relationships
+      if (req.session.userRole !== UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const userId = parseInt(req.params.userId);
+
+      // Verify user belongs to company
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.id, userId),
+          eq(users.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found in company" });
+      }
+
+      // Cannot remove SUPER_ADMIN users
+      if (user.role === UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Cannot remove super admin users" });
+      }
+
+      // Update user's company to null
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          companyId: null as any, // Type assertion needed due to Drizzle typing
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error removing user from company:', error);
       res.status(500).json({ message: "Server error" });
     }
   });

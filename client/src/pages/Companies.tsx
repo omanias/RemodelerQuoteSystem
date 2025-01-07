@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { CompanyUsers } from "@/components/CompanyUsers";
 
 const companySchema = z.object({
   name: z.string().min(1, "Company name is required"),
@@ -42,6 +43,7 @@ export function Companies() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
 
   const form = useForm<CompanyFormData>({
     resolver: zodResolver(companySchema),
@@ -166,7 +168,11 @@ export function Companies() {
                     {new Date(company.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedCompanyId(company.id)}
+                    >
                       Manage Users
                     </Button>
                   </TableCell>
@@ -176,6 +182,17 @@ export function Companies() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* CompanyUsers Modal */}
+      {selectedCompanyId && (
+        <CompanyUsers
+          companyId={selectedCompanyId}
+          open={!!selectedCompanyId}
+          onOpenChange={(open) => {
+            if (!open) setSelectedCompanyId(null);
+          }}
+        />
+      )}
     </div>
   );
 }

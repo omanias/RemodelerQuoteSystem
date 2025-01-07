@@ -1,6 +1,6 @@
 import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-import { relations, type SQL } from "drizzle-orm";
+import { relations, type SQL, eq, and } from "drizzle-orm";
 
 // Add NotificationType enum
 export const NotificationType = {
@@ -282,6 +282,7 @@ export const companies = pgTable("companies", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Update User schema with proper companyId constraints
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
@@ -290,7 +291,7 @@ export const users = pgTable("users", {
   status: text("status").notNull().$type<keyof typeof UserStatus>(),
   password: text("password").notNull(),
   companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
+    .references(() => companies.id, { onDelete: 'restrict' })
     .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -560,15 +561,18 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   contacts: many(contacts),
   quotes: many(quotes),
   notifications: many(notifications),
+  companyAccess: many(companyAccess)
 }));
 
+// Update relations to better handle user-company relationships
 export const usersRelations = relations(users, ({ one, many }) => ({
   company: one(companies, {
     fields: [users.companyId],
     references: [companies.id],
   }),
   assignedContacts: many(contacts, { relationName: "assignedUser" }),
-  companyAccess: many(companyAccess)
+  companyAccess: many(companyAccess),
+  notifications: many(notifications)
 }));
 
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
@@ -873,7 +877,10 @@ export const insertWorkflowActionSchema = createInsertSchema(workflowActions);
 export const selectWorkflowActionSchema = createSelectSchema(workflowActions);
 export const insertWorkflowExecutionSchema = createInsertSchema(workflowExecutions);
 export const selectWorkflowExecutionSchema = createSelectSchema(workflowExecutions);
-
 // Add Zod schemas for signatures
 export const insertQuoteSchemaWithSignature = createInsertSchema(quotes);
 export const selectQuoteSchemaWithSignature = createSelectSchema(quotes);
+
+// Add new Zod schema for user with company validation
+export const insertUserWithCompanySchema = createInsertSchema(users);
+export const selectUserWithCompanySchema = createSelectSchema(users);
