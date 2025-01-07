@@ -105,10 +105,10 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       // Move down for content
       doc.moveDown(4);
 
-      // Quote Items Table Header
+      // Products Table Header
       const tableTop = doc.y;
-      const tableHeaders = ['Item', 'Description', 'Unit Price', 'Quantity', 'Total'];
-      const columnWidths = [150, 140, 80, 60, 65];
+      const tableHeaders = ['Product', 'Description', 'Quantity', 'Unit Price', 'Total'];
+      const columnWidths = [150, 140, 60, 70, 75];
 
       // Draw table header with light gray background
       doc.rect(50, tableTop, 495, 20).fill('#f3f4f6').stroke('#e5e7eb');
@@ -124,79 +124,65 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         xPos += columnWidths[i];
       });
 
-      // Quote Items
+      // Quote Products
       let yPos = tableTop + 25;
-      let content;
-      try {
-        content = typeof quote.content === 'string' ? JSON.parse(quote.content) : quote.content;
-      } catch (error) {
-        console.error('Error parsing quote content:', error);
-        content = [];
-      }
+      const products = quote.content?.products || [];
 
-      if (Array.isArray(content)) {
-        content.forEach((item: any) => {
-          const {
-            name = '',
-            description = '',
-            unitPrice = 0,
-            quantity = 0,
-            unit = '',
-            total = 0
-          } = item;
+      products.forEach((product: any, index: number) => {
+        const isEvenRow = index % 2 === 0;
+        const itemHeight = Math.max(
+          doc.heightOfString(product.name || '', { width: columnWidths[0] }),
+          doc.heightOfString(product.description || '', { width: columnWidths[1] })
+        );
 
-          const formattedUnitPrice = `$${Number(unitPrice).toFixed(2)}/${unit || 'unit'}`;
-          const formattedQuantity = `${Number(quantity).toFixed(2)} ${unit || ''}`.trim();
-          const formattedTotal = `$${Number(total).toFixed(2)}`;
+        // Alternate row background
+        if (isEvenRow) {
+          doc.rect(50, yPos - 2, 495, itemHeight + 4)
+             .fill('#f8fafc');
+        }
 
-          const itemHeight = Math.max(
-            doc.heightOfString(name, { width: columnWidths[0] }),
-            doc.heightOfString(description, { width: columnWidths[1] })
-          );
+        xPos = 60;
+        doc.font('Helvetica')
+           .fontSize(10)
+           .fillColor('#000000');
 
-          // Alternate row background
-          const isEvenRow = content.indexOf(item) % 2 === 0;
-          if (isEvenRow) {
-            doc.rect(50, yPos - 2, 495, itemHeight + 4)
-               .fill('#f8fafc');
-          }
+        // Product name and variation
+        const productName = product.variation 
+          ? `${product.name} (${product.variation})`
+          : product.name;
+        doc.text(productName, xPos, yPos, { width: columnWidths[0] });
 
-          xPos = 60;
-          doc.font('Helvetica')
-             .fontSize(10)
-             .fillColor('#000000');
+        // Description (can be empty)
+        xPos += columnWidths[0];
+        doc.text(product.description || '', xPos, yPos, { width: columnWidths[1] });
 
-          // Item name
-          doc.text(name, xPos, yPos, { width: columnWidths[0] });
-
-          // Description
-          xPos += columnWidths[0];
-          doc.text(description, xPos, yPos, { width: columnWidths[1] });
-
-          // Unit Price
-          xPos += columnWidths[1];
-          doc.text(formattedUnitPrice, xPos, yPos, { 
-            width: columnWidths[2], 
-            align: 'right' 
-          });
-
-          // Quantity
-          xPos += columnWidths[2];
-          doc.text(formattedQuantity, xPos, yPos, { 
-            width: columnWidths[3], 
-            align: 'right' 
-          });
-
-          // Total
-          xPos += columnWidths[3];
-          doc.text(formattedTotal, xPos, yPos, { 
-            width: columnWidths[4], 
-            align: 'right' 
-          });
-
-          yPos += itemHeight + 10;
+        // Quantity with unit
+        xPos += columnWidths[1];
+        const quantityText = product.unit
+          ? `${product.quantity} ${product.unit}`
+          : product.quantity.toString();
+        doc.text(quantityText, xPos, yPos, {
+          width: columnWidths[2],
+          align: 'right'
         });
-      }
+
+        // Unit Price
+        xPos += columnWidths[2];
+        doc.text(`$${Number(product.price).toFixed(2)}`, xPos, yPos, {
+          width: columnWidths[3],
+          align: 'right'
+        });
+
+        // Total
+        xPos += columnWidths[3];
+        const total = Number(product.price) * Number(product.quantity);
+        doc.text(`$${total.toFixed(2)}`, xPos, yPos, {
+          width: columnWidths[4],
+          align: 'right'
+        });
+
+        yPos += itemHeight + 10;
+      });
 
       // Financial Summary Box
       doc.rect(320, yPos + 20, 225, 120)
@@ -215,7 +201,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       let currentY = summaryStartY + 20;
       if (quote.discountValue) {
         const discountValue = Number(quote.discountValue);
-        const discountLabel = quote.discountType === 'PERCENTAGE' 
+        const discountLabel = quote.discountType === 'PERCENTAGE'
           ? `Discount (${discountValue}%):`
           : 'Discount (fixed):';
         doc.text(discountLabel, 330, currentY)
