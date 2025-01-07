@@ -91,47 +91,40 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      try {
-        const response = await fetch(
-          product ? `/api/products/${product.id}` : "/api/products",
-          {
-            method: product ? "PUT" : "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              ...data,
-              categoryId: parseInt(data.categoryId),
-              basePrice: parseFloat(data.basePrice),
-              cost: parseFloat(data.cost),
-              variations: variations.map(v => ({
-                ...v,
-                price: parseFloat(v.price)
-              })),
-            }),
-            credentials: "include",
-          }
-        );
+      const formattedData = {
+        ...data,
+        categoryId: parseInt(data.categoryId),
+        basePrice: parseFloat(data.basePrice),
+        cost: parseFloat(data.cost),
+        variations: variations.map(v => ({
+          ...v,
+          price: parseFloat(v.price)
+        })),
+      };
 
-        if (!response.ok) {
-          const contentType = response.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || "Failed to save product");
-          } else {
-            const errorText = await response.text();
-            throw new Error("Server error: Please try again later");
-          }
+      const response = await fetch(
+        product ? `/api/products/${product.id}` : "/api/products",
+        {
+          method: product ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify(formattedData),
+          credentials: "include",
         }
+      );
 
-        return response.json();
-      } catch (error: any) {
-        if (error instanceof Error) {
-          throw error;
+      if (!response.ok) {
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to save product");
         }
-        throw new Error("An unexpected error occurred");
+        const errorText = await response.text();
+        throw new Error(errorText || "An unexpected error occurred");
       }
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
