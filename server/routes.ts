@@ -817,6 +817,102 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Create template
+  app.post("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        name,
+        categoryId,
+        termsAndConditions,
+        isDefault,
+        imageUrls,
+      } = req.body;
+
+      // Create the template
+      const [newTemplate] = await db
+        .insert(templates)
+        .values({
+          name,
+          categoryId: parseInt(categoryId),
+          termsAndConditions: termsAndConditions || null,
+          isDefault: isDefault || false,
+          imageUrls: imageUrls || [],
+          companyId: req.company!.id,
+        })
+        .returning();
+
+      // Get template with relations
+      const [templateWithRelations] = await db.query.templates.findMany({
+        where: eq(templates.id, newTemplate.id),
+        with: {
+          category: true,
+        },
+        limit: 1,
+      });
+
+      res.json(templateWithRelations);
+    } catch (error) {
+      console.error('Error creating template:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update template
+  app.put("/api/templates/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const {
+        name,
+        categoryId,
+        termsAndConditions,
+        isDefault,
+        imageUrls,
+      } = req.body;
+
+      // First verify template exists and belongs to company
+      const [existingTemplate] = await db
+        .select()
+        .from(templates)
+        .where(and(
+          eq(templates.id, templateId),
+          eq(templates.companyId, req.company!.id)
+        ))
+        .limit(1);
+
+      if (!existingTemplate) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      // Update the template
+      const [updatedTemplate] = await db
+        .update(templates)
+        .set({
+          name: name || existingTemplate.name,
+          categoryId: categoryId ? parseInt(categoryId) : existingTemplate.categoryId,
+          termsAndConditions: termsAndConditions || existingTemplate.termsAndConditions,
+          isDefault: isDefault !== undefined ? isDefault : existingTemplate.isDefault,
+          imageUrls: imageUrls || existingTemplate.imageUrls,
+          updatedAt: new Date(),
+        })
+        .where(eq(templates.id, templateId))
+        .returning();
+
+      // Get template with relations
+      const [templateWithRelations] = await db.query.templates.findMany({
+        where: eq(templates.id, updatedTemplate.id),
+        with: {
+          category: true,
+        },
+        limit: 1,
+      });
+
+      res.json(templateWithRelations);
+    } catch (error) {
+      console.error('Error updating template:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   app.get("/api/companies", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
