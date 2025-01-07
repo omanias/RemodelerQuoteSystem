@@ -131,10 +131,20 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       serveStatic(app);
     }
 
+    // Start server on port 5000 with proper error handling
     const PORT = 5000;
     server.listen(PORT, "0.0.0.0", () => {
       log(`Server running on port ${PORT}`);
+    }).on('error', (error: any) => {
+      if (error.code === 'EADDRINUSE') {
+        log(`Error: Port ${PORT} is already in use. Please ensure no other instance of the application is running.`);
+        process.exit(1);
+      } else {
+        console.error('Server error:', error);
+        process.exit(1);
+      }
     });
+
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);

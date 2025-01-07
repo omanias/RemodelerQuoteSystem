@@ -181,8 +181,8 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
           align: 'right'
         });
 
-        // Increased spacing between products from 10 to 20
-        yPos += itemHeight + 20;
+        // Increased spacing between products from 20 to 35 for better readability
+        yPos += itemHeight + 35;
       });
 
       // Financial Summary Box
