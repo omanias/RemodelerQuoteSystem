@@ -1844,34 +1844,40 @@ export function registerRoutes(app: Express): Server {
         variations
       } = req.body;
 
-      console.log('Creating product with data:', {
-        name,
-        categoryId,
-        basePrice,
-        cost,
-        unit,
-        isActive,
-        variations
-      });
+      console.log('Creating product with raw data:', req.body);
 
-      // Parse numeric values
+      // Validate required fields
+      if (!name || !categoryId) {
+        return res.status(400).json({ message: "Name and category are required" });
+      }
+
+      // Parse numeric values safely
       const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : 0;
       const parsedCost = cost ? parseFloat(cost.toString()) : 0;
       const parsedCategoryId = parseInt(categoryId.toString());
 
-      // Create the product with all fields
+      // Validate parsed values
+      if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
+        return res.status(400).json({ message: "Invalid numeric values provided" });
+      }
+
+      const productData = {
+        name,
+        categoryId: parsedCategoryId,
+        basePrice: parsedBasePrice,
+        cost: parsedCost,
+        unit,
+        isActive: isActive !== undefined ? isActive : true,
+        variations: variations || [],
+        companyId: req.company!.id,
+      };
+
+      console.log('Creating product with parsed data:', productData);
+
+      // Create the product
       const [newProduct] = await db
         .insert(products)
-        .values({
-          name,
-          categoryId: parsedCategoryId,
-          basePrice: parsedBasePrice,
-          cost: parsedCost,
-          unit,
-          isActive: isActive !== undefined ? isActive : true,
-          variations: variations || [],
-          companyId: req.company!.id,
-        })
+        .values(productData)
         .returning();
 
       console.log('Created product:', newProduct);
@@ -1907,16 +1913,10 @@ export function registerRoutes(app: Express): Server {
         variations
       } = req.body;
 
-      console.log('Updating product with data:', {
+      console.log('Updating product with raw data:', {
         productId,
         companyId,
-        name,
-        categoryId,
-        basePrice,
-        cost,
-        unit,
-        isActive,
-        variations
+        ...req.body
       });
 
       // First verify product exists and belongs to company
@@ -1933,24 +1933,33 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Product not found" });
       }
 
-      // Parse numeric values
+      // Parse numeric values safely
       const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : existingProduct.basePrice;
       const parsedCost = cost !== undefined ? parseFloat(cost.toString()) : existingProduct.cost;
       const parsedCategoryId = categoryId ? parseInt(categoryId.toString()) : existingProduct.categoryId;
 
-      // Update the product with all fields
+      // Validate parsed values
+      if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
+        return res.status(400).json({ message: "Invalid numeric values provided" });
+      }
+
+      const updateData = {
+        name: name || existingProduct.name,
+        categoryId: parsedCategoryId,
+        basePrice: parsedBasePrice,
+        cost: parsedCost,
+        unit: unit || existingProduct.unit,
+        isActive: isActive !== undefined ? isActive : existingProduct.isActive,
+        variations: variations || existingProduct.variations,
+        updatedAt: new Date()
+      };
+
+      console.log('Updating product with parsed data:', updateData);
+
+      // Update the product
       const [updatedProduct] = await db
         .update(products)
-        .set({
-          name: name || existingProduct.name,
-          categoryId: parsedCategoryId,
-          basePrice: parsedBasePrice,
-          cost: parsedCost,
-          unit: unit || existingProduct.unit,
-          isActive: isActive !== undefined ? isActive : existingProduct.isActive,
-          variations: variations || existingProduct.variations,
-          updatedAt: new Date()
-        })
+        .set(updateData)
         .where(and(
           eq(products.id, productId),
           eq(products.companyId, companyId)
