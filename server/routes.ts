@@ -1854,14 +1854,19 @@ export function registerRoutes(app: Express): Server {
         variations
       });
 
+      // Parse numeric values
+      const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : 0;
+      const parsedCost = cost ? parseFloat(cost.toString()) : 0;
+      const parsedCategoryId = parseInt(categoryId.toString());
+
       // Create the product with all fields
       const [newProduct] = await db
         .insert(products)
         .values({
           name,
-          categoryId: parseInt(categoryId),
-          basePrice: parseFloat(basePrice),
-          cost: parseFloat(cost),
+          categoryId: parsedCategoryId,
+          basePrice: parsedBasePrice,
+          cost: parsedCost,
           unit,
           isActive: isActive !== undefined ? isActive : true,
           variations: variations || [],
@@ -1875,9 +1880,9 @@ export function registerRoutes(app: Express): Server {
       const [productWithRelations] = await db.query.products.findMany({
         where: eq(products.id, newProduct.id),
         with: {
-          category: true,
+          category: true
         },
-        limit: 1,
+        limit: 1
       });
 
       res.json(productWithRelations);
@@ -1928,14 +1933,19 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Product not found" });
       }
 
+      // Parse numeric values
+      const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : existingProduct.basePrice;
+      const parsedCost = cost !== undefined ? parseFloat(cost.toString()) : existingProduct.cost;
+      const parsedCategoryId = categoryId ? parseInt(categoryId.toString()) : existingProduct.categoryId;
+
       // Update the product with all fields
       const [updatedProduct] = await db
         .update(products)
         .set({
           name: name || existingProduct.name,
-          categoryId: categoryId ? parseInt(categoryId) : existingProduct.categoryId,
-          basePrice: basePrice ? parseFloat(basePrice) : existingProduct.basePrice,
-          cost: cost !== undefined ? parseFloat(cost) : existingProduct.cost,
+          categoryId: parsedCategoryId,
+          basePrice: parsedBasePrice,
+          cost: parsedCost,
           unit: unit || existingProduct.unit,
           isActive: isActive !== undefined ? isActive : existingProduct.isActive,
           variations: variations || existingProduct.variations,
