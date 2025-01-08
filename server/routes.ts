@@ -1879,18 +1879,18 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Update product
   app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
       const companyId = req.company!.id;
       const {
         name,
-        categoryId,
         basePrice,
-        cost,
         unit,
         isActive,
-        variations,
+        categoryId,
+        variations
       } = req.body;
 
       // First verify product exists and belongs to company
@@ -1912,11 +1912,10 @@ export function registerRoutes(app: Express): Server {
         .update(products)
         .set({
           name: name || existingProduct.name,
-          categoryId: categoryId ? parseInt(categoryId.toString()) : existingProduct.categoryId,
-          basePrice: basePrice ? parseFloat(basePrice.toString()) : existingProduct.basePrice,
-          cost: cost ? parseFloat(cost.toString()) : existingProduct.cost,
+          basePrice: basePrice !== undefined ? parseFloat(basePrice) : existingProduct.basePrice,
           unit: unit || existingProduct.unit,
-          isActive: isActive ?? existingProduct.isActive,
+          isActive: isActive !== undefined ? isActive : existingProduct.isActive,
+          categoryId: categoryId ? parseInt(categoryId) : existingProduct.categoryId,
           variations: variations || existingProduct.variations,
           updatedAt: new Date(),
         })

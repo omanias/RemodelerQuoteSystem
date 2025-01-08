@@ -24,7 +24,6 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, X, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 const variationSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -102,49 +101,30 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         })),
       };
 
-      try {
-        const response = await fetch(
-          product ? `/api/products/${product.id}` : "/api/products",
-          {
-            method: product ? "PUT" : "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: JSON.stringify(formattedData),
-            credentials: "include",
-          }
-        );
+      const url = product ? `/api/products/${product.id}` : "/api/products";
+      const method = product ? "PUT" : "POST";
 
-        // First check if the response is JSON
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          // If not JSON, get the text and throw a formatted error
-          const errorText = await response.text();
-          throw new Error("Server returned an invalid response. Please try again.");
-        }
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formattedData),
+        credentials: "include",
+      });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || "Failed to save product");
-        }
-
-        return data;
-      } catch (error) {
-        if (error instanceof Error) {
-          throw error;
-        }
-        throw new Error("An unexpected error occurred");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to ${product ? 'update' : 'create'} product`);
       }
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({
         title: `Product ${product ? "updated" : "created"} successfully`,
-        description: `The product has been ${
-          product ? "updated" : "created"
-        } in the system.`,
+        description: `The product has been ${product ? "updated" : "created"} in the system.`,
       });
       onSuccess?.();
       setIsLoading(false);
@@ -164,6 +144,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
     try {
       await mutation.mutateAsync(data);
     } catch (error) {
+      console.error('Product submission error:', error);
       setIsLoading(false);
     }
   };
@@ -209,10 +190,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a category">
-                        {categories.find((c) => c.id.toString() === field.value)
-                          ?.name || "Select a category"}
-                      </SelectValue>
+                      <SelectValue placeholder="Select a category" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
@@ -316,10 +294,10 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label>Variations</Label>
-            <Button 
-              type="button" 
-              variant="outline" 
-              size="sm" 
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               onClick={addVariation}
               className="whitespace-nowrap"
             >
