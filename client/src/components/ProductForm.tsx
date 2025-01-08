@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -65,6 +65,7 @@ interface ProductFormProps {
 
 export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formChanged, setFormChanged] = useState(false);
   const [variations, setVariations] = useState<VariationData[]>(
     product?.variations || []
   );
@@ -84,9 +85,26 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       cost: product?.cost?.toString() || "",
       unit: (product?.unit as ProductFormData["unit"]) || "Square Foot",
       isActive: product?.isActive ?? true,
-      variations: product?.variations || [],
+      variations: variations,
     },
   });
+
+  // Track form changes
+  useEffect(() => {
+    const subscription = form.watch((value, { name, type }) => {
+      if (type === 'change') {
+        setFormChanged(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
+
+  // Track variations changes
+  useEffect(() => {
+    if (JSON.stringify(variations) !== JSON.stringify(product?.variations || [])) {
+      setFormChanged(true);
+    }
+  }, [variations, product?.variations]);
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
@@ -130,6 +148,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         description: `The product has been ${product ? "updated" : "created"} successfully.`,
       });
       setIsSubmitting(false);
+      setFormChanged(false);
       if (onSuccess) {
         onSuccess();
       }
@@ -147,7 +166,10 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const onSubmit = async (data: ProductFormData) => {
     try {
       setIsSubmitting(true);
-      await mutation.mutateAsync(data);
+      await mutation.mutateAsync({
+        ...data,
+        variations: variations,
+      });
     } catch (error) {
       setIsSubmitting(false);
     }
@@ -357,7 +379,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
         <Button 
           type="submit" 
-          disabled={isSubmitting}
+          disabled={isSubmitting || !formChanged}
           className="w-full"
         >
           {isSubmitting ? (
