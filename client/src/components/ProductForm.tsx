@@ -90,7 +90,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      console.log('Submitting product data:', data); // Debug log
+      console.log('Submitting product data:', data);
 
       const formattedData = {
         ...data,
@@ -103,12 +103,12 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         })),
       };
 
-      console.log('Formatted data:', formattedData); // Debug log
+      console.log('Formatted data:', formattedData);
 
       const url = product ? `/api/products/${product.id}` : "/api/products";
       const method = product ? "PUT" : "POST";
 
-      console.log(`Making ${method} request to ${url}`); // Debug log
+      console.log(`Making ${method} request to ${url}`);
 
       const response = await fetch(url, {
         method,
@@ -121,12 +121,12 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('API Error:', errorData); // Debug log
+        console.error('API Error:', errorData);
         throw new Error(errorData.message || `Failed to ${product ? 'update' : 'create'} product`);
       }
 
       const responseData = await response.json();
-      console.log('API Response:', responseData); // Debug log
+      console.log('API Response:', responseData);
       return responseData;
     },
     onSuccess: () => {
@@ -139,7 +139,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       onSuccess?.();
     },
     onError: (error: Error) => {
-      console.error('Mutation error:', error); // Debug log
+      console.error('Mutation error:', error);
       toast({
         title: "Error",
         description: error.message,
@@ -152,7 +152,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const onSubmit = async (data: ProductFormData) => {
     try {
       setIsSubmitting(true);
-      console.log('Form submitted with data:', data); // Debug log
+      console.log('Form submitted with data:', data);
       await mutation.mutateAsync(data);
     } catch (error) {
       console.error('Form submission error:', error);
@@ -364,13 +364,8 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
         <Button 
           type="submit" 
-          disabled={isSubmitting} 
+          disabled={isSubmitting}
           className="w-full"
-          onClick={(e) => {
-            e.preventDefault();
-            console.log('Submit button clicked'); // Debug log
-            form.handleSubmit(onSubmit)(e);
-          }}
         >
           {isSubmitting ? (
             <>
