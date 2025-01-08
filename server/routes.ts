@@ -1831,6 +1831,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Create new product
   app.post("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const {
@@ -1840,30 +1841,37 @@ export function registerRoutes(app: Express): Server {
         cost,
         unit,
         isActive,
-        variations,
+        variations
       } = req.body;
 
-      // Validate required fields
-      if (!name || !categoryId) {
-        return res.status(400).json({ message: "Name and category are required" });
-      }
+      console.log('Creating product with data:', {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      });
 
-      // Create the product with proper type handling
+      // Create the product with all fields
       const [newProduct] = await db
         .insert(products)
         .values({
           name,
-          categoryId: parseInt(categoryId.toString()),
-          basePrice: parseFloat(basePrice.toString()),
-          cost: parseFloat(cost.toString()),
-          unit: unit || null,
-          isActive: isActive ?? true,
+          categoryId: parseInt(categoryId),
+          basePrice: parseFloat(basePrice),
+          cost: parseFloat(cost),
+          unit,
+          isActive: isActive !== undefined ? isActive : true,
           variations: variations || [],
           companyId: req.company!.id,
         })
         .returning();
 
-      // Get product with relations
+      console.log('Created product:', newProduct);
+
+      // Get full product data with relations
       const [productWithRelations] = await db.query.products.findMany({
         where: eq(products.id, newProduct.id),
         with: {
@@ -1879,7 +1887,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add product update endpoint
+  // Update product
   app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
