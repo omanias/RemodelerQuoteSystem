@@ -16,7 +16,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -51,7 +50,8 @@ interface Product {
 }
 
 export function Products() {
-  const [open, setOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const { toast } = useToast();
@@ -59,6 +59,11 @@ export function Products() {
   const { data: products = [], isLoading, refetch } = useQuery<Product[]>({
     queryKey: ["/api/products"],
   });
+
+  const handleEdit = (product: Product) => {
+    setEditProduct(product);
+    setEditDialogOpen(true);
+  };
 
   const handleDelete = async () => {
     if (!deleteProduct) return;
@@ -108,20 +113,20 @@ export function Products() {
             </Button>
           </Link>
 
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" /> New Product
-              </Button>
-            </DialogTrigger>
+          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" /> New Product
+            </Button>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add New Product</DialogTitle>
               </DialogHeader>
-              <ProductForm onSuccess={() => {
-                setOpen(false);
-                refetch();
-              }} />
+              <ProductForm 
+                onSuccess={() => {
+                  setCreateDialogOpen(false);
+                  refetch();
+                }} 
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -174,31 +179,12 @@ export function Products() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditProduct(product);
-                            }}>
-                              Edit
-                            </DropdownMenuItem>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Product</DialogTitle>
-                            </DialogHeader>
-                            <ProductForm 
-                              product={editProduct} 
-                              onSuccess={() => {
-                                setEditProduct(null);
-                                refetch();
-                              }}
-                            />
-                          </DialogContent>
-                        </Dialog>
+                        <DropdownMenuItem onClick={() => handleEdit(product)}>
+                          Edit
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
-                          onSelect={() => setDeleteProduct(product)}
+                          onClick={() => setDeleteProduct(product)}
                         >
                           Delete
                         </DropdownMenuItem>
@@ -211,6 +197,33 @@ export function Products() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Product</DialogTitle>
+          </DialogHeader>
+          {editProduct && (
+            <ProductForm
+              product={{
+                id: editProduct.id,
+                name: editProduct.name,
+                categoryId: editProduct.category.id,
+                basePrice: editProduct.basePrice,
+                unit: editProduct.unit,
+                isActive: editProduct.isActive,
+                cost: 0, // Add default cost as it's required by the form
+              }}
+              onSuccess={() => {
+                setEditDialogOpen(false);
+                setEditProduct(null);
+                refetch();
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteProduct} onOpenChange={(open) => !open && setDeleteProduct(null)}>
         <AlertDialogContent>
