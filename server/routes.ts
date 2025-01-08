@@ -1844,7 +1844,15 @@ export function registerRoutes(app: Express): Server {
         variations
       } = req.body;
 
-      console.log('Creating product with raw data:', req.body);
+      console.log('Creating product with raw data:', {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      });
 
       // Validate required fields
       if (!name || !categoryId) {
@@ -1852,9 +1860,9 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Parse numeric values safely
-      const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : 0;
-      const parsedCost = cost ? parseFloat(cost.toString()) : 0;
-      const parsedCategoryId = parseInt(categoryId.toString());
+      const parsedBasePrice = parseFloat(basePrice?.toString() || '0');
+      const parsedCost = parseFloat(cost?.toString() || '0');
+      const parsedCategoryId = parseInt(categoryId?.toString() || '0');
 
       // Validate parsed values
       if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
@@ -1866,9 +1874,9 @@ export function registerRoutes(app: Express): Server {
         categoryId: parsedCategoryId,
         basePrice: parsedBasePrice,
         cost: parsedCost,
-        unit,
+        unit: unit || 'UNIT',
         isActive: isActive !== undefined ? isActive : true,
-        variations: variations || [],
+        variations: Array.isArray(variations) ? variations : [],
         companyId: req.company!.id,
       };
 
@@ -1916,7 +1924,13 @@ export function registerRoutes(app: Express): Server {
       console.log('Updating product with raw data:', {
         productId,
         companyId,
-        ...req.body
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
       });
 
       // First verify product exists and belongs to company
@@ -1934,9 +1948,9 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Parse numeric values safely
-      const parsedBasePrice = basePrice ? parseFloat(basePrice.toString()) : existingProduct.basePrice;
-      const parsedCost = cost !== undefined ? parseFloat(cost.toString()) : existingProduct.cost;
-      const parsedCategoryId = categoryId ? parseInt(categoryId.toString()) : existingProduct.categoryId;
+      const parsedBasePrice = parseFloat(basePrice?.toString() || existingProduct.basePrice.toString());
+      const parsedCost = parseFloat(cost?.toString() || existingProduct.cost.toString());
+      const parsedCategoryId = parseInt(categoryId?.toString() || existingProduct.categoryId.toString());
 
       // Validate parsed values
       if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
@@ -1950,7 +1964,7 @@ export function registerRoutes(app: Express): Server {
         cost: parsedCost,
         unit: unit || existingProduct.unit,
         isActive: isActive !== undefined ? isActive : existingProduct.isActive,
-        variations: variations || existingProduct.variations,
+        variations: Array.isArray(variations) ? variations : existingProduct.variations,
         updatedAt: new Date()
       };
 
