@@ -1879,19 +1879,32 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update product
+  // Add product update endpoint
   app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const productId = parseInt(req.params.id);
       const companyId = req.company!.id;
       const {
         name,
+        categoryId,
         basePrice,
+        cost,
         unit,
         isActive,
-        categoryId,
         variations
       } = req.body;
+
+      console.log('Updating product with data:', {
+        productId,
+        companyId,
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      });
 
       // First verify product exists and belongs to company
       const [existingProduct] = await db
@@ -1907,28 +1920,37 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Product not found" });
       }
 
-      // Update the product
+      // Update the product with all fields
       const [updatedProduct] = await db
         .update(products)
         .set({
           name: name || existingProduct.name,
-          basePrice: basePrice !== undefined ? parseFloat(basePrice) : existingProduct.basePrice,
+          categoryId: categoryId ? parseInt(categoryId) : existingProduct.categoryId,
+          basePrice: basePrice ? parseFloat(basePrice) : existingProduct.basePrice,
+          cost: cost !== undefined ? parseFloat(cost) : existingProduct.cost,
           unit: unit || existingProduct.unit,
           isActive: isActive !== undefined ? isActive : existingProduct.isActive,
-          categoryId: categoryId ? parseInt(categoryId) : existingProduct.categoryId,
           variations: variations || existingProduct.variations,
-          updatedAt: new Date(),
+          updatedAt: new Date()
         })
-        .where(eq(products.id, productId))
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
         .returning();
 
-      // Get product with relations
+      console.log('Updated product:', updatedProduct);
+
+      // Get full product data with relations
       const [productWithRelations] = await db.query.products.findMany({
-        where: eq(products.id, updatedProduct.id),
+        where: and(
+          eq(products.id, updatedProduct.id),
+          eq(products.companyId, companyId)
+        ),
         with: {
-          category: true,
+          category: true
         },
-        limit: 1,
+        limit: 1
       });
 
       res.json(productWithRelations);
