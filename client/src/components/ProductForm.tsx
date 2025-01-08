@@ -90,8 +90,6 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      console.log('Submitting product data:', data);
-
       const formattedData = {
         ...data,
         categoryId: parseInt(data.categoryId),
@@ -103,12 +101,8 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         })),
       };
 
-      console.log('Formatted data:', formattedData);
-
       const url = product ? `/api/products/${product.id}` : "/api/products";
       const method = product ? "PUT" : "POST";
-
-      console.log(`Making ${method} request to ${url}`);
 
       const response = await fetch(url, {
         method,
@@ -120,26 +114,27 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('API Error:', errorData);
-        throw new Error(errorData.message || `Failed to ${product ? 'update' : 'create'} product`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.message || 
+          `Failed to ${product ? 'update' : 'create'} product. Please try again.`
+        );
       }
 
-      const responseData = await response.json();
-      console.log('API Response:', responseData);
-      return responseData;
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({
         title: `Product ${product ? "updated" : "created"} successfully`,
-        description: `The product has been ${product ? "updated" : "created"} in the system.`,
+        description: `The product has been ${product ? "updated" : "created"} successfully.`,
       });
       setIsSubmitting(false);
-      onSuccess?.();
+      if (onSuccess) {
+        onSuccess();
+      }
     },
     onError: (error: Error) => {
-      console.error('Mutation error:', error);
       toast({
         title: "Error",
         description: error.message,
@@ -152,10 +147,8 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const onSubmit = async (data: ProductFormData) => {
     try {
       setIsSubmitting(true);
-      console.log('Form submitted with data:', data);
       await mutation.mutateAsync(data);
     } catch (error) {
-      console.error('Form submission error:', error);
       setIsSubmitting(false);
     }
   };
