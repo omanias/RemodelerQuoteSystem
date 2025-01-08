@@ -64,7 +64,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product, onSuccess }: ProductFormProps) {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [variations, setVariations] = useState<VariationData[]>(
     product?.variations || []
   );
@@ -90,6 +90,8 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
+      console.log('Submitting product data:', data); // Debug log
+
       const formattedData = {
         ...data,
         categoryId: parseInt(data.categoryId),
@@ -101,8 +103,12 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         })),
       };
 
+      console.log('Formatted data:', formattedData); // Debug log
+
       const url = product ? `/api/products/${product.id}` : "/api/products";
       const method = product ? "PUT" : "POST";
+
+      console.log(`Making ${method} request to ${url}`); // Debug log
 
       const response = await fetch(url, {
         method,
@@ -115,10 +121,13 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('API Error:', errorData); // Debug log
         throw new Error(errorData.message || `Failed to ${product ? 'update' : 'create'} product`);
       }
 
-      return response.json();
+      const responseData = await response.json();
+      console.log('API Response:', responseData); // Debug log
+      return responseData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
@@ -126,26 +135,28 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         title: `Product ${product ? "updated" : "created"} successfully`,
         description: `The product has been ${product ? "updated" : "created"} in the system.`,
       });
+      setIsSubmitting(false);
       onSuccess?.();
-      setIsLoading(false);
     },
     onError: (error: Error) => {
+      console.error('Mutation error:', error); // Debug log
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       });
-      setIsLoading(false);
+      setIsSubmitting(false);
     },
   });
 
   const onSubmit = async (data: ProductFormData) => {
-    setIsLoading(true);
     try {
+      setIsSubmitting(true);
+      console.log('Form submitted with data:', data); // Debug log
       await mutation.mutateAsync(data);
     } catch (error) {
-      console.error('Product submission error:', error);
-      setIsLoading(false);
+      console.error('Form submission error:', error);
+      setIsSubmitting(false);
     }
   };
 
@@ -351,8 +362,17 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
           </div>
         </div>
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? (
+        <Button 
+          type="submit" 
+          disabled={isSubmitting} 
+          className="w-full"
+          onClick={(e) => {
+            e.preventDefault();
+            console.log('Submit button clicked'); // Debug log
+            form.handleSubmit(onSubmit)(e);
+          }}
+        >
+          {isSubmitting ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               {product ? "Updating..." : "Creating..."}
