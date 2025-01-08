@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -147,6 +147,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         } in the system.`,
       });
       onSuccess?.();
+      setIsLoading(false);
     },
     onError: (error: Error) => {
       toast({
@@ -154,6 +155,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         description: error.message,
         variant: "destructive",
       });
+      setIsLoading(false);
     },
   });
 
@@ -161,7 +163,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
     setIsLoading(true);
     try {
       await mutation.mutateAsync(data);
-    } finally {
+    } catch (error) {
       setIsLoading(false);
     }
   };
@@ -182,53 +184,79 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Product Name</FormLabel>
-              <FormControl>
-                <Input placeholder="Enter product name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="categoryId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Category</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 w-full max-w-2xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="col-span-1 md:col-span-2">
+                <FormLabel>Product Name</FormLabel>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category">
-                      {categories.find((c) => c.id.toString() === field.value)
-                        ?.name || "Select a category"}
-                    </SelectValue>
-                  </SelectTrigger>
+                  <Input placeholder="Enter product name" {...field} className="w-full" />
                 </FormControl>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem
-                      key={category.id}
-                      value={category.id.toString()}
-                    >
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="categoryId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a category">
+                        {categories.find((c) => c.id.toString() === field.value)
+                          ?.name || "Select a category"}
+                      </SelectValue>
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem
+                        key={category.id}
+                        value={category.id.toString()}
+                      >
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="unit"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Unit</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a unit" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Square Foot">Square Foot</SelectItem>
+                    <SelectItem value="Linear Foot">Linear Foot</SelectItem>
+                    <SelectItem value="Unit">Unit</SelectItem>
+                    <SelectItem value="Hours">Hours</SelectItem>
+                    <SelectItem value="Days">Days</SelectItem>
+                    <SelectItem value="Piece">Piece</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="basePrice"
@@ -241,6 +269,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                     step="0.01"
                     placeholder="Enter base price"
                     {...field}
+                    className="w-full"
                   />
                 </FormControl>
                 <FormMessage />
@@ -260,59 +289,40 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                     step="0.01"
                     placeholder="Enter cost"
                     {...field}
+                    className="w-full"
                   />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-        </div>
 
-        <FormField
-          control={form.control}
-          name="unit"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Unit</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value}>
+          <FormField
+            control={form.control}
+            name="isActive"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
+                <div className="space-y-0.5">
+                  <FormLabel>Active</FormLabel>
+                </div>
                 <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a unit" />
-                  </SelectTrigger>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
                 </FormControl>
-                <SelectContent>
-                  <SelectItem value="Square Foot">Square Foot</SelectItem>
-                  <SelectItem value="Linear Foot">Linear Foot</SelectItem>
-                  <SelectItem value="Unit">Unit</SelectItem>
-                  <SelectItem value="Hours">Hours</SelectItem>
-                  <SelectItem value="Days">Days</SelectItem>
-                  <SelectItem value="Piece">Piece</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="isActive"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-              <div className="space-y-0.5">
-                <FormLabel>Active</FormLabel>
-              </div>
-              <FormControl>
-                <Switch checked={field.value} onCheckedChange={field.onChange} />
-              </FormControl>
-            </FormItem>
-          )}
-        />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <Label>Variations</Label>
-            <Button type="button" variant="outline" size="sm" onClick={addVariation}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              onClick={addVariation}
+              className="whitespace-nowrap"
+            >
               <Plus className="h-4 w-4 mr-2" /> Add Variation
             </Button>
           </div>
@@ -321,9 +331,9 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
             {variations.map((variation, index) => (
               <div
                 key={index}
-                className="flex items-end gap-2 border rounded-md p-2"
+                className="grid grid-cols-1 md:grid-cols-2 gap-2 items-end border rounded-md p-3"
               >
-                <div className="flex-1">
+                <div className="space-y-2">
                   <Label>Name</Label>
                   <Input
                     value={variation.name}
@@ -331,36 +341,47 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
                       updateVariation(index, "name", e.target.value)
                     }
                     placeholder="Variation name"
+                    className="w-full"
                   />
                 </div>
-                <div className="flex-1">
+                <div className="space-y-2">
                   <Label>Price</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={variation.price}
-                    onChange={(e) =>
-                      updateVariation(index, "price", e.target.value)
-                    }
-                    placeholder="Variation price"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={variation.price}
+                      onChange={(e) =>
+                        updateVariation(index, "price", e.target.value)
+                      }
+                      placeholder="Variation price"
+                      className="w-full"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeVariation(index)}
+                      className="shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="mb-[2px]"
-                  onClick={() => removeVariation(index)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
               </div>
             ))}
           </div>
         </div>
 
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? "Saving..." : product ? "Update Product" : "Create Product"}
+        <Button type="submit" disabled={isLoading} className="w-full">
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {product ? "Updating..." : "Creating..."}
+            </>
+          ) : (
+            product ? "Update Product" : "Create Product"
+          )}
         </Button>
       </form>
     </Form>
