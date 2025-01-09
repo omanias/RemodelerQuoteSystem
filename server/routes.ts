@@ -695,16 +695,75 @@ export function registerRoutes(app: Express): Server {
 
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
+      console.log('Fetching products for company:', req.company!.id);
+
       const productsData = await db.query.products.findMany({
         where: eq(products.companyId, req.company!.id),
+        columns: {
+          id: true,
+          name: true,
+          categoryId: true,
+          basePrice: true,
+          cost: true,
+          unit: true,
+          isActive: true,
+          variations: true,
+          companyId: true,
+          createdAt: true,
+          updatedAt: true
+        },
         with: {
           category: true
         },
         orderBy: (productsTable, { desc }) => [desc(productsTable.updatedAt)],
       });
+
+      console.log('Retrieved products data:', JSON.stringify(productsData, null, 2));
       res.json(productsData);
     } catch (error) {
       console.error('Error fetching products:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Get single product by ID
+  app.get("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      console.log('Fetching product:', productId);
+
+      const [product] = await db.query.products.findMany({
+        where: and(
+          eq(products.id, productId),
+          eq(products.companyId, req.company!.id)
+        ),
+        columns: {
+          id: true,
+          name: true,
+          categoryId: true,
+          basePrice: true,
+          cost: true,
+          unit: true,
+          isActive: true,
+          variations: true,
+          companyId: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        with: {
+          category: true
+        },
+        limit: 1
+      });
+
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      console.log('Retrieved product data:', JSON.stringify(product, null, 2));
+      res.json(product);
+    } catch (error) {
+      console.error('Error fetching product:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
@@ -958,7 +1017,7 @@ export function registerRoutes(app: Express): Server {
             createdAt: companies.createdAt,
             updatedAt: companies.updatedAt
           })
-          .from(companyAccess)
+                    .from(companyAccess)
           .innerJoin(
             companies,
             sql`${companyAccess.companyId} = ${companies.id} AND ${companyAccess.userId} = ${userId}`
@@ -1382,6 +1441,621 @@ export function registerRoutes(app: Express): Server {
       res.json(companyMetrics);
     } catch (error) {
       console.error('Error fetching company metrics:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.get("/api/companies/current", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      if (!req.company) {
+        return res.status(404).json({ message: "No company context found" });
+      }
+
+      // Get fresh data from database to ensure we have the latest
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, req.company.id))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      res.json(company);
+    } catch (error) {
+      console.error('Error fetching current company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Delete quote
+  app.delete("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify quote exists and belongs to company
+      const [existingQuote] = await db
+        .select()
+        .from(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Delete the quote directly since we have ON DELETE CASCADE
+      await db
+        .delete(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ));
+
+      console.log(`Quote ${quoteId} successfully deleted for company ${companyId}`);
+      res.json({ message: "Quote deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        firstName,
+        lastName,
+        primaryEmail,
+        primaryPhone,
+        primaryAddress,
+        leadStatus = LeadStatus.NEW,
+        leadSource = LeadSource.OTHER,
+        propertyType = PropertyType.SINGLE_FAMILY,
+        productInterests = "None specified",
+        secondaryEmail = null,
+        mobilePhone = null,
+        projectAddress = null,
+        categoryId = null
+      } = req.body;
+
+      // Validate required fields
+      if (!firstName || !lastName || !primaryEmail || !primaryPhone || !primaryAddress) {
+        return res.status(400).json({
+          message: "First name, last name, primary email, primary phone, and primary address are required"
+        });
+      }
+
+      // Create the contact with defaults for required fields
+      const [newContact] = await db
+        .insert(contacts)
+        .values({
+          firstName,
+          lastName,
+          primaryEmail,
+          primaryPhone,
+          primaryAddress,
+          leadStatus,
+          leadSource,
+          propertyType,
+          productInterests,
+          assignedUserId: req.session.userId,
+          companyId: req.company!.id,
+          secondaryEmail,
+          mobilePhone,
+          projectAddress,
+          categoryId,
+          tags: [], // Default empty array since it's notNull
+        })
+        .returning();
+
+      // Get full contact data with relations
+      const [contactWithRelations] = await db.query.contacts.findMany({
+        where: eq(contacts.id, newContact.id),
+        with: {
+          assignedUser: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          },
+          category: true,
+        },
+        limit: 1
+      });
+
+      res.json(contactWithRelations);
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add this route after other quote-related routes
+  app.get("/api/quotes/:id/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // Get quote with template data
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ),
+        with: {
+          template: true,
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Get company data
+      const [companyData] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!companyData) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateQuotePDF({
+        quote: quoteData,
+        company: companyData
+      });
+
+      // Set response headers for PDF download
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="quote-${quoteData.number}.pdf"`);
+
+      // Send PDF buffer
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating quote PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
+
+  // Add PDF export route
+  app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // Get quote with all necessary relations
+      const [quoteData] = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, companyId)
+        ),
+        with: {
+          template: true,
+          category: true,
+          user: {
+            columns: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            }
+          }
+        },
+        limit: 1
+      });
+
+      if (!quoteData) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateQuotePDF({
+        quote: quoteData,
+        company: req.company!
+      });
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="quote-${quoteData.number}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // Send the PDF buffer
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
+  // Add product deletion route
+  app.delete("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+
+      // First verify product exists and belongs to company
+      const [existingProduct] = await db
+        .select()
+        .from(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Delete the product
+      await db
+        .delete(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ));
+
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  // Add new endpoints for company user management
+  app.get("/api/companies/:id/users", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can view users across companies
+      if (req.session.userRole !== UserRole.SUPER_ADMIN &&
+        req.session.userRole !== UserRole.MULTI_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const companyUsers = await db
+        .select({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        })
+        .from(users)
+        .where(eq(users.companyId, companyId))
+        .orderBy(users.name);
+
+      res.json(companyUsers);
+    } catch (error) {
+      console.error('Error fetching company users:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Add user to company
+  app.post("/api/companies/:id/users", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN can modify user-company relationships
+      if (req.session.userRole !== UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+
+      // Verify company exists
+      const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Verify user exists and update their company
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          companyId,
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, parseInt(userId)))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error assigning user to company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Remove user from company
+  app.delete("/api/companies/:id/users/:userId", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN can modify user-company relationships
+      if (req.session.userRole !== UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const companyId = parseInt(req.params.id);
+      const userId = parseInt(req.params.userId);
+
+      // Verify user belongs to company
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(and(
+          eq(users.id, userId),
+          eq(users.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found in company" });
+      }
+
+      // Cannot remove SUPER_ADMIN users
+      if (user.role === UserRole.SUPER_ADMIN) {
+        return res.status(403).json({ message: "Cannot remove super admin users" });
+      }
+
+      // Update user's company to null
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          companyId: null as any, // Type assertion needed due to Drizzle typing
+          updatedAt: new Date()
+        })
+        .where(eq(users.id, userId))
+        .returning();
+
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error removing user from company:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Replace the existing user creation route with improved error handling
+  app.post("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { name, email, password, role, status, companyId } = req.body;
+
+      // Validate required fields
+      if (!name || !email || !password || !role || !status) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // For non-super-admin users, force company assignment to their own company
+      const assignedCompanyId = req.session.userRole === UserRole.SUPER_ADMIN
+        ? (companyId || req.company!.id)
+        : req.company!.id;
+
+      // Check if email already exists
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser.length > 0) {
+        return res.status(400).json({ message: "Email already exists" });
+      }
+
+      // Create the user with proper company assignment
+      const [newUser] = await db
+        .insert(users)
+        .values({
+          name,
+          email,
+          password, // Note: In production, ensure password is hashed
+          role: role as keyof typeof UserRole,
+          status: status as keyof typeof UserStatus,
+          companyId: assignedCompanyId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning({
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          role: users.role,
+          status: users.status,
+          companyId: users.companyId,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        });
+
+      res.json(newUser);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({ message: "Server error creating user" });
+    }
+  });
+
+  // Create new product
+  app.post("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      } = req.body;
+
+      console.log('Creating product with raw data:', {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      });
+
+      // Validate required fields
+      if (!name || !categoryId) {
+        return res.status(400).json({ message: "Name and category are required" });
+      }
+
+      // Parse numeric values safely
+      const parsedBasePrice = parseFloat(basePrice?.toString() || '0');
+      const parsedCost = parseFloat(cost?.toString() || '0');
+      const parsedCategoryId = parseInt(categoryId?.toString() || '0');
+
+      // Validate parsed values
+      if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
+        return res.status(400).json({ message: "Invalid numeric values provided" });
+      }
+
+      const productData = {
+        name,
+        categoryId: parsedCategoryId,
+        basePrice: parsedBasePrice,
+        cost: parsedCost,
+        unit: unit || 'UNIT',
+        isActive: isActive !== undefined ? isActive : true,
+        variations: Array.isArray(variations) ? variations : [],
+        companyId: req.company!.id,
+      };
+
+      console.log('Creating product with parsed data:', productData);
+
+      // Create the product
+      const [newProduct] = await db
+        .insert(products)
+        .values(productData)
+        .returning();
+
+      console.log('Created product:', newProduct);
+
+      // Get full product data with relations
+      const [productWithRelations] = await db.query.products.findMany({
+        where: eq(products.id, newProduct.id),
+        with: {
+          category: true
+        },
+        limit: 1
+      });
+
+      res.json(productWithRelations);
+    } catch (error) {
+      console.error('Error creating product:', error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update product
+  app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      const companyId = req.company!.id;
+      const {
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      } = req.body;
+
+      console.log('Updating product with raw data:', {
+        productId,
+        companyId,
+        name,
+        categoryId,
+        basePrice,
+        cost,
+        unit,
+        isActive,
+        variations
+      });
+
+      // First verify product exists and belongs to company
+      const [existingProduct] = await db
+        .select()
+        .from(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
+        .limit(1);
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Parse numeric values safely
+      const parsedBasePrice = parseFloat(basePrice?.toString() || existingProduct.basePrice.toString());
+      const parsedCost = parseFloat(cost?.toString() || existingProduct.cost.toString());
+      const parsedCategoryId = parseInt(categoryId?.toString() || existingProduct.categoryId.toString());
+
+      // Validate parsed values
+      if (isNaN(parsedBasePrice) || isNaN(parsedCost) || isNaN(parsedCategoryId)) {
+        return res.status(400).json({ message: "Invalid numeric values provided" });
+      }
+
+      const updateData = {
+        name: name || existingProduct.name,
+        categoryId: parsedCategoryId,
+        basePrice: parsedBasePrice,
+        cost: parsedCost,
+        unit: unit || existingProduct.unit,
+        isActive: isActive !== undefined ? isActive : existingProduct.isActive,
+        variations: Array.isArray(variations) ? variations : existingProduct.variations,
+        updatedAt: new Date()
+      };
+
+      console.log('Updating product with parsed data:', updateData);
+
+      // Update the product
+      const [updatedProduct] = await db
+        .update(products)
+        .set(updateData)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, companyId)
+        ))
+        .returning();
+
+      console.log('Updated product:', updatedProduct);
+
+      // Get full product data with relations
+      const [productWithRelations] = await db.query.products.findMany({
+        where: and(
+          eq(products.id, updatedProduct.id),
+          eq(products.companyId, companyId)
+        ),
+        with: {
+          category: true
+        },
+        limit: 1
+      });
+
+      res.json(productWithRelations);
+    } catch (error) {
+      console.error('Error updating product:', error);
       res.status(500).json({ message: "Server error" });
     }
   });
