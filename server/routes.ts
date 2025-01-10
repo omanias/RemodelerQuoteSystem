@@ -46,10 +46,16 @@ function verifyPassword(password: string, hashedPassword: string): boolean {
   const [storedHash, salt] = hashedPassword.split('.');
   console.log('Split hash components - stored:', storedHash, 'salt:', salt);
 
-  // Use SHA-512 to match the existing hash format
-  const calculatedHash = createHash('sha512')
+  // First SHA-512 hash
+  const firstHash = createHash('sha512')
     .update(password + salt)
     .digest('hex');
+
+  // Second SHA-512 hash
+  const calculatedHash = createHash('sha512')
+    .update(firstHash)
+    .digest('hex');
+
   console.log('Calculated hash:', calculatedHash);
   console.log('Hashes match?', calculatedHash === storedHash);
 
