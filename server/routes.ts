@@ -8,6 +8,7 @@ import createMemoryStore from "memorystore";
 import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
 import { storage, UPLOADS_PATH } from "./storage";
+import { createHash, scryptSync, randomBytes, timingSafeEqual } from "crypto";
 
 declare module 'express' {
   interface Request {
@@ -30,6 +31,18 @@ declare module 'express-session' {
     companyId: number;
     accessibleCompanyIds?: number[];
   }
+}
+
+function hashPassword(password: string, salt?: string): { hash: string; salt: string } {
+  const generatedSalt = salt || randomBytes(16).toString('hex');
+  const hash = createHash('sha512').update(password + generatedSalt).digest('hex');
+  return { hash, salt: generatedSalt };
+}
+
+function verifyPassword(password: string, hashedPassword: string): boolean {
+  const [hash, salt] = hashedPassword.split('.');
+  const calculatedHash = hashPassword(password, salt).hash;
+  return hash === calculatedHash;
 }
 
 export function registerRoutes(app: Express): Server {
@@ -86,7 +99,18 @@ export function registerRoutes(app: Express): Server {
 
       console.log('Found user:', user ? 'yes' : 'no');
 
-      if (!user || user.password !== password) {
+      if (!user) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Split the stored password into hash and salt
+      const [storedHash, storedSalt] = user.password.split('.');
+
+      // Hash the provided password with the stored salt
+      const { hash: calculatedHash } = hashPassword(password, storedSalt);
+
+      // Compare the hashes
+      if (storedHash !== calculatedHash) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
