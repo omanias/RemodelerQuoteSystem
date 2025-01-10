@@ -111,10 +111,12 @@ export function registerRoutes(app: Express): Server {
   // Products routes with proper middleware chain
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const companyProducts = await db
-        .select()
-        .from(products)
-        .where(eq(products.companyId, req.user!.companyId));
+      const companyProducts = await db.query.products.findMany({
+        where: eq(products.companyId, req.user!.companyId),
+        with: {
+          category: true
+        }
+      });
 
       res.json(companyProducts);
     } catch (error) {
@@ -141,10 +143,13 @@ export function registerRoutes(app: Express): Server {
   // Categories routes with proper middleware chain
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const companyCategories = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.companyId, req.user!.companyId));
+      const companyCategories = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.user!.companyId),
+        with: {
+          products: true,
+          templates: true
+        }
+      });
 
       res.json(companyCategories);
     } catch (error) {
