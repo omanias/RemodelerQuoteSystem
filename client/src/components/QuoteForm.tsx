@@ -724,12 +724,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                             ) : (
                               <Button
                                 type="button"
-                                variant="outline"
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => addProduct(product)}
-                                className="w-[140px]"
+                                className="h-8 w-8"
                               >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Add to Quote
+                                <Plus className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
@@ -1008,7 +1008,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
         {status === QuoteStatus.ACCEPTED && !quote?.signature && (
           <SignatureCanvas
-            isOpen={showSignature}
+                        isOpen={showSignature}
             onClose={() => setShowSignature(false)}
             onSave={handleSignatureSave}
             title="Sign Quote"
