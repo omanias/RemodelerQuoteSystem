@@ -29,11 +29,6 @@ export function useAuth() {
       try {
         const res = await fetch("/api/auth/user", {
           credentials: "include",
-          headers: {
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          },
         });
 
         if (!res.ok) {
@@ -62,11 +57,7 @@ export function useAuth() {
 
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
         credentials: "include",
       });
@@ -90,10 +81,6 @@ export function useAuth() {
       const res = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
       });
 
       if (!res.ok) {
