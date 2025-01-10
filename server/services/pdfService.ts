@@ -30,7 +30,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Collect chunks in a buffer
       const chunks: Buffer[] = [];
-
       doc.on('data', chunk => {
         chunks.push(Buffer.from(chunk));
       });
@@ -39,34 +38,29 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         resolve(Buffer.concat(chunks));
       });
 
-      // Handle any document errors
       doc.on('error', (err) => {
         reject(err);
       });
 
-      // Professional Header with Logo and Company Info
+      // Header Section
       const headerTop = 45;
       if (company.logo) {
         try {
           const uploadDir = path.join(process.cwd(), 'uploads');
           const logoPath = path.join(uploadDir, path.basename(company.logo));
-
           if (fs.existsSync(logoPath)) {
             doc.image(logoPath, 50, headerTop, { width: 100 });
-          } else {
-            console.warn(`Company logo not found at path: ${logoPath}`);
           }
         } catch (logoError) {
           console.error('Error loading company logo:', logoError);
         }
       }
 
-      // Company Info Block (aligned to the right)
+      // Company Info
       doc.font('Helvetica-Bold')
          .fontSize(16)
          .text(company.name || '', 250, headerTop);
 
-      // Company Contact Info in a styled block
       const contactInfo = [
         company.phone && `Tel: ${company.phone}`,
         company.email,
@@ -113,73 +107,90 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            `Valid Until: ${new Date(new Date(quote.createdAt).setDate(new Date(quote.createdAt).getDate() + 30)).toLocaleDateString()}`
          ].join('\n'), 330, quoteDetailsY + 30);
 
-      // Move down for content
+      // Products Table
       doc.moveDown(4);
-
-      // Products Table Header
       const tableTop = doc.y;
       const tableHeaders = ['Product', 'Description', 'Quantity', 'Unit Price', 'Total'];
-      const columnWidths = [150, 140, 60, 70, 75];
+      const columnWidths = [150, 140, 70, 70, 65];
+      const pageHeight = doc.page.height - doc.page.margins.bottom;
+      let currentY = tableTop;
 
-      // Draw table header with light gray background
-      doc.rect(50, tableTop, 495, 20).fill('#f3f4f6').stroke('#e5e7eb');
-      let xPos = 60;
-      tableHeaders.forEach((header, i) => {
-        doc.font('Helvetica-Bold')
-           .fontSize(10)
-           .fillColor('#000000')
-           .text(header, xPos, tableTop + 5, {
-              width: columnWidths[i],
-              align: i >= 2 ? 'right' : 'left'
-           });
-        xPos += columnWidths[i];
-      });
+      // Table Header
+      const drawTableHeader = (y: number) => {
+        doc.rect(50, y, 495, 20).fill('#f3f4f6').stroke('#e5e7eb');
+        let xPos = 60;
+        tableHeaders.forEach((header, i) => {
+          doc.font('Helvetica-Bold')
+             .fontSize(10)
+             .fillColor('#000000')
+             .text(header, xPos, y + 5, {
+                width: columnWidths[i],
+                align: i >= 2 ? 'right' : 'left'
+             });
+          xPos += columnWidths[i];
+        });
+        return y + 25;
+      };
 
-      // Quote Products
-      let yPos = tableTop + 25;
+      currentY = drawTableHeader(currentY);
+
+      // Products
       const products = (quote.content as { products?: any[] })?.products || [];
+      let isFirstProduct = true;
 
       products.forEach((product: any, index: number) => {
-        const isEvenRow = index % 2 === 0;
-        const itemHeight = Math.max(
-          doc.heightOfString(product.name || '', { width: columnWidths[0] }),
-          doc.heightOfString(product.description || '', { width: columnWidths[1] })
-        );
+        const productText = product.variation 
+          ? `${product.name} (${product.variation})`
+          : product.name;
 
-        // Alternate row background
+        const descriptionText = product.description || '';
+        const quantityText = product.unit
+          ? `${product.quantity} ${product.unit}`
+          : product.quantity.toString();
+
+        // Calculate required height for this product
+        const productHeight = Math.max(
+          doc.heightOfString(productText, { width: columnWidths[0] }),
+          doc.heightOfString(descriptionText, { width: columnWidths[1] })
+        ) + 20; // Add padding
+
+        // Check if we need a new page
+        if (currentY + productHeight > pageHeight) {
+          doc.addPage();
+          currentY = doc.page.margins.top;
+          currentY = drawTableHeader(currentY);
+        }
+
+        // Draw row background
+        const isEvenRow = index % 2 === 0;
         if (isEvenRow) {
-          doc.rect(50, yPos - 4, 495, itemHeight + 8)
+          doc.rect(50, currentY - 4, 495, productHeight)
              .fill('#f8fafc');
         }
 
-        xPos = 60;
+        // Product details
+        let xPos = 60;
         doc.font('Helvetica')
            .fontSize(10)
            .fillColor('#000000');
 
-        // Product name and variation
-        const productName = product.variation 
-          ? `${product.name} (${product.variation})`
-          : product.name;
-        doc.text(productName, xPos, yPos, { width: columnWidths[0] });
+        // Product name
+        doc.text(productText, xPos, currentY, { width: columnWidths[0] });
 
-        // Description (can be empty)
+        // Description
         xPos += columnWidths[0];
-        doc.text(product.description || '', xPos, yPos, { width: columnWidths[1] });
+        doc.text(descriptionText, xPos, currentY, { width: columnWidths[1] });
 
-        // Quantity with unit
+        // Quantity
         xPos += columnWidths[1];
-        const quantityText = product.unit
-          ? `${product.quantity} ${product.unit}`
-          : product.quantity.toString();
-        doc.text(quantityText, xPos, yPos, {
+        doc.text(quantityText, xPos, currentY, {
           width: columnWidths[2],
           align: 'right'
         });
 
         // Unit Price
         xPos += columnWidths[2];
-        doc.text(`$${Number(product.price).toFixed(2)}`, xPos, yPos, {
+        doc.text(`$${Number(product.price).toFixed(2)}`, xPos, currentY, {
           width: columnWidths[3],
           align: 'right'
         });
@@ -187,72 +198,76 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         // Total
         xPos += columnWidths[3];
         const total = Number(product.price) * Number(product.quantity);
-        doc.text(`$${total.toFixed(2)}`, xPos, yPos, {
+        doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
           width: columnWidths[4],
           align: 'right'
         });
 
-        // Increased spacing between products from 35 to 45 for better readability
-        yPos += itemHeight + 45;
+        currentY += productHeight;
 
-        // Add a subtle separator line between products if not the last item
+        // Add separator line if not the last item
         if (index < products.length - 1) {
           doc.strokeColor('#e5e7eb')
-             .moveTo(50, yPos - 20)
-             .lineTo(545, yPos - 20)
+             .moveTo(50, currentY - 10)
+             .lineTo(545, currentY - 10)
              .stroke()
              .strokeColor('#000000');
         }
       });
 
-      // Financial Summary Box
-      doc.rect(320, yPos + 20, 225, 120)
-         .stroke();
+      // Financial Summary
+      currentY += 20;
+      if (currentY + 150 > pageHeight) {
+        doc.addPage();
+        currentY = doc.page.margins.top + 20;
+      }
 
-      const summaryStartY = yPos + 30;
-      doc.font('Helvetica')
-         .fontSize(10);
+      doc.rect(320, currentY, 225, 120)
+         .stroke();
 
       // Subtotal
       const subtotal = Number(quote.subtotal || 0);
-      doc.text('Subtotal:', 330, summaryStartY)
-         .text(`$${subtotal.toFixed(2)}`, 495, summaryStartY, { align: 'right' });
+      doc.font('Helvetica')
+         .fontSize(10)
+         .text('Subtotal:', 330, currentY + 10)
+         .text(`$${subtotal.toFixed(2)}`, 495, currentY + 10, { align: 'right' });
 
-      // Discount if applicable
-      let currentY = summaryStartY + 20;
+      let summaryY = currentY + 30;
+
+      // Discount
       if (quote.discountValue) {
         const discountValue = Number(quote.discountValue);
         const discountLabel = quote.discountType === 'PERCENTAGE'
           ? `Discount (${discountValue}%):`
           : 'Discount (fixed):';
-        doc.text(discountLabel, 330, currentY)
-           .text(`-$${discountValue.toFixed(2)}`, 495, currentY, { align: 'right' });
-        currentY += 20;
+        doc.text(discountLabel, 330, summaryY)
+           .text(`-$${discountValue.toFixed(2)}`, 495, summaryY, { align: 'right' });
+        summaryY += 20;
       }
 
-      // Tax if applicable
+      // Tax
       if (quote.taxRate) {
         const taxRate = Number(quote.taxRate);
         const taxAmount = (subtotal * (taxRate / 100));
-        doc.text(`Tax (${taxRate}%):`, 330, currentY)
-           .text(`$${taxAmount.toFixed(2)}`, 495, currentY, { align: 'right' });
-        currentY += 20;
+        doc.text(`Tax (${taxRate}%):`, 330, summaryY)
+           .text(`$${taxAmount.toFixed(2)}`, 495, summaryY, { align: 'right' });
+        summaryY += 20;
       }
 
       // Total
       const total = Number(quote.total || 0);
       doc.font('Helvetica-Bold')
-         .text('Total:', 330, currentY)
-         .text(`$${total.toFixed(2)}`, 495, currentY, { align: 'right' });
+         .text('Total:', 330, summaryY)
+         .text(`$${total.toFixed(2)}`, 495, summaryY, { align: 'right' });
 
-      // Payment Terms
+      // Payment Terms (if applicable)
       if (quote.downPaymentValue) {
-        currentY += 20;
+        summaryY += 40;
         const downPayment = Number(quote.downPaymentValue);
         const remainingBalance = Number(quote.remainingBalance || 0);
         doc.font('Helvetica')
            .fontSize(10)
-           .text('Payment Terms:', 50, currentY + 20)
+           .text('Payment Terms:', 50, summaryY)
            .moveDown(0.5)
            .text([
              `Down Payment Required: $${downPayment.toFixed(2)} (${quote.downPaymentType})`,
@@ -260,7 +275,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
            ].join('\n'));
       }
 
-      // Terms and Conditions
+      // Terms and Conditions (only if provided)
       if (quote.template?.termsAndConditions) {
         doc.addPage()
            .font('Helvetica-Bold')
@@ -273,18 +288,16 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
              align: 'left',
              columns: 1,
              columnGap: 15,
-             height: 700,
-             continued: true
+             height: 700
            });
       }
 
-      // Signature Section if available
+      // Signature Section (if available)
       if (quote.signature) {
-        // If we were already on a terms page, add some spacing
-        if (quote.template?.termsAndConditions) {
-          doc.moveDown(4);
-        } else {
+        if (doc.y + 200 > pageHeight) {
           doc.addPage();
+        } else {
+          doc.moveDown(4);
         }
 
         doc.font('Helvetica-Bold')
@@ -299,7 +312,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         const signatureData = quote.signature.data;
         if (signatureData) {
           try {
-            // Convert base64 to image and add to PDF
             const imgBuffer = Buffer.from(signatureData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
             doc.image(imgBuffer, { width: 200, align: 'center' });
 
@@ -317,7 +329,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         }
       }
 
-      // Ensure proper document closure
       try {
         doc.end();
       } catch (endError) {
