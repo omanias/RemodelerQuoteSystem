@@ -1,6 +1,6 @@
 import passport from "passport";
 import { IVerifyOptions, Strategy as LocalStrategy } from "passport-local";
-import { type Express } from "express";
+import { type Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
@@ -60,14 +60,6 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
-
-  // Authentication middleware
-  const requireAuth = (req: Express.Request, res: Express.Response, next: Express.NextFunction) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    next();
-  };
 
   // Configure passport strategy
   passport.use(
@@ -169,6 +161,8 @@ export function setupAuth(app: Express) {
 
         // Add company information to the session
         req.session.companyId = user.companyId;
+        req.session.userId = user.id;
+        req.session.userRole = user.role;
 
         return res.json({
           id: user.id,
@@ -187,74 +181,26 @@ export function setupAuth(app: Express) {
       if (err) {
         return res.status(500).json({ message: "Logout failed" });
       }
-      res.json({ message: "Logged out successfully" });
+      req.session.destroy((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Session destruction failed" });
+        }
+        res.json({ message: "Logged out successfully" });
+      });
     });
   });
 
   app.get("/api/auth/user", (req, res) => {
-    if (req.isAuthenticated()) {
-      const user = req.user;
+    if (req.isAuthenticated() && req.user) {
       return res.json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        companyId: user.companyId,
-        status: user.status
+        id: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        role: req.user.role,
+        companyId: req.user.companyId,
+        status: req.user.status
       });
     }
     res.status(401).json({ message: "Not authenticated" });
   });
-
-  // Company switching for multi-company users
-  app.post("/api/auth/switch-company", requireAuth, async (req, res) => {
-    const { companyId } = req.body;
-    const userId = req.user?.id;
-
-    if (!companyId || !userId) {
-      return res.status(400).json({ message: "Company ID is required" });
-    }
-
-    try {
-      // Verify user has access to the target company
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(
-          and(
-            eq(users.id, userId),
-            eq(users.companyId, companyId)
-          )
-        )
-        .limit(1);
-
-      if (!user) {
-        return res.status(403).json({ message: "Access denied to this company" });
-      }
-
-      // Update session with new company context
-      req.session.companyId = companyId;
-
-      // Re-login the user with the new company context
-      req.logIn(user, (err) => {
-        if (err) {
-          return res.status(500).json({ message: "Failed to switch company" });
-        }
-
-        return res.json({
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          companyId: user.companyId,
-          status: user.status
-        });
-      });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to switch company" });
-    }
-  });
-
-  // Make requireAuth middleware available
-  app.set('requireAuth', requireAuth);
 }

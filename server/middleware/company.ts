@@ -93,7 +93,7 @@ export async function companyMiddleware(
         return next();
       }
 
-      // For regular users, verify they belong to their assigned company
+      // For regular users, use their assigned company
       if (user.companyId) {
         const [company] = await db
           .select()
@@ -106,10 +106,7 @@ export async function companyMiddleware(
         }
 
         // Regular users can only access their assigned company
-        if (req.session.companyId && req.session.companyId !== user.companyId) {
-          return res.status(403).json({ message: "Invalid company access" });
-        }
-
+        req.session.companyId = user.companyId; // Set company ID in session
         req.company = company;
         req.user = user;
         return next();
@@ -138,7 +135,7 @@ export function requireCompanyAccess(req: Request, res: Response, next: NextFunc
     return res.status(403).json({ message: "Company access required" });
   }
 
-  if (!req.session?.userId) {
+  if (!req.user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
 
@@ -147,26 +144,14 @@ export function requireCompanyAccess(req: Request, res: Response, next: NextFunc
 
 export function requireRole(roles: Array<keyof typeof UserRole>) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.session?.userId) {
+    if (!req.user) {
       return res.status(401).json({ message: "Not authenticated" });
     }
 
-    try {
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, req.session.userId))
-        .limit(1);
-
-      if (!user || !roles.includes(user.role)) {
-        return res.status(403).json({ message: "Insufficient permissions" });
-      }
-
-      req.user = user;
-      next();
-    } catch (error) {
-      console.error('Role check error:', error);
-      next(error);
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Insufficient permissions" });
     }
+
+    next();
   };
 }
