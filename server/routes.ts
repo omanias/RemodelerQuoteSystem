@@ -10,6 +10,7 @@ import {
   templates, notifications, companies 
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
+import { generateQuotePDF } from "./services/pdfService";
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -41,6 +42,51 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error fetching company:', error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // PDF Export route
+  app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      // Get quote with its template
+      const quote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, quoteId),
+        with: {
+          template: true
+        }
+      });
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Get company info
+      const company = await db.query.companies.findFirst({
+        where: eq(companies.id, req.user!.companyId)
+      });
+
+      if (!company) {
+        return res.status(404).json({ message: "Company not found" });
+      }
+
+      // Generate PDF
+      const pdfBuffer = await generateQuotePDF({ quote, company });
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=quote-${quote.number}.pdf`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // Send PDF
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
     }
   });
 

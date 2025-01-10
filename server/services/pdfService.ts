@@ -30,8 +30,19 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Collect chunks in a buffer
       const chunks: Buffer[] = [];
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+      doc.on('data', chunk => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+
+      // Handle any document errors
+      doc.on('error', (err) => {
+        reject(err);
+      });
 
       // Professional Header with Logo and Company Info
       const headerTop = 45;
@@ -306,7 +317,13 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         }
       }
 
-      doc.end();
+      // Ensure proper document closure
+      try {
+        doc.end();
+      } catch (endError) {
+        console.error('Error ending PDF document:', endError);
+        reject(endError);
+      }
     } catch (error) {
       console.error('Error generating PDF:', error);
       reject(error);

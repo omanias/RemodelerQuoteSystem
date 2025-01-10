@@ -133,15 +133,36 @@ export function Quotes() {
         throw new Error(await response.text());
       }
 
+      // Get the content-disposition header to extract the filename
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `quote-${quote.number}.pdf`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+
+      // Create blob with proper MIME type
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+
+      // Create object URL and trigger download
+      const url = window.URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
-      a.download = `quote-${quote.number}.pdf`;
+      a.download = filename;
+
+      // Append to body, click and cleanup
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+
+      // Cleanup after download starts
+      window.setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
 
       toast({
         title: "Success",
@@ -206,9 +227,9 @@ export function Quotes() {
             )}
           </div>
         </div>
-        <QuoteForm 
-          onSuccess={() => navigate('/quotes')} 
-          user={user} 
+        <QuoteForm
+          onSuccess={() => navigate('/quotes')}
+          user={user}
           defaultContactId={contactId}
           contact={contact}
         />
