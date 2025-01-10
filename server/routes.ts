@@ -10,6 +10,7 @@ import multer from "multer";
 import { storage, UPLOADS_PATH } from "./storage";
 import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
+import passport from "passport";
 
 declare module 'express' {
   interface Request {
@@ -58,6 +59,89 @@ export function registerRoutes(app: Express): Server {
       }
     })
   );
+
+  // Authentication routes
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password, companyId } = req.body;
+
+      if (!email || !password || !companyId) {
+        return res.status(400).json({ message: "Email, password and company ID are required" });
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (!user || user.password !== password || user.companyId !== companyId) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      // Set session data
+      req.session.userId = user.id;
+      req.session.userRole = user.role;
+      req.session.companyId = user.companyId;
+
+      const userData = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        companyId: user.companyId,
+        status: user.status
+      };
+
+      res.json(userData);
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Logout error:', err);
+        return res.status(500).json({ message: "Error during logout" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/user", async (req, res) => {
+    try {
+      if (!req.session.userId) {
+        return res.status(401).json(null);
+      }
+
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, req.session.userId))
+        .limit(1);
+
+      if (!user) {
+        req.session.destroy(() => {});
+        return res.status(401).json(null);
+      }
+
+      const userData = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        companyId: user.companyId,
+        status: user.status
+      };
+
+      res.json(userData);
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // Apply company middleware to all routes
   app.use(companyMiddleware);

@@ -26,7 +26,7 @@ const sessionConfig = {
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    sameSite: 'none' as const,
+    sameSite: 'lax' as const,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: '/',
   }
@@ -37,19 +37,20 @@ if (app.get("env") === "production") {
   sessionConfig.cookie.secure = true;
 }
 
+// Initialize session before any routes
 app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// CORS configuration
+// CORS configuration for development
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && (origin.endsWith('.replit.dev') || origin.includes('localhost'))) {
     res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
