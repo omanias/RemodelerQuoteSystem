@@ -58,7 +58,10 @@ interface ProductFormProps {
     cost: number;
     unit: string;
     isActive: boolean;
-    variations?: VariationData[];
+    variations?: Array<{
+      name: string;
+      price: string | number;
+    }>;
   };
   onSuccess?: () => void;
 }
@@ -67,8 +70,12 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formChanged, setFormChanged] = useState(false);
   const [variations, setVariations] = useState<VariationData[]>(
-    product?.variations || []
+    product?.variations?.map(v => ({
+      name: v.name,
+      price: typeof v.price === 'number' ? v.price.toString() : v.price
+    })) || []
   );
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
