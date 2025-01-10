@@ -320,7 +320,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         discountCode: data.discountCode,
         taxRate: parseNumber(data.taxRate),
         taxAmount: parseNumber(tax),
-        notes: data.notes,
         content: {
           products: formattedProducts,
           calculations: {
@@ -726,10 +725,11 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               <Button
                                 type="button"
                                 variant="outline"
-                                size="sm"
                                 onClick={() => addProduct(product)}
+                                className="w-[140px]"
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add to Quote
                               </Button>
                             )}
                           </div>
