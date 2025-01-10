@@ -43,7 +43,7 @@ interface Product {
   basePrice: number;
   unit: string;
   isActive: boolean;
-  category: {
+  category?: {
     id: number;
     name: string;
   };
@@ -163,8 +163,8 @@ export function Products() {
               products.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>{product.name}</TableCell>
-                  <TableCell>{product.category.name}</TableCell>
-                  <TableCell>${product.basePrice}</TableCell>
+                  <TableCell>{product.category?.name || "Uncategorized"}</TableCell>
+                  <TableCell>${product.basePrice.toFixed(2)}</TableCell>
                   <TableCell>{product.unit}</TableCell>
                   <TableCell>
                     <Badge variant={product.isActive ? "default" : "secondary"}>
@@ -209,7 +209,7 @@ export function Products() {
               product={{
                 id: editProduct.id,
                 name: editProduct.name,
-                categoryId: editProduct.category.id,
+                categoryId: editProduct.category?.id || 0,
                 basePrice: editProduct.basePrice,
                 unit: editProduct.unit,
                 isActive: editProduct.isActive,
