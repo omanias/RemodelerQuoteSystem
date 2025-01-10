@@ -21,6 +21,85 @@ export function registerRoutes(app: Express): Server {
   // Apply company middleware to all routes after auth routes
   app.use(companyMiddleware);
 
+  // Products routes with proper middleware chain
+  app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const companyProducts = await db.query.products.findMany({
+        where: eq(products.companyId, req.user!.companyId),
+        with: {
+          category: true
+        },
+        columns: {
+          id: true,
+          name: true,
+          basePrice: true,
+          cost: true,
+          unit: true,
+          isActive: true,
+          variations: true,
+          companyId: true,
+          categoryId: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      });
+
+      res.json(companyProducts);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Add PUT route for updating products
+  app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+
+      // Verify product exists and belongs to company
+      const existingProduct = await db.query.products.findFirst({
+        where: and(
+          eq(products.id, productId),
+          eq(products.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Update product
+      await db
+        .update(products)
+        .set({
+          name: req.body.name,
+          categoryId: req.body.categoryId,
+          basePrice: req.body.basePrice,
+          cost: req.body.cost,
+          unit: req.body.unit,
+          isActive: req.body.isActive,
+          variations: req.body.variations,
+          updatedAt: new Date()
+        })
+        .where(eq(products.id, productId));
+
+      // Get updated product
+      const updatedProduct = await db.query.products.findFirst({
+        where: eq(products.id, productId),
+        with: {
+          category: true
+        }
+      });
+
+      res.json(updatedProduct);
+    } catch (error) {
+      console.error('Error updating product:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
   // Companies routes
   app.get("/api/companies/current", requireAuth, async (req, res) => {
     try {
@@ -108,35 +187,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Products routes with proper middleware chain
-  app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const companyProducts = await db.query.products.findMany({
-        where: eq(products.companyId, req.user!.companyId),
-        with: {
-          category: true
-        },
-        columns: {
-          id: true,
-          name: true,
-          basePrice: true,
-          cost: true,
-          unit: true,
-          isActive: true,
-          variations: true,
-          companyId: true,
-          categoryId: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
-
-      res.json(companyProducts);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
 
   // Users routes with proper middleware chain
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {

@@ -69,9 +69,19 @@ export function Products() {
     queryKey: ["/api/products"],
   });
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = async (product: Product) => {
     setEditProduct(product);
     setEditDialogOpen(true);
+  };
+
+  const handleEditSuccess = async () => {
+    toast({
+      title: "Product updated",
+      description: "The product has been updated successfully.",
+    });
+    setEditDialogOpen(false);
+    setEditProduct(null);
+    refetch();
   };
 
   const handleDelete = async () => {
@@ -222,14 +232,10 @@ export function Products() {
                 basePrice: Number(editProduct.basePrice) || 0,
                 unit: editProduct.unit,
                 isActive: editProduct.isActive,
-                cost: 0, 
-                variations: editProduct.variations || [] 
+                cost: 0,
+                variations: editProduct.variations || []
               }}
-              onSuccess={() => {
-                setEditDialogOpen(false);
-                setEditProduct(null);
-                refetch();
-              }}
+              onSuccess={handleEditSuccess}
             />
           )}
         </DialogContent>
