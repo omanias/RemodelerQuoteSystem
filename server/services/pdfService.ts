@@ -134,19 +134,38 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       currentY = drawTableHeader(currentY);
 
-      // Products
-      const products = (quote.content as { products?: any[] })?.products || [];
-      let isFirstProduct = true;
+      // Get and validate products array
+      let products = [];
+      try {
+        if (typeof quote.content === 'string') {
+          const content = JSON.parse(quote.content);
+          products = content.products || [];
+        } else if (quote.content && Array.isArray(quote.content.products)) {
+          products = quote.content.products;
+        } else {
+          console.warn('No products found in quote content');
+          products = [];
+        }
+      } catch (error) {
+        console.error('Error parsing quote content:', error);
+        products = [];
+      }
 
+      // Products Table Content
       products.forEach((product: any, index: number) => {
-        const productText = product.variation 
-          ? `${product.name} (${product.variation})`
-          : product.name;
+        // Log product data for debugging
+        console.log(`Processing product ${index}:`, product);
 
+        // Calculate product details
+        const productText = product.name || 'Unnamed Product';
         const descriptionText = product.description || '';
+        const quantity = parseFloat(product.quantity) || 0;
+        const price = parseFloat(product.price) || 0;
+        const total = quantity * price;
+
         const quantityText = product.unit
-          ? `${product.quantity} ${product.unit}`
-          : product.quantity.toString();
+          ? `${quantity} ${product.unit}`
+          : quantity.toString();
 
         // Calculate required height for this product
         const productHeight = Math.max(
@@ -168,7 +187,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
              .fill('#f8fafc');
         }
 
-        // Product details
+        // Write product details
         let xPos = 60;
         doc.font('Helvetica')
            .fontSize(10)
@@ -190,14 +209,13 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
         // Unit Price
         xPos += columnWidths[2];
-        doc.text(`$${Number(product.price).toFixed(2)}`, xPos, currentY, {
+        doc.text(`$${price.toFixed(2)}`, xPos, currentY, {
           width: columnWidths[3],
           align: 'right'
         });
 
         // Total
         xPos += columnWidths[3];
-        const total = Number(product.price) * Number(product.quantity);
         doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
           width: columnWidths[4],
           align: 'right'
@@ -205,7 +223,7 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
         currentY += productHeight;
 
-        // Add separator line if not the last item
+        // Add separator line
         if (index < products.length - 1) {
           doc.strokeColor('#e5e7eb')
              .moveTo(50, currentY - 10)

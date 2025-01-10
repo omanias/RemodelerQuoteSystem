@@ -9,7 +9,7 @@ import {
   users, quotes, contacts, products, categories, 
   templates, notifications, companies 
 } from "@db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
 
 export function registerRoutes(app: Express): Server {
@@ -53,11 +53,16 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid quote ID" });
       }
 
-      // Get quote with its template
+      // Get quote with all necessary relations
       const quote = await db.query.quotes.findFirst({
         where: eq(quotes.id, quoteId),
         with: {
-          template: true
+          template: true,
+          products: {
+            with: {
+              product: true
+            }
+          }
         }
       });
 
@@ -74,8 +79,17 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Company not found" });
       }
 
+      // Log the quote content for debugging
+      console.log('Quote content:', JSON.stringify(quote.content, null, 2));
+
       // Generate PDF
-      const pdfBuffer = await generateQuotePDF({ quote, company });
+      const pdfBuffer = await generateQuotePDF({ 
+        quote: {
+          ...quote,
+          content: quote.content || { products: [] }
+        }, 
+        company 
+      });
 
       // Set response headers
       res.setHeader('Content-Type', 'application/pdf');
@@ -111,10 +125,19 @@ export function registerRoutes(app: Express): Server {
   // Products routes with proper middleware chain
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const companyProducts = await db
-        .select()
-        .from(products)
-        .where(eq(products.companyId, req.user!.companyId));
+      const companyProducts = await db.query.products.findMany({
+        where: eq(products.companyId, req.user!.companyId),
+        with: {
+          category: true,
+          variations: true
+        },
+        orderBy: [
+          desc(products.updatedAt)
+        ]
+      });
+
+      // Log for debugging
+      console.log('Fetched products:', JSON.stringify(companyProducts, null, 2));
 
       res.json(companyProducts);
     } catch (error) {

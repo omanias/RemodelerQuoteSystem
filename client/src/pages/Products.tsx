@@ -40,6 +40,7 @@ import { Link } from "wouter";
 interface Product {
   id: number;
   name: string;
+  description?: string;
   basePrice: number;
   unit: string;
   isActive: boolean;
@@ -47,6 +48,12 @@ interface Product {
     id: number;
     name: string;
   };
+  variations?: Array<{
+    id: number;
+    name: string;
+    price: number;
+  }>;
+  updatedAt: string;
 }
 
 export function Products() {
@@ -162,9 +169,18 @@ export function Products() {
             ) : (
               products.map((product) => (
                 <TableRow key={product.id}>
-                  <TableCell>{product.name}</TableCell>
-                  <TableCell>{product.category.name}</TableCell>
-                  <TableCell>${product.basePrice}</TableCell>
+                  <TableCell>
+                    <div>
+                      <div>{product.name}</div>
+                      {product.description && (
+                        <div className="text-sm text-muted-foreground">
+                          {product.description}
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>{product.category?.name || 'No Category'}</TableCell>
+                  <TableCell>${product.basePrice.toFixed(2)}</TableCell>
                   <TableCell>{product.unit}</TableCell>
                   <TableCell>
                     <Badge variant={product.isActive ? "default" : "secondary"}>
@@ -213,7 +229,11 @@ export function Products() {
                 basePrice: editProduct.basePrice,
                 unit: editProduct.unit,
                 isActive: editProduct.isActive,
-                cost: 0, // Add default cost as it's required by the form
+                description: editProduct.description,
+                variations: editProduct.variations?.map(v => ({
+                  name: v.name,
+                  price: v.price.toString()
+                }))
               }}
               onSuccess={() => {
                 setEditDialogOpen(false);
