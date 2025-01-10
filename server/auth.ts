@@ -64,18 +64,22 @@ export function setupAuth(app: Express) {
       {
         usernameField: 'email',
         passwordField: 'password',
+        passReqToCallback: true, // This allows us to access the request object
       },
-      async (email, password, done) => {
+      async (req, email, password, done) => {
         try {
-          const companyId = Number(email.split(":")[1]); // Get companyId from email format "email:companyId"
-          const actualEmail = email.split(":")[0];
+          const companyId = parseInt(req.body.companyId);
+
+          if (isNaN(companyId)) {
+            return done(null, false, { message: "Invalid company ID" });
+          }
 
           const [user] = await db
             .select()
             .from(users)
             .where(
               and(
-                eq(users.email, actualEmail),
+                eq(users.email, email),
                 eq(users.companyId, companyId)
               )
             )
@@ -126,9 +130,6 @@ export function setupAuth(app: Express) {
     if (!email || !password || !companyId) {
       return res.status(400).json({ message: "Email, password and company ID are required" });
     }
-
-    // Combine email and companyId for the localStrategy
-    const combinedEmail = `${email}:${companyId}`;
 
     passport.authenticate("local", (err: any, user: Express.User | false, info: IVerifyOptions) => {
       if (err) {
