@@ -31,9 +31,6 @@ interface Category {
   id: number;
   name: string;
   description: string | null;
-  companyId: number;
-  createdAt: string;
-  updatedAt: string;
   products: Array<{
     id: number;
     name: string;
@@ -46,10 +43,10 @@ interface Category {
 
 export function Categories() {
   const [search, setSearch] = useState("");
-  const [editCategory, setEditCategory] = useState<Category | null>(null);
 
   const { data: categories = [], isLoading, refetch } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
+    retry: false
   });
 
   const filteredCategories = categories.filter((category) =>
@@ -145,10 +142,7 @@ export function Categories() {
                       <DropdownMenuContent align="end">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditCategory(category);
-                            }}>
+                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                               Edit
                             </DropdownMenuItem>
                           </DialogTrigger>
@@ -160,10 +154,9 @@ export function Categories() {
                               category={{
                                 id: category.id,
                                 name: category.name,
-                                description: category.description
+                                description: category.description || undefined
                               }}
                               onSuccess={() => {
-                                setEditCategory(null);
                                 refetch();
                               }}
                             />
