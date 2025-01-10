@@ -40,7 +40,7 @@ import { Link } from "wouter";
 interface Product {
   id: number;
   name: string;
-  basePrice: number;
+  basePrice: number | string;
   unit: string;
   isActive: boolean;
   category?: {
@@ -48,6 +48,11 @@ interface Product {
     name: string;
   };
 }
+
+const formatPrice = (price: number | string): string => {
+  const numericPrice = typeof price === 'string' ? parseFloat(price) : price;
+  return isNaN(numericPrice) ? '0.00' : numericPrice.toFixed(2);
+};
 
 export function Products() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -164,7 +169,7 @@ export function Products() {
                 <TableRow key={product.id}>
                   <TableCell>{product.name}</TableCell>
                   <TableCell>{product.category?.name || "Uncategorized"}</TableCell>
-                  <TableCell>${product.basePrice.toFixed(2)}</TableCell>
+                  <TableCell>${formatPrice(product.basePrice)}</TableCell>
                   <TableCell>{product.unit}</TableCell>
                   <TableCell>
                     <Badge variant={product.isActive ? "default" : "secondary"}>
@@ -210,7 +215,7 @@ export function Products() {
                 id: editProduct.id,
                 name: editProduct.name,
                 categoryId: editProduct.category?.id || 0,
-                basePrice: editProduct.basePrice,
+                basePrice: Number(editProduct.basePrice) || 0,
                 unit: editProduct.unit,
                 isActive: editProduct.isActive,
                 cost: 0, // Add default cost as it's required by the form
