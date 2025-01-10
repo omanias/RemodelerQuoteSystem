@@ -102,7 +102,8 @@ export function Products() {
         description: "The product has been deleted successfully.",
       });
 
-      refetch();
+      // Important: Refetch the products list after successful deletion
+      await refetch();
     } catch (error: any) {
       toast({
         title: "Error",

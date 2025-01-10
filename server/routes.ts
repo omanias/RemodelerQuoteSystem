@@ -38,6 +38,41 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add DELETE route for products
+  app.delete("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const productId = parseInt(req.params.id);
+      if (isNaN(productId)) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+
+      // Verify product exists and belongs to company
+      const existingProduct = await db.query.products.findFirst({
+        where: and(
+          eq(products.id, productId),
+          eq(products.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingProduct) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Delete the product
+      await db
+        .delete(products)
+        .where(and(
+          eq(products.id, productId),
+          eq(products.companyId, req.user!.companyId)
+        ));
+
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Add PUT route for updating products
   app.put("/api/products/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
