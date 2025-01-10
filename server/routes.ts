@@ -46,20 +46,20 @@ function verifyPassword(password: string, hashedPassword: string): boolean {
   const [storedHash, salt] = hashedPassword.split('.');
   console.log('Split hash components - stored:', storedHash, 'salt:', salt);
 
-  // First SHA-512 hash
+  // First SHA-512 hash: password + salt
   const firstHash = createHash('sha512')
     .update(password + salt)
     .digest('hex');
 
-  // Second SHA-512 hash
-  const calculatedHash = createHash('sha512')
+  // Second SHA-512 hash: only hash the first hash result
+  const finalHash = createHash('sha512')
     .update(firstHash)
     .digest('hex');
 
-  console.log('Calculated hash:', calculatedHash);
-  console.log('Hashes match?', calculatedHash === storedHash);
+  console.log('Final calculated hash:', finalHash);
+  console.log('Hashes match?', finalHash === storedHash);
 
-  return calculatedHash === storedHash;
+  return finalHash === storedHash;
 }
 
 export function registerRoutes(app: Express): Server {
