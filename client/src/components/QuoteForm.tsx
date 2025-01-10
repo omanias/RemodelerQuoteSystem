@@ -256,15 +256,31 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const addProduct = (product: Product, variationPrice?: string) => {
-    setSelectedProducts(prev => [
-      ...prev,
-      {
-        productId: product.id,
-        quantity: 1,
-        variation: variationPrice ? product.variations?.find(v => v.price === variationPrice)?.name : undefined,
-        unitPrice: variationPrice ? parseFloat(variationPrice) : product.basePrice,
+    if (variationPrice) {
+      // For products with variations, add only the selected variation
+      const variation = product.variations?.find(v => v.price === variationPrice);
+      if (variation) {
+        setSelectedProducts(prev => [
+          ...prev,
+          {
+            productId: product.id,
+            quantity: 1,
+            variation: variation.name,
+            unitPrice: parseFloat(variationPrice),
+          }
+        ]);
       }
-    ]);
+    } else {
+      // For products without variations, add the base product
+      setSelectedProducts(prev => [
+        ...prev,
+        {
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.basePrice,
+        }
+      ]);
+    }
   };
 
   const updateQuantity = (index: number, value: number) => {
