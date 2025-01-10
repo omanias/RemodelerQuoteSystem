@@ -706,7 +706,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                 Base Price: ${product.basePrice}/{product.unit}
                               </p>
                             </div>
-                            {product.variations ? (
+                            {product.variations?.length ? (
                               <Select onValueChange={(value) => addProduct(product, value)}>
                                 <FormControl>
                                   <SelectTrigger className="w-[140px]">
@@ -1008,7 +1008,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
         {status === QuoteStatus.ACCEPTED && !quote?.signature && (
           <SignatureCanvas
-                        isOpen={showSignature}
+            isOpen={showSignature}
             onClose={() => setShowSignature(false)}
             onSave={handleSignatureSave}
             title="Sign Quote"
