@@ -17,7 +17,7 @@ export function registerRoutes(app: Express): Server {
   // Set up authentication routes and middleware
   setupAuth(app);
 
-  // Apply company middleware to all other routes
+  // Apply company middleware to all routes after auth routes
   app.use(companyMiddleware);
 
   // Companies routes
@@ -62,7 +62,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Products
+  // Products routes with proper middleware chain
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyProducts = await db
@@ -77,7 +77,22 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Categories
+  // Users routes with proper middleware chain
+  app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const companyUsers = await db
+        .select()
+        .from(users)
+        .where(eq(users.companyId, req.user!.companyId));
+
+      res.json(companyUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Categories routes with proper middleware chain
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyCategories = await db
@@ -92,7 +107,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Contacts
+  // Contacts routes with proper middleware chain
   app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyContacts = await db
@@ -107,7 +122,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Quotes
+  // Quotes routes with proper middleware chain
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyQuotes = await db
@@ -122,7 +137,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Templates
+  // Templates routes with proper middleware chain
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyTemplates = await db
@@ -137,7 +152,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Notifications
+  // Notifications routes with proper middleware chain
   app.get("/api/notifications", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const userNotifications = await db
