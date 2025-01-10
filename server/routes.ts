@@ -28,19 +28,6 @@ export function registerRoutes(app: Express): Server {
         where: eq(products.companyId, req.user!.companyId),
         with: {
           category: true
-        },
-        columns: {
-          id: true,
-          name: true,
-          basePrice: true,
-          cost: true,
-          unit: true,
-          isActive: true,
-          variations: true,
-          companyId: true,
-          categoryId: true,
-          createdAt: true,
-          updatedAt: true
         }
       });
 
@@ -100,6 +87,44 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // Add POST route for creating products
+  app.post("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { name, categoryId, basePrice, cost, unit, isActive, variations } = req.body;
+
+      // Create new product
+      const [newProduct] = await db
+        .insert(products)
+        .values({
+          name,
+          categoryId,
+          basePrice,
+          cost,
+          unit,
+          isActive,
+          variations,
+          companyId: req.user!.companyId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      // Get the created product with its category
+      const createdProduct = await db.query.products.findFirst({
+        where: eq(products.id, newProduct.id),
+        with: {
+          category: true
+        }
+      });
+
+      res.status(201).json(createdProduct);
+    } catch (error) {
+      console.error('Error creating product:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Companies routes
   app.get("/api/companies/current", requireAuth, async (req, res) => {
     try {
@@ -120,6 +145,24 @@ export function registerRoutes(app: Express): Server {
       res.json(company);
     } catch (error) {
       console.error('Error fetching company:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/companies", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can view all companies
+      if (!["SUPER_ADMIN", "MULTI_ADMIN"].includes(req.user!.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const allCompanies = await db
+        .select()
+        .from(companies);
+
+      res.json(allCompanies);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -168,25 +211,6 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Error generating PDF" });
     }
   });
-
-  app.get("/api/companies", requireAuth, async (req, res) => {
-    try {
-      // Only SUPER_ADMIN and MULTI_ADMIN can view all companies
-      if (!["SUPER_ADMIN", "MULTI_ADMIN"].includes(req.user!.role)) {
-        return res.status(403).json({ message: "Access denied" });
-      }
-
-      const allCompanies = await db
-        .select()
-        .from(companies);
-
-      res.json(allCompanies);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
 
   // Users routes with proper middleware chain
   app.get("/api/users", requireAuth, requireCompanyAccess, async (req, res) => {

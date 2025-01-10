@@ -121,7 +121,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         basePrice: parseFloat(data.basePrice),
         cost: parseFloat(data.cost),
         variations: variations.map(v => ({
-          ...v,
+          name: v.name,
           price: parseFloat(v.price)
         })),
       };
@@ -139,11 +139,15 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(
-          errorData?.message || 
-          `Failed to ${product ? 'update' : 'create'} product. Please try again.`
-        );
+        const errorText = await response.text();
+        let errorMessage;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message;
+        } catch {
+          errorMessage = errorText;
+        }
+        throw new Error(errorMessage || `Failed to ${product ? 'update' : 'create'} product`);
       }
 
       return response.json();
