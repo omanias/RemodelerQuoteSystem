@@ -69,40 +69,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Email, password and company ID are required" });
       }
 
-      const parsedCompanyId = parseInt(companyId.toString());
-      if (isNaN(parsedCompanyId)) {
-        return res.status(400).json({ message: "Invalid company ID format" });
-      }
-
-      console.log('Attempting login for:', { email, companyId: parsedCompanyId });
-
       const [user] = await db
         .select()
         .from(users)
-        .where(and(
-          eq(users.email, email),
-          eq(users.companyId, parsedCompanyId)
-        ))
+        .where(eq(users.email, email))
         .limit(1);
 
-      if (!user) {
-        console.log('User not found:', email);
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-
-      // Handle password verification
-      let isValidPassword = false;
-
-      // For development/testing environment, accept 'magic123'
-      if (password === 'magic123') {
-        isValidPassword = true;
-      } else {
-        // Plain text comparison for now
-        isValidPassword = user.password === password;
-      }
-
-      if (!isValidPassword) {
-        console.log('Invalid password for user:', email);
+      if (!user || user.password !== password || user.companyId !== companyId) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
@@ -110,8 +83,6 @@ export function registerRoutes(app: Express): Server {
       req.session.userId = user.id;
       req.session.userRole = user.role;
       req.session.companyId = user.companyId;
-
-      console.log('Login successful for:', email);
 
       const userData = {
         id: user.id,
