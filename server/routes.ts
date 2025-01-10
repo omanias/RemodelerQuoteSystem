@@ -44,6 +44,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/companies", requireAuth, async (req, res) => {
+    try {
+      // Only SUPER_ADMIN and MULTI_ADMIN can view all companies
+      if (!["SUPER_ADMIN", "MULTI_ADMIN"].includes(req.user!.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const allCompanies = await db
+        .select()
+        .from(companies);
+
+      res.json(allCompanies);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Products
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {

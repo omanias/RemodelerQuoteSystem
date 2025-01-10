@@ -41,7 +41,9 @@ export function setupAuth(app: Express) {
     secret: process.env.REPL_ID || "quote-builder-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: {},
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    },
     store: new MemoryStore({
       checkPeriod: 86400000, // prune expired entries every 24h
     }),
@@ -50,6 +52,7 @@ export function setupAuth(app: Express) {
   if (app.get("env") === "production") {
     app.set("trust proxy", 1);
     sessionSettings.cookie = {
+      ...sessionSettings.cookie,
       secure: true,
     };
   }
@@ -58,13 +61,21 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Authentication middleware
+  const requireAuth = (req: Express.Request, res: Express.Response, next: Express.NextFunction) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
+  };
+
   // Configure passport strategy
   passport.use(
     new LocalStrategy(
       {
         usernameField: 'email',
         passwordField: 'password',
-        passReqToCallback: true, // This allows us to access the request object
+        passReqToCallback: true,
       },
       async (req, email, password, done) => {
         try {
@@ -74,6 +85,7 @@ export function setupAuth(app: Express) {
             return done(null, false, { message: "Invalid company ID" });
           }
 
+          // Find user with matching email and company ID
           const [user] = await db
             .select()
             .from(users)
@@ -107,16 +119,26 @@ export function setupAuth(app: Express) {
   );
 
   passport.serializeUser((user, done) => {
-    done(null, user.id);
+    done(null, { id: user.id, companyId: user.companyId });
   });
 
-  passport.deserializeUser(async (id: number, done) => {
+  passport.deserializeUser(async (data: { id: number; companyId: number }, done) => {
     try {
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.id, id))
+        .where(
+          and(
+            eq(users.id, data.id),
+            eq(users.companyId, data.companyId)
+          )
+        )
         .limit(1);
+
+      if (!user) {
+        return done(null, false);
+      }
+
       done(null, user);
     } catch (err) {
       done(err);
@@ -144,6 +166,9 @@ export function setupAuth(app: Express) {
         if (err) {
           return next(err);
         }
+
+        // Add company information to the session
+        req.session.companyId = user.companyId;
 
         return res.json({
           id: user.id,
@@ -180,4 +205,56 @@ export function setupAuth(app: Express) {
     }
     res.status(401).json({ message: "Not authenticated" });
   });
+
+  // Company switching for multi-company users
+  app.post("/api/auth/switch-company", requireAuth, async (req, res) => {
+    const { companyId } = req.body;
+    const userId = req.user?.id;
+
+    if (!companyId || !userId) {
+      return res.status(400).json({ message: "Company ID is required" });
+    }
+
+    try {
+      // Verify user has access to the target company
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.id, userId),
+            eq(users.companyId, companyId)
+          )
+        )
+        .limit(1);
+
+      if (!user) {
+        return res.status(403).json({ message: "Access denied to this company" });
+      }
+
+      // Update session with new company context
+      req.session.companyId = companyId;
+
+      // Re-login the user with the new company context
+      req.logIn(user, (err) => {
+        if (err) {
+          return res.status(500).json({ message: "Failed to switch company" });
+        }
+
+        return res.json({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          companyId: user.companyId,
+          status: user.status
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to switch company" });
+    }
+  });
+
+  // Make requireAuth middleware available
+  app.set('requireAuth', requireAuth);
 }
