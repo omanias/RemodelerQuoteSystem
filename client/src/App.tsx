@@ -32,9 +32,13 @@ function App() {
     );
   }
 
-  // If no authenticated user, show login
+  // If no authenticated user, show login page
   if (!user) {
-    return <Login />;
+    return (
+      <Switch>
+        <Route path="*" component={Login} />
+      </Switch>
+    );
   }
 
   // For SUPER_ADMIN and MULTI_ADMIN, show super admin dashboard as home
@@ -58,7 +62,6 @@ function App() {
         <Route path="/users" component={Users} />
         <Route path="/permissions" component={AdminPermissions} />
         <Route path="/companies" component={Companies} />
-        {/* Add the workflows route */}
         <Route path="/workflows" component={WorkflowsPage} />
         <Route path="/settings" component={Settings} />
       </Switch>
