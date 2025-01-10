@@ -35,11 +35,24 @@ declare module 'express-session' {
 
 // Password verification that matches the existing hash format
 function verifyPassword(password: string, hashedPassword: string): boolean {
+  console.log('Verifying password with hash:', hashedPassword);
+
+  // Basic validation
+  if (!hashedPassword || !hashedPassword.includes('.')) {
+    console.log('Invalid hash format - no salt separator found');
+    return false;
+  }
+
   const [storedHash, salt] = hashedPassword.split('.');
+  console.log('Split hash components - stored:', storedHash, 'salt:', salt);
+
   // Use SHA-512 to match the existing hash format
   const calculatedHash = createHash('sha512')
     .update(password + salt)
     .digest('hex');
+  console.log('Calculated hash:', calculatedHash);
+  console.log('Hashes match?', calculatedHash === storedHash);
+
   return calculatedHash === storedHash;
 }
 
