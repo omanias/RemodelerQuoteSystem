@@ -115,6 +115,19 @@ export function registerRoutes(app: Express): Server {
         where: eq(products.companyId, req.user!.companyId),
         with: {
           category: true
+        },
+        columns: {
+          id: true,
+          name: true,
+          basePrice: true,
+          cost: true,
+          unit: true,
+          isActive: true,
+          variations: true,
+          companyId: true,
+          categoryId: true,
+          createdAt: true,
+          updatedAt: true
         }
       });
 

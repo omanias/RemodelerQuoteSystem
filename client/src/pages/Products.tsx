@@ -47,6 +47,10 @@ interface Product {
     id: number;
     name: string;
   };
+  variations?: Array<{
+    name: string;
+    price: number;
+  }>;
 }
 
 const formatPrice = (price: number | string): string => {
@@ -126,11 +130,11 @@ export function Products() {
               <DialogHeader>
                 <DialogTitle>Add New Product</DialogTitle>
               </DialogHeader>
-              <ProductForm 
+              <ProductForm
                 onSuccess={() => {
                   setCreateDialogOpen(false);
                   refetch();
-                }} 
+                }}
               />
             </DialogContent>
           </Dialog>
@@ -218,7 +222,8 @@ export function Products() {
                 basePrice: Number(editProduct.basePrice) || 0,
                 unit: editProduct.unit,
                 isActive: editProduct.isActive,
-                cost: 0, // Add default cost as it's required by the form
+                cost: 0, 
+                variations: editProduct.variations || [] 
               }}
               onSuccess={() => {
                 setEditDialogOpen(false);
