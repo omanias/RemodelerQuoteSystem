@@ -154,12 +154,19 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid quote ID" });
       }
 
-      // Get quote with its template and necessary relations
+      // Get quote with its template, company, and products with their categories
       const quote = await db.query.quotes.findFirst({
         where: eq(quotes.id, quoteId),
         with: {
           template: true,
           company: true,
+          content: {
+            products: {
+              with: {
+                category: true
+              }
+            }
+          }
         }
       });
 

@@ -1,12 +1,12 @@
 import PDFDocument from 'pdfkit';
-import { Quote, Company, Template } from '@db/schema';
+import { Quote, Company, Template, Category } from '@db/schema';
 import path from 'path';
 import fs from 'fs';
 
 interface Product {
   name: string;
   description?: string;
-  category?: string;
+  category?: Category;
   variation?: string;
   quantity: number;
   unit?: string;
@@ -171,7 +171,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Parse and group products by category
       const products = quote.content.products || [];
       const productsByCategory = products.reduce<Record<string, Product[]>>((acc, product) => {
-        const categoryName = product.category || 'Uncategorized';
+        const categoryName = product.category?.name || 'Uncategorized';
         if (!acc[categoryName]) {
           acc[categoryName] = [];
         }
@@ -179,8 +179,11 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         return acc;
       }, {});
 
+      // Sort categories alphabetically to ensure consistent order
+      const sortedCategories = Object.entries(productsByCategory).sort(([a], [b]) => a.localeCompare(b));
+
       // Iterate through categories and their products
-      Object.entries(productsByCategory).forEach(([categoryName, categoryProducts], categoryIndex) => {
+      sortedCategories.forEach(([categoryName, categoryProducts], categoryIndex) => {
         // Calculate height needed for category header
         const categoryHeaderHeight = 25;
 
@@ -295,7 +298,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         });
 
         // Add extra space between categories
-        if (categoryIndex < Object.keys(productsByCategory).length - 1) {
+        if (categoryIndex < sortedCategories.length - 1) {
           currentY += 15;
         }
       });
