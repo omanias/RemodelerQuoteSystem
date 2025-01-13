@@ -410,6 +410,32 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add single contact route
+  app.get("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      if (isNaN(contactId)) {
+        return res.status(400).json({ message: "Invalid contact ID" });
+      }
+
+      const contact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      res.json(contact);
+    } catch (error) {
+      console.error('Error fetching contact:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Quotes routes with proper middleware chain
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {

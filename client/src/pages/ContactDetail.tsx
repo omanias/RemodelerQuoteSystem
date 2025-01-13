@@ -25,6 +25,31 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
+// Define the Contact interface to match API response
+interface Contact {
+  id: number;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  secondaryEmail?: string;
+  primaryPhone: string;
+  mobilePhone?: string;
+  leadStatus: LeadStatus;
+  leadSource: LeadSource;
+  propertyType: PropertyType;
+  primaryAddress: string;
+  projectAddress?: string;
+  projectTimeline?: string;
+  budgetRangeMin?: number;
+  budgetRangeMax?: number;
+  productInterests: string;
+  notes?: string;
+  assignedUserId?: number;
+  companyId?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Define types for the note
 interface Note {
   id: number;
@@ -78,7 +103,7 @@ export function ContactDetail() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: contact, isLoading: isLoadingContact } = useQuery({
+  const { data: contact, isLoading: isLoadingContact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${id}`],
     enabled: !!id,
   });
