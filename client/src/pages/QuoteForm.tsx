@@ -51,6 +51,30 @@ const quoteFormSchema = z.object({
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
+interface SelectedProduct {
+  productId: number;
+  quantity: number;
+  variation?: string;
+  unitPrice: number;
+  category?: {
+    id: number;
+    name: string;
+  };
+}
+
+interface QuoteFormProps {
+  quote?: Quote;
+  onSuccess?: () => void;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  defaultContactId?: string | null;
+  contact?: any;
+}
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -63,6 +87,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         quantity: p.quantity || 1,
         variation: p.variation,
         unitPrice: parseFloat(p.price) || 0,
+        category: p.category
       }));
     }
     return [];
@@ -87,13 +112,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const url = quote ? `/api/quotes/${quote.id}` : "/api/quotes";
       const method = quote ? "PUT" : "POST";
 
+      // Include category information in the products
       const requestBody = {
         ...data,
         contactId: data.contactId ? parseInt(data.contactId) : null,
         templateId: data.templateId ? parseInt(data.templateId) : null,
         categoryId: data.categoryId ? parseInt(data.categoryId) : null,
         content: {
-          products: selectedProducts,
+          products: selectedProducts.map(product => ({
+            ...product,
+            price: product.unitPrice, // Ensure price is properly set for PDF generation
+            category: product.category // Include category information
+          }))
         },
       };
 
@@ -525,24 +555,4 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       </form>
     </Form>
   );
-}
-
-interface SelectedProduct {
-  productId: number;
-  quantity: number;
-  variation?: string;
-  unitPrice: number;
-}
-
-interface QuoteFormProps {
-  quote?: Quote;
-  onSuccess?: () => void;
-  user?: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  };
-  defaultContactId?: string | null;
-  contact?: any;
 }
