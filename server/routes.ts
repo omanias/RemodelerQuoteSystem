@@ -7,7 +7,7 @@ import { storage, UPLOADS_PATH } from "./storage";
 import { db } from "@db";
 import { 
   users, quotes, contacts, products, categories, 
-  templates, notifications, companies 
+  templates, notifications, companies, settings 
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
@@ -231,8 +231,23 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Company not found" });
       }
 
-      // Generate PDF
-      const pdfBuffer = await generateQuotePDF({ quote, company });
+      // Get quote settings
+      const quoteSettings = await db.query.settings.findFirst({
+        where: eq(settings.companyId, req.user!.companyId)
+      }) || {
+        showUnitPrice: true, // Default to true for backwards compatibility
+        showTotalPrice: true // Default to true for backwards compatibility
+      };
+
+      // Generate PDF with settings
+      const pdfBuffer = await generateQuotePDF({ 
+        quote, 
+        company,
+        settings: {
+          showUnitPrice: quoteSettings.showUnitPrice,
+          showTotalPrice: quoteSettings.showTotalPrice
+        }
+      });
 
       // Set response headers
       res.setHeader('Content-Type', 'application/pdf');
@@ -341,6 +356,67 @@ export function registerRoutes(app: Express): Server {
       res.json(userNotifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Quote Settings routes
+  app.get("/api/settings/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteSettings = await db.query.settings.findFirst({
+        where: eq(settings.companyId, req.user!.companyId)
+      });
+
+      // Return settings with defaults if not found
+      res.json(quoteSettings || {
+        defaultTaxRate: "0",
+        defaultDiscountType: "percentage",
+        defaultDiscountValue: "0",
+        defaultPaymentMethod: "CASH",
+        defaultDownPaymentType: "percentage",
+        defaultDownPaymentValue: "0",
+        requireClientSignature: false,
+        autoSendEmails: false,
+        showUnitPrice: true,
+        showTotalPrice: true
+      });
+    } catch (error) {
+      console.error('Error fetching quote settings:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/settings/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      // Check if settings exist
+      const existingSettings = await db.query.settings.findFirst({
+        where: eq(settings.companyId, req.user!.companyId)
+      });
+
+      if (existingSettings) {
+        // Update existing settings
+        await db
+          .update(settings)
+          .set({
+            ...req.body,
+            updatedAt: new Date()
+          })
+          .where(eq(settings.companyId, req.user!.companyId));
+      } else {
+        // Create new settings
+        await db
+          .insert(settings)
+          .values({
+            ...req.body,
+            companyId: req.user!.companyId,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+      }
+
+      res.json({ message: "Settings updated successfully" });
+    } catch (error) {
+      console.error('Error updating quote settings:', error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

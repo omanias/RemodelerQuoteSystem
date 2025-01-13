@@ -134,423 +134,429 @@ export const SignatureType = {
 
 
 // Tables
-export const notifications = pgTable("notifications", {
-  id: serial("id").primaryKey(),
-  type: text("type").notNull().$type<keyof typeof NotificationType>(),
-  title: text("title").notNull(),
-  message: text("message").notNull(),
-  read: boolean("read").default(false).notNull(),
-  data: jsonb("data"),
-  deliveryMethod: text("delivery_method").notNull().$type<keyof typeof DeliveryMethod>(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  sentAt: timestamp("sent_at"),
-  error: text("error"),
-});
+export const {
+  users, quotes, contacts, products, categories,
+  templates, notifications, companies, settings,
+  contactNotes, contactTasks, contactDocuments, contactPhotos,
+  contactCustomFields, tablePermissions, companyAccess, notes,
+  workflows, workflowTriggers, workflowActions, workflowExecutions
+} = {
+  users: pgTable("users", {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    name: text("name").notNull(),
+    role: text("role").notNull().$type<keyof typeof UserRole>(),
+    status: text("status").notNull().$type<keyof typeof UserStatus>(),
+    password: text("password").notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'restrict' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  quotes: pgTable("quotes", {
+    id: serial("id").primaryKey(),
+    number: text("number").notNull(),
+    categoryId: integer("category_id")
+      .references(() => categories.id)
+      .notNull(),
+    templateId: integer("template_id")
+      .references(() => templates.id)
+      .notNull(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id),
+    clientName: text("client_name").notNull(),
+    clientEmail: text("client_email"),
+    clientPhone: text("client_phone"),
+    clientAddress: text("client_address"),
+    status: text("status").notNull().$type<keyof typeof QuoteStatus>(),
+    content: jsonb("content").notNull(),
+    subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+    total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+    downPaymentValue: decimal("down_payment_value", { precision: 10, scale: 2 }),
+    downPaymentType: text("down_payment_type"),
+    discountType: text("discount_type"),
+    discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
+    taxRate: decimal("tax_rate", { precision: 10, scale: 2 }),
+    remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
+    paymentMethod: text("payment_method"),
+    notes: text("notes"),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    signature: jsonb("signature").$type<{
+      data: string;
+      timestamp: string;
+      metadata: {
+        browserInfo: string;
+        ipAddress: string;
+        signedAt: string;
+        timezone: string;
+      };
+    }>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  contacts: pgTable("contacts", {
+    id: serial("id").primaryKey(),
+    firstName: text("first_name").notNull(),
+    lastName: text("last_name").notNull(),
+    profileImage: text("profile_image"),
+    leadStatus: text("lead_status").notNull().$type<keyof typeof LeadStatus>(),
+    leadSource: text("lead_source").notNull().$type<keyof typeof LeadSource>(),
+    assignedUserId: integer("assigned_user_id")
+      .references(() => users.id)
+      .notNull(),
+    propertyType: text("property_type").notNull().$type<keyof typeof PropertyType>(),
+    primaryEmail: text("primary_email").notNull(),
+    secondaryEmail: text("secondary_email"),
+    primaryPhone: text("primary_phone").notNull(),
+    mobilePhone: text("mobile_phone"),
+    preferredContact: text("preferred_contact"),
+    bestTimeToContact: text("best_time_to_contact"),
+    communicationPreferences: jsonb("communication_preferences"),
+    primaryAddress: text("primary_address").notNull(),
+    projectAddress: text("project_address"),
+    propertyAge: integer("property_age"),
+    propertyStyle: text("property_style"),
+    squareFootage: integer("square_footage"),
+    numberOfStories: integer("number_of_stories"),
+    previousRenovations: jsonb("previous_renovations"),
+    propertyNotes: text("property_notes"),
+    categoryId: integer("category_id")
+      .references(() => categories.id),
+    projectTimeline: text("project_timeline"),
+    budgetRangeMin: decimal("budget_range_min", { precision: 10, scale: 2 }),
+    budgetRangeMax: decimal("budget_range_max", { precision: 10, scale: 2 }),
+    projectPriority: text("project_priority"),
+    productInterests: text("product_interests").notNull(),
+    financingInterest: boolean("financing_interest").default(false),
+    customFields: jsonb("custom_fields"),
+    tags: text("tags").array().default([]).notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  products: pgTable("products", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    categoryId: integer("category_id")
+      .references(() => categories.id, { onDelete: 'cascade' })
+      .notNull(),
+    basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
+    cost: decimal("cost", { precision: 10, scale: 2 }).notNull(),
+    unit: text("unit").notNull().$type<keyof typeof ProductUnit>(),
+    isActive: boolean("is_active").default(true).notNull(),
+    variations: jsonb("variations"),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  categories: pgTable("categories", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  templates: pgTable("templates", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    categoryId: integer("category_id")
+      .references(() => categories.id, { onDelete: 'cascade' })
+      .notNull(),
+    termsAndConditions: text("terms_and_conditions"),
+    imageUrls: jsonb("image_urls"),
+    isDefault: boolean("is_default").default(false).notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  notifications: pgTable("notifications", {
+    id: serial("id").primaryKey(),
+    type: text("type").notNull().$type<keyof typeof NotificationType>(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    read: boolean("read").default(false).notNull(),
+    data: jsonb("data"),
+    deliveryMethod: text("delivery_method").notNull().$type<keyof typeof DeliveryMethod>(),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    sentAt: timestamp("sent_at"),
+    error: text("error"),
+  }),
+  companies: pgTable("companies", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    subdomain: text("subdomain").notNull().unique(),
+    logo: text("logo"),
 
-export const workflows = pgTable("workflows", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  status: text("status").notNull().$type<keyof typeof WorkflowStatus>(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdBy: integer("created_by")
-    .references(() => users.id)
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    // Business Contact Information
+    phone: text("phone"),
+    tollFree: text("toll_free"),
+    fax: text("fax"),
+    email: text("email"),
+    website: text("website"),
 
-export const workflowTriggers = pgTable("workflow_triggers", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  triggerType: text("trigger_type").notNull().$type<keyof typeof WorkflowTriggerType>(),
-  conditions: jsonb("conditions"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    // Physical Address
+    streetAddress: text("street_address"),
+    suite: text("suite"),
+    city: text("city"),
+    state: text("state"),
+    zipCode: text("zip_code"),
 
-export const workflowActions = pgTable("workflow_actions", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  actionType: text("action_type").notNull().$type<keyof typeof WorkflowActionType>(),
-  config: jsonb("config").notNull(),
-  order: integer("order").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    // Business Details
+    taxId: text("tax_id"),
+    businessHours: jsonb("business_hours").$type<{
+      monday?: { open?: string; close?: string; closed?: boolean };
+      tuesday?: { open?: string; close?: string; closed?: boolean };
+      wednesday?: { open?: string; close?: string; closed?: boolean };
+      thursday?: { open?: string; close?: string; closed?: boolean };
+      friday?: { open?: string; close?: string; closed?: boolean };
+      saturday?: { open?: string; close?: string; closed?: boolean };
+      sunday?: { open?: string; close?: string; closed?: boolean };
+    }>(),
 
-export const workflowExecutions = pgTable("workflow_executions", {
-  id: serial("id").primaryKey(),
-  workflowId: integer("workflow_id")
-    .references(() => workflows.id, { onDelete: 'cascade' })
-    .notNull(),
-  triggerId: integer("trigger_id")
-    .references(() => workflowTriggers.id)
-    .notNull(),
-  status: text("status").notNull(),
-  error: text("error"),
-  metadata: jsonb("metadata"),
-  startedAt: timestamp("started_at").defaultNow().notNull(),
-  completedAt: timestamp("completed_at"),
-});
+    // Social Media
+    socialMedia: jsonb("social_media").$type<{
+      facebook?: string;
+      twitter?: string;
+      linkedin?: string;
+      instagram?: string;
+      youtube?: string;
+    }>(),
 
-export const companies = pgTable("companies", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  subdomain: text("subdomain").notNull().unique(),
-  logo: text("logo"),
-
-  // Business Contact Information
-  phone: text("phone"),
-  tollFree: text("toll_free"),
-  fax: text("fax"),
-  email: text("email"),
-  website: text("website"),
-
-  // Physical Address
-  streetAddress: text("street_address"),
-  suite: text("suite"),
-  city: text("city"),
-  state: text("state"),
-  zipCode: text("zip_code"),
-
-  // Business Details
-  taxId: text("tax_id"),
-  businessHours: jsonb("business_hours").$type<{
-    monday?: { open?: string; close?: string; closed?: boolean };
-    tuesday?: { open?: string; close?: string; closed?: boolean };
-    wednesday?: { open?: string; close?: string; closed?: boolean };
-    thursday?: { open?: string; close?: string; closed?: boolean };
-    friday?: { open?: string; close?: string; closed?: boolean };
-    saturday?: { open?: string; close?: string; closed?: boolean };
-    sunday?: { open?: string; close?: string; closed?: boolean };
-  }>(),
-
-  // Social Media
-  socialMedia: jsonb("social_media").$type<{
-    facebook?: string;
-    twitter?: string;
-    linkedin?: string;
-    instagram?: string;
-    youtube?: string;
-  }>(),
-
-  settings: jsonb("settings").$type<{
-    notifications?: {
-      email?: {
-        templates?: {
-          quoteCreated?: string;
-          quoteSent?: string;
-          quoteAccepted?: string;
-          quoteRejected?: string;
-          quoteRevised?: string;
-          paymentReceived?: string;
+    settings: jsonb("settings").$type<{
+      notifications?: {
+        email?: {
+          templates?: {
+            quoteCreated?: string;
+            quoteSent?: string;
+            quoteAccepted?: string;
+            quoteRejected?: string;
+            quoteRevised?: string;
+            paymentReceived?: string;
+          };
+          enabled?: boolean;
         };
-        enabled?: boolean;
-      };
-      sms?: {
-        templates?: {
-          quoteCreated?: string;
-          quoteSent?: string;
-          quoteAccepted?: string;
-          quoteRejected?: string;
-          quoteRevised?: string;
-          paymentReceived?: string;
+        sms?: {
+          templates?: {
+            quoteCreated?: string;
+            quoteSent?: string;
+            quoteAccepted?: string;
+            quoteRejected?: string;
+            quoteRevised?: string;
+            paymentReceived?: string;
+          };
+          enabled?: boolean;
+          apiKey?: string;
+          fromNumber?: string;
         };
-        enabled?: boolean;
-        apiKey?: string;
-        fromNumber?: string;
+        inApp?: {
+          enabled?: boolean;
+        };
       };
-      inApp?: {
-        enabled?: boolean;
-      };
-    };
-  }>(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// Update User schema with proper companyId constraints
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  name: text("name").notNull(),
-  role: text("role").notNull().$type<keyof typeof UserRole>(),
-  status: text("status").notNull().$type<keyof typeof UserStatus>(),
-  password: text("password").notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'restrict' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const categories = pgTable("categories", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description"),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  categoryId: integer("category_id")
-    .references(() => categories.id, { onDelete: 'cascade' })
-    .notNull(),
-  basePrice: decimal("base_price", { precision: 10, scale: 2 }).notNull(),
-  cost: decimal("cost", { precision: 10, scale: 2 }).notNull(),
-  unit: text("unit").notNull().$type<keyof typeof ProductUnit>(),
-  isActive: boolean("is_active").default(true).notNull(),
-  variations: jsonb("variations"),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const templates = pgTable("templates", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  categoryId: integer("category_id")
-    .references(() => categories.id, { onDelete: 'cascade' })
-    .notNull(),
-  termsAndConditions: text("terms_and_conditions"),
-  imageUrls: jsonb("image_urls"),
-  isDefault: boolean("is_default").default(false).notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const contacts = pgTable("contacts", {
-  id: serial("id").primaryKey(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-  profileImage: text("profile_image"),
-  leadStatus: text("lead_status").notNull().$type<keyof typeof LeadStatus>(),
-  leadSource: text("lead_source").notNull().$type<keyof typeof LeadSource>(),
-  assignedUserId: integer("assigned_user_id")
-    .references(() => users.id)
-    .notNull(),
-  propertyType: text("property_type").notNull().$type<keyof typeof PropertyType>(),
-  primaryEmail: text("primary_email").notNull(),
-  secondaryEmail: text("secondary_email"),
-  primaryPhone: text("primary_phone").notNull(),
-  mobilePhone: text("mobile_phone"),
-  preferredContact: text("preferred_contact"),
-  bestTimeToContact: text("best_time_to_contact"),
-  communicationPreferences: jsonb("communication_preferences"),
-  primaryAddress: text("primary_address").notNull(),
-  projectAddress: text("project_address"),
-  propertyAge: integer("property_age"),
-  propertyStyle: text("property_style"),
-  squareFootage: integer("square_footage"),
-  numberOfStories: integer("number_of_stories"),
-  previousRenovations: jsonb("previous_renovations"),
-  propertyNotes: text("property_notes"),
-  categoryId: integer("category_id")
-    .references(() => categories.id),
-  projectTimeline: text("project_timeline"),
-  budgetRangeMin: decimal("budget_range_min", { precision: 10, scale: 2 }),
-  budgetRangeMax: decimal("budget_range_max", { precision: 10, scale: 2 }),
-  projectPriority: text("project_priority"),
-  productInterests: text("product_interests").notNull(),
-  financingInterest: boolean("financing_interest").default(false),
-  customFields: jsonb("custom_fields"),
-  tags: text("tags").array().default([]).notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const quotes = pgTable("quotes", {
-  id: serial("id").primaryKey(),
-  number: text("number").notNull(),
-  categoryId: integer("category_id")
-    .references(() => categories.id)
-    .notNull(),
-  templateId: integer("template_id")
-    .references(() => templates.id)
-    .notNull(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id),
-  clientName: text("client_name").notNull(),
-  clientEmail: text("client_email"),
-  clientPhone: text("client_phone"),
-  clientAddress: text("client_address"),
-  status: text("status").notNull().$type<keyof typeof QuoteStatus>(),
-  content: jsonb("content").notNull(),
-  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
-  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-  downPaymentValue: decimal("down_payment_value", { precision: 10, scale: 2 }),
-  downPaymentType: text("down_payment_type"),
-  discountType: text("discount_type"),
-  discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
-  taxRate: decimal("tax_rate", { precision: 10, scale: 2 }),
-  remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
-  paymentMethod: text("payment_method"),
-  notes: text("notes"),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  signature: jsonb("signature").$type<{
-    data: string;
-    timestamp: string;
-    metadata: {
-      browserInfo: string;
-      ipAddress: string;
-      signedAt: string;
-      timezone: string;
-    };
-  }>(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const tablePermissions = pgTable("table_permissions", {
-  id: serial("id").primaryKey(),
-  tableName: text("table_name").notNull(),
-  roleId: text("role").notNull().$type<keyof typeof UserRole>(),
-  permissionType: text("permission_type").notNull().$type<keyof typeof PermissionType>(),
-  isAllowed: boolean("is_allowed").default(false).notNull(),
-  createdBy: integer("created_by").references(() => users.id),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const contactCustomFields = pgTable("contact_custom_fields", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  type: text("type").notNull().$type<keyof typeof ContactFieldType>(),
-  required: boolean("required").default(false),
-  options: text("options").array(),
-  defaultValue: text("default_value"),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const contactNotes = pgTable("contact_notes", {
-  id: serial("id").primaryKey(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: 'cascade' })
-    .notNull(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  content: text("content").notNull(),
-  type: text("type").notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const contactTasks = pgTable("contact_tasks", {
-  id: serial("id").primaryKey(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: 'cascade' })
-    .notNull(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  title: text("title").notNull(),
-  description: text("description"),
-  dueDate: timestamp("due_date"),
-  completed: boolean("completed").default(false),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const contactDocuments = pgTable("contact_documents", {
-  id: serial("id").primaryKey(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: 'cascade' })
-    .notNull(),
-  name: text("name").notNull(),
-  type: text("type").notNull(),
-  url: text("url").notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const contactPhotos = pgTable("contact_photos", {
-  id: serial("id").primaryKey(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: 'cascade' })
-    .notNull(),
-  type: text("type").notNull(),
-  url: text("url").notNull(),
-  description: text("description"),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const notes = pgTable("notes", {
-  id: serial("id").primaryKey(),
-  content: text("content").notNull(),
-  contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: 'cascade' })
-    .notNull(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  type: text("type").notNull(),
-  quoteId: integer("quote_id")
-    .references(() => quotes.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-export const companyAccess = pgTable("company_access", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .references(() => users.id)
-    .notNull(),
-  companyId: integer("company_id")
-    .references(() => companies.id, { onDelete: 'cascade' })
-    .notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+    }>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  settings: pgTable("settings", {
+    id: serial("id").primaryKey(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    defaultTaxRate: text("default_tax_rate").default("0").notNull(),
+    defaultDiscountType: text("default_discount_type").default("percentage").notNull(),
+    defaultDiscountValue: text("default_discount_value").default("0").notNull(),
+    defaultPaymentMethod: text("default_payment_method").default("CASH").notNull(),
+    defaultDownPaymentType: text("default_down_payment_type").default("percentage").notNull(),
+    defaultDownPaymentValue: text("default_down_payment_value").default("0").notNull(),
+    requireClientSignature: boolean("require_client_signature").default(false).notNull(),
+    autoSendEmails: boolean("auto_send_emails").default(false).notNull(),
+    showUnitPrice: boolean("show_unit_price").default(true).notNull(),
+    showTotalPrice: boolean("show_total_price").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  contactNotes: pgTable("contact_notes", {
+    id: serial("id").primaryKey(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    content: text("content").notNull(),
+    type: text("type").notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  contactTasks: pgTable("contact_tasks", {
+    id: serial("id").primaryKey(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    dueDate: timestamp("due_date"),
+    completed: boolean("completed").default(false),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  contactDocuments: pgTable("contact_documents", {
+    id: serial("id").primaryKey(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    url: text("url").notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }),
+  contactPhotos: pgTable("contact_photos", {
+    id: serial("id").primaryKey(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id, { onDelete: 'cascade' })
+      .notNull(),
+    type: text("type").notNull(),
+    url: text("url").notNull(),
+    description: text("description"),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }),
+  contactCustomFields: pgTable("contact_custom_fields", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    type: text("type").notNull().$type<keyof typeof ContactFieldType>(),
+    required: boolean("required").default(false),
+    options: text("options").array(),
+    defaultValue: text("default_value"),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  tablePermissions: pgTable("table_permissions", {
+    id: serial("id").primaryKey(),
+    tableName: text("table_name").notNull(),
+    roleId: text("role").notNull().$type<keyof typeof UserRole>(),
+    permissionType: text("permission_type").notNull().$type<keyof typeof PermissionType>(),
+    isAllowed: boolean("is_allowed").default(false).notNull(),
+    createdBy: integer("created_by").references(() => users.id),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  companyAccess: pgTable("company_access", {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  notes: pgTable("notes", {
+    id: serial("id").primaryKey(),
+    content: text("content").notNull(),
+    contactId: integer("contact_id")
+      .references(() => contacts.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+    type: text("type").notNull(),
+    quoteId: integer("quote_id")
+      .references(() => quotes.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  workflows: pgTable("workflows", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    status: text("status").notNull().$type<keyof typeof WorkflowStatus>(),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdBy: integer("created_by")
+      .references(() => users.id)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  workflowTriggers: pgTable("workflow_triggers", {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .references(() => workflows.id, { onDelete: 'cascade' })
+      .notNull(),
+    triggerType: text("trigger_type").notNull().$type<keyof typeof WorkflowTriggerType>(),
+    conditions: jsonb("conditions"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  workflowActions: pgTable("workflow_actions", {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .references(() => workflows.id, { onDelete: 'cascade' })
+      .notNull(),
+    actionType: text("action_type").notNull().$type<keyof typeof WorkflowActionType>(),
+    config: jsonb("config").notNull(),
+    order: integer("order").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  workflowExecutions: pgTable("workflow_executions", {
+    id: serial("id").primaryKey(),
+    workflowId: integer("workflow_id")
+      .references(() => workflows.id, { onDelete: 'cascade' })
+      .notNull(),
+    triggerId: integer("trigger_id")
+      .references(() => workflowTriggers.id)
+      .notNull(),
+    status: text("status").notNull(),
+    error: text("error"),
+    metadata: jsonb("metadata"),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  }),
+};
 
 // Relations
 export const companiesRelations = relations(companies, ({ many }) => ({
@@ -561,7 +567,8 @@ export const companiesRelations = relations(companies, ({ many }) => ({
   contacts: many(contacts),
   quotes: many(quotes),
   notifications: many(notifications),
-  companyAccess: many(companyAccess)
+  companyAccess: many(companyAccess),
+  settings: many(settings)
 }));
 
 // Update relations to better handle user-company relationships
@@ -786,6 +793,14 @@ export const companyAccessRelations = relations(companyAccess, ({ one }) => ({
   }),
 }));
 
+// Add settings relations
+export const settingsRelations = relations(settings, ({ one }) => ({
+  company: one(companies, {
+    fields: [settings.companyId],
+    references: [companies.id],
+  }),
+}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -834,12 +849,15 @@ export type NewWorkflowExecution = typeof workflowExecutions.$inferInsert;
 // Add type definitions for signatures
 export type Signature = typeof quotes.$inferSelect['signature'];
 
+// Add settings types
+export type Settings = typeof settings.$inferSelect;
+export type NewSettings = typeof settings.$inferInsert;
+
 // Zod schemas
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
 export const insertProductSchema = createInsertSchema(products);
-export const selectProductSchema = createSelectSchema(products);
-export const insertTemplateSchema = createInsertSchema(templates);
+export const selectProductSchema = createSelectSchema(products);export const insertTemplateSchema = createInsertSchema(templates);
 export const selectTemplateSchema = createSelectSchema(templates);
 export const insertCategorySchema = createInsertSchema(categories);
 export const selectCategorySchema = createSelectSchema(categories);
@@ -847,7 +865,7 @@ export const insertContactSchema = createInsertSchema(contacts);
 export const selectContactSchema = createSelectSchema(contacts);
 export const insertQuoteSchema = createInsertSchema(quotes);
 export const selectQuoteSchema = createSelectSchema(quotes);
-export const insertCompanySchema = createInsertSchema(companies);
+export const insertCompanySchema =createInsertSchema(companies);
 export const selectCompanySchema = createSelectSchema(companies);
 export const insertTablePermissionSchema = createInsertSchema(tablePermissions);
 export const selectTablePermissionSchema = createSelectSchema(tablePermissions);
@@ -884,3 +902,16 @@ export const selectQuoteSchemaWithSignature = createSelectSchema(quotes);
 // Add new Zod schema for user with company validation
 export const insertUserWithCompanySchema = createInsertSchema(users);
 export const selectUserWithCompanySchema = createSelectSchema(users);
+// Add settings schemas
+export const insertSettingsSchema = createInsertSchema(settings);
+export const selectSettingsSchema = createSelectSchema(settings);
+
+// Export all table definitions at the top of the file
+//This line is removed as per the edited code
+//export { 
+//  users, quotes, contacts, products, categories, 
+//  templates, notifications, companies, settings,
+//  contactNotes, contactTasks, contactDocuments, contactPhotos,
+//  contactCustomFields, tablePermissions, companyAccess, notes,
+//  workflows, workflowTriggers, workflowActions, workflowExecutions
+//};
