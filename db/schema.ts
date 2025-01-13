@@ -1,7 +1,6 @@
 import { pgTable, text, serial, timestamp, integer, boolean, jsonb, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations, type SQL, eq, and } from "drizzle-orm";
-import { z } from "zod";
 
 // Add NotificationType enum
 export const NotificationType = {
@@ -134,19 +133,8 @@ export const SignatureType = {
 } as const;
 
 
-// Define the tables with proper type annotations
-const tablesDefinition = {
-  categories: pgTable("categories", {
-    id: serial("id").primaryKey(),
-    name: text("name").notNull(),
-    description: text("description"),
-    subcategories: text("subcategories").array().default([]).notNull(),
-    companyId: integer("company_id")
-      .references(() => companies.id, { onDelete: 'cascade' })
-      .notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  }),
+// Tables
+const tables = {
   users: pgTable("users", {
     id: serial("id").primaryKey(),
     email: text("email").notNull().unique(),
@@ -259,6 +247,18 @@ const tablesDefinition = {
     unit: text("unit").notNull().$type<keyof typeof ProductUnit>(),
     isActive: boolean("is_active").default(true).notNull(),
     variations: jsonb("variations"),
+    companyId: integer("company_id")
+      .references(() => companies.id, { onDelete: 'cascade' })
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }),
+  // Categories table definition update
+  categories: pgTable("categories", {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description"),
+    subcategories: text("subcategories").array().default([]),
     companyId: integer("company_id")
       .references(() => companies.id, { onDelete: 'cascade' })
       .notNull(),
@@ -561,26 +561,7 @@ export const {
   contactNotes, contactTasks, contactDocuments, contactPhotos,
   contactCustomFields, tablePermissions, companyAccess, notes,
   workflows, workflowTriggers, workflowActions, workflowExecutions
-} = tablesDefinition;
-
-// Define the category schema with proper validation
-const categorySchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().nullable(),
-  subcategories: z.array(z.string()).default([]),
-  companyId: z.number(),
-  createdAt: z.date(),
-  updatedAt: z.date()
-});
-
-// Create insert and select schemas for categories
-export const insertCategorySchema = createInsertSchema(categories, {
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().nullable(),
-  subcategories: z.array(z.string()).default([])
-});
-
-export const selectCategorySchema = createSelectSchema(categories);
+} = tables;
 
 // Relations
 export const companiesRelations = relations(companies, ({ many }) => ({
@@ -884,11 +865,7 @@ export const insertProductSchema = createInsertSchema(products);
 export const selectProductSchema = createSelectSchema(products);
 export const insertTemplateSchema = createInsertSchema(templates);
 export const selectTemplateSchema = createSelectSchema(templates);
-export const insertCategorySchema = createInsertSchema(categories, {
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().nullable(),
-  subcategories: z.array(z.string()).default([])
-});
+export const insertCategorySchema = createInsertSchema(categories);
 export const selectCategorySchema = createSelectSchema(categories);
 export const insertContactSchema = createInsertSchema(contacts);
 export const selectContactSchema = createSelectSchema(contacts);

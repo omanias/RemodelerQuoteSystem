@@ -29,14 +29,17 @@ interface CategoryFormProps {
   category?: {
     id: number;
     name: string;
-    description?: string | null;
-    subcategories?: string[] | null;
+    description?: string;
+    subcategories?: string[];
   };
   onSuccess?: () => void;
 }
 
 export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [subcategories, setSubcategories] = useState<string[]>(
+    category?.subcategories || []
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -49,9 +52,6 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     },
   });
 
-  const { setValue, watch } = form;
-  const subcategories = watch("subcategories");
-
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
       const response = await fetch(
@@ -59,14 +59,16 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         {
           method: category ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            ...data,
+            subcategories,
+          }),
           credentials: "include",
         }
       );
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to save category");
+        throw new Error(await response.text());
       }
 
       return response.json();
@@ -98,20 +100,17 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   };
 
   const addSubcategory = () => {
-    setValue("subcategories", [...subcategories, ""]);
+    setSubcategories([...subcategories, ""]);
   };
 
   const removeSubcategory = (index: number) => {
-    setValue(
-      "subcategories",
-      subcategories.filter((_, i) => i !== index)
-    );
+    setSubcategories(subcategories.filter((_, i) => i !== index));
   };
 
   const updateSubcategory = (index: number, value: string) => {
     const newSubcategories = [...subcategories];
     newSubcategories[index] = value;
-    setValue("subcategories", newSubcategories);
+    setSubcategories(newSubcategories);
   };
 
   return (
@@ -166,7 +165,6 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
               </div>
             ))}
           </div>
-          <FormMessage>{form.formState.errors.subcategories?.message}</FormMessage>
         </div>
 
         <FormField
