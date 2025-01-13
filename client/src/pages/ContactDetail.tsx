@@ -121,6 +121,7 @@ export function ContactDetail() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           ...data,
           assignedUserId: 1,

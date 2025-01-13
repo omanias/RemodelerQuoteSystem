@@ -492,6 +492,67 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add contact creation route
+  app.post("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        firstName,
+        lastName,
+        primaryEmail,
+        secondaryEmail,
+        primaryPhone,
+        mobilePhone,
+        leadStatus,
+        leadSource,
+        propertyType,
+        primaryAddress,
+        projectAddress,
+        projectTimeline,
+        budgetRangeMin,
+        budgetRangeMax,
+        productInterests,
+        notes,
+      } = req.body;
+
+      // Create new contact
+      const [newContact] = await db
+        .insert(contacts)
+        .values({
+          firstName,
+          lastName,
+          primaryEmail,
+          secondaryEmail,
+          primaryPhone,
+          mobilePhone,
+          leadStatus,
+          leadSource,
+          propertyType,
+          primaryAddress,
+          projectAddress,
+          projectTimeline,
+          budgetRangeMin,
+          budgetRangeMax,
+          productInterests,
+          notes,
+          assignedUserId: req.body.assignedUserId || req.user!.id,
+          companyId: req.user!.companyId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      // Get the created contact
+      const createdContact = await db.query.contacts.findFirst({
+        where: eq(contacts.id, newContact.id)
+      });
+
+      res.status(201).json(createdContact);
+    } catch (error) {
+      console.error('Error creating contact:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Quotes routes with proper middleware chain
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
