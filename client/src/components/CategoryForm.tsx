@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 const categoryFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   description: z.string().optional(),
+  subcategory: z.string().optional(),
 });
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
@@ -28,6 +29,7 @@ interface CategoryFormProps {
     id: number;
     name: string;
     description?: string;
+    subcategory?: string;
   };
   onSuccess?: () => void;
 }
@@ -42,6 +44,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     defaultValues: {
       name: category?.name || "",
       description: category?.description || "",
+      subcategory: category?.subcategory || "",
     },
   });
 
@@ -100,6 +103,23 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input placeholder="Enter category name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="subcategory"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Subcategory</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Enter subcategory (optional)" 
+                  {...field} 
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

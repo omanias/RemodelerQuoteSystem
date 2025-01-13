@@ -134,13 +134,7 @@ export const SignatureType = {
 
 
 // Tables
-export const {
-  users, quotes, contacts, products, categories,
-  templates, notifications, companies, settings,
-  contactNotes, contactTasks, contactDocuments, contactPhotos,
-  contactCustomFields, tablePermissions, companyAccess, notes,
-  workflows, workflowTriggers, workflowActions, workflowExecutions
-} = {
+const tables = {
   users: pgTable("users", {
     id: serial("id").primaryKey(),
     email: text("email").notNull().unique(),
@@ -263,6 +257,7 @@ export const {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     description: text("description"),
+    subcategory: text("subcategory"),
     companyId: integer("company_id")
       .references(() => companies.id, { onDelete: 'cascade' })
       .notNull(),
@@ -557,6 +552,15 @@ export const {
     completedAt: timestamp("completed_at"),
   }),
 };
+
+// Export all table definitions
+export const {
+  users, quotes, contacts, products, categories,
+  templates, notifications, companies, settings,
+  contactNotes, contactTasks, contactDocuments, contactPhotos,
+  contactCustomFields, tablePermissions, companyAccess, notes,
+  workflows, workflowTriggers, workflowActions, workflowExecutions
+} = tables;
 
 // Relations
 export const companiesRelations = relations(companies, ({ many }) => ({
@@ -857,7 +861,8 @@ export type NewSettings = typeof settings.$inferInsert;
 export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
 export const insertProductSchema = createInsertSchema(products);
-export const selectProductSchema = createSelectSchema(products);export const insertTemplateSchema = createInsertSchema(templates);
+export const selectProductSchema = createSelectSchema(products);
+export const insertTemplateSchema = createInsertSchema(templates);
 export const selectTemplateSchema = createSelectSchema(templates);
 export const insertCategorySchema = createInsertSchema(categories);
 export const selectCategorySchema = createSelectSchema(categories);
@@ -905,13 +910,3 @@ export const selectUserWithCompanySchema = createSelectSchema(users);
 // Add settings schemas
 export const insertSettingsSchema = createInsertSchema(settings);
 export const selectSettingsSchema = createSelectSchema(settings);
-
-// Export all table definitions at the top of the file
-//This line is removed as per the edited code
-//export { 
-//  users, quotes, contacts, products, categories, 
-//  templates, notifications, companies, settings,
-//  contactNotes, contactTasks, contactDocuments, contactPhotos,
-//  contactCustomFields, tablePermissions, companyAccess, notes,
-//  workflows, workflowTriggers, workflowActions, workflowExecutions
-//};

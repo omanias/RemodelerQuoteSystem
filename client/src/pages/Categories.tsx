@@ -42,6 +42,7 @@ interface Category {
   id: number;
   name: string;
   description: string | null;
+  subcategory: string | null;
   products: Array<{
     id: number;
     name: string;
@@ -62,7 +63,8 @@ export function Categories() {
 
   const filteredCategories = categories.filter((category) =>
     category.name.toLowerCase().includes(search.toLowerCase()) ||
-    (category.description || "").toLowerCase().includes(search.toLowerCase())
+    (category.description || "").toLowerCase().includes(search.toLowerCase()) ||
+    (category.subcategory || "").toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDelete = async () => {
@@ -143,6 +145,7 @@ export function Categories() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
+              <TableHead>Subcategory</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Products</TableHead>
               <TableHead className="w-[50px]"></TableHead>
@@ -151,7 +154,7 @@ export function Categories() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center py-8">
                   <div className="flex justify-center items-center">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -159,7 +162,7 @@ export function Categories() {
               </TableRow>
             ) : filteredCategories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8">
+                <TableCell colSpan={5} className="text-center py-8">
                   {search ? "No categories found matching your search" : "No categories found"}
                 </TableCell>
               </TableRow>
@@ -167,6 +170,7 @@ export function Categories() {
               filteredCategories.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
+                  <TableCell>{category.subcategory || "-"}</TableCell>
                   <TableCell>{category.description || "-"}</TableCell>
                   <TableCell>{category.products?.length || 0}</TableCell>
                   <TableCell>
@@ -202,7 +206,8 @@ export function Categories() {
                               category={{
                                 id: category.id,
                                 name: category.name,
-                                description: category.description || undefined
+                                description: category.description || undefined,
+                                subcategory: category.subcategory || undefined
                               }}
                               onSuccess={() => {
                                 setEditDialogOpen(false);
