@@ -97,6 +97,25 @@ export function Categories() {
     }
   };
 
+  const handleEditSuccess = async () => {
+    setEditDialogOpen(false);
+    setEditCategory(null);
+    await refetch();
+    toast({
+      title: "Success",
+      description: "Category updated successfully",
+    });
+  };
+
+  const handleCreateSuccess = async () => {
+    setCreateDialogOpen(false);
+    await refetch();
+    toast({
+      title: "Success",
+      description: "Category created successfully",
+    });
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -120,10 +139,7 @@ export function Categories() {
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
             </DialogHeader>
-            <CategoryForm onSuccess={() => {
-              setCreateDialogOpen(false);
-              refetch();
-            }} />
+            <CategoryForm onSuccess={handleCreateSuccess} />
           </DialogContent>
         </Dialog>
       </div>
@@ -171,7 +187,7 @@ export function Categories() {
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>
-                    {category.subcategories?.length 
+                    {category.subcategories?.length
                       ? category.subcategories.join(", ")
                       : "-"}
                   </TableCell>
@@ -188,40 +204,16 @@ export function Categories() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog open={editDialogOpen && editCategory?.id === category.id} 
-                               onOpenChange={(open) => {
-                                 setEditDialogOpen(open);
-                                 if (!open) setEditCategory(null);
-                               }}>
-                          <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditCategory(category);
-                              setEditDialogOpen(true);
-                            }}>
-                              Edit
-                            </DropdownMenuItem>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Category</DialogTitle>
-                            </DialogHeader>
-                            <CategoryForm 
-                              category={{
-                                id: category.id,
-                                name: category.name,
-                                description: category.description || undefined,
-                                subcategories: category.subcategories || undefined
-                              }}
-                              onSuccess={() => {
-                                setEditDialogOpen(false);
-                                setEditCategory(null);
-                                refetch();
-                              }}
-                            />
-                          </DialogContent>
-                        </Dialog>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
+                          onSelect={(e) => {
+                            e.preventDefault();
+                            setEditCategory(category);
+                            setEditDialogOpen(true);
+                          }}
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           className="text-destructive"
                           onSelect={() => setDeleteCategory(category)}
                         >
@@ -229,6 +221,32 @@ export function Categories() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Edit Dialog */}
+                    <Dialog open={editDialogOpen && editCategory?.id === category.id}
+                           onOpenChange={(open) => {
+                             if (!open) {
+                               setEditDialogOpen(false);
+                               setEditCategory(null);
+                             }
+                           }}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Edit Category</DialogTitle>
+                        </DialogHeader>
+                        {editCategory && (
+                          <CategoryForm
+                            category={{
+                              id: editCategory.id,
+                              name: editCategory.name,
+                              description: editCategory.description || undefined,
+                              subcategories: editCategory.subcategories || undefined
+                            }}
+                            onSuccess={handleEditSuccess}
+                          />
+                        )}
+                      </DialogContent>
+                    </Dialog>
                   </TableCell>
                 </TableRow>
               ))
