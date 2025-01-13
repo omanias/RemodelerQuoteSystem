@@ -116,10 +116,13 @@ export function Categories() {
               Add Category
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent aria-describedby="dialog-description">
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
             </DialogHeader>
+            <div id="dialog-description" className="sr-only">
+              Form to create a new category with name, description, and subcategories
+            </div>
             <CategoryForm onSuccess={() => {
               setCreateDialogOpen(false);
               refetch();
@@ -171,7 +174,7 @@ export function Categories() {
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>
-                    {category.subcategories?.length 
+                    {category.subcategories?.length
                       ? category.subcategories.join(", ")
                       : "-"}
                   </TableCell>
@@ -188,40 +191,14 @@ export function Categories() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog open={editDialogOpen && editCategory?.id === category.id} 
-                               onOpenChange={(open) => {
-                                 setEditDialogOpen(open);
-                                 if (!open) setEditCategory(null);
-                               }}>
-                          <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditCategory(category);
-                              setEditDialogOpen(true);
-                            }}>
-                              Edit
-                            </DropdownMenuItem>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Category</DialogTitle>
-                            </DialogHeader>
-                            <CategoryForm 
-                              category={{
-                                id: category.id,
-                                name: category.name,
-                                description: category.description || undefined,
-                                subcategories: category.subcategories || undefined
-                              }}
-                              onSuccess={() => {
-                                setEditDialogOpen(false);
-                                setEditCategory(null);
-                                refetch();
-                              }}
-                            />
-                          </DialogContent>
-                        </Dialog>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem onSelect={(e) => {
+                          e.preventDefault();
+                          setEditCategory(category);
+                          setEditDialogOpen(true);
+                        }}>
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           className="text-destructive"
                           onSelect={() => setDeleteCategory(category)}
                         >
@@ -236,6 +213,38 @@ export function Categories() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog 
+        open={editDialogOpen} 
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) setEditCategory(null);
+        }}
+      >
+        <DialogContent aria-describedby="edit-dialog-description">
+          <DialogHeader>
+            <DialogTitle>Edit Category</DialogTitle>
+          </DialogHeader>
+          <div id="edit-dialog-description" className="sr-only">
+            Form to edit category details including name, description, and subcategories
+          </div>
+          {editCategory && (
+            <CategoryForm 
+              category={{
+                id: editCategory.id,
+                name: editCategory.name,
+                description: editCategory.description || undefined,
+                subcategories: editCategory.subcategories || []
+              }}
+              onSuccess={() => {
+                setEditDialogOpen(false);
+                setEditCategory(null);
+                refetch();
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteCategory} onOpenChange={(open) => !open && setDeleteCategory(null)}>
         <AlertDialogContent>

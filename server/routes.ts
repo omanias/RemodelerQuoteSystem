@@ -448,6 +448,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid category ID" });
       }
 
+      const { name, description, subcategories } = req.body;
+
+      // Validate required fields
+      if (!name || name.trim().length < 2) {
+        return res.status(400).json({ message: "Name must be at least 2 characters" });
+      }
+
+      // Validate subcategories array
+      if (!Array.isArray(subcategories)) {
+        return res.status(400).json({ message: "Subcategories must be an array" });
+      }
+
       // Verify category exists and belongs to company
       const existingCategory = await db.query.categories.findFirst({
         where: and(
@@ -461,28 +473,30 @@ export function registerRoutes(app: Express): Server {
       }
 
       // Update category with subcategories array
-      await db
+      const [updatedCategory] = await db
         .update(categories)
         .set({
-          name: req.body.name,
-          description: req.body.description,
-          subcategories: req.body.subcategories || [], // Ensure subcategories is always an array
+          name: name.trim(),
+          description: description?.trim() || null,
+          subcategories: subcategories.map(s => s.trim()).filter(s => s.length > 0),
           updatedAt: new Date()
         })
-        .where(eq(categories.id, categoryId));
+        .where(eq(categories.id, categoryId))
+        .returning();
 
-      // Get updated category
-      const updatedCategory = await db.query.categories.findFirst({
+      // Get updated category with all relations
+      const categoryWithRelations = await db.query.categories.findFirst({
         where: eq(categories.id, categoryId),
         with: {
-          products: true
+          products: true,
+          templates: true
         }
       });
 
-      res.json(updatedCategory);
+      res.json(categoryWithRelations);
     } catch (error) {
       console.error('Error updating category:', error);
-      res.status(500).json({ message: "Internal server error" });
+      res.status(500).json({ message: "Failed to update category. Please try again." });
     }
   });
 
