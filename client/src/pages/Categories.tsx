@@ -39,6 +39,7 @@ interface Category {
 
 export function Categories() {
   const [search, setSearch] = useState("");
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: categories = [], isLoading, refetch } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -61,7 +62,7 @@ export function Categories() {
           </Link>
           <h1 className="text-2xl font-bold">Categories</h1>
         </div>
-        <Dialog>
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" />
@@ -73,6 +74,7 @@ export function Categories() {
               <DialogTitle>Add New Category</DialogTitle>
             </DialogHeader>
             <CategoryForm onSuccess={() => {
+              setCreateDialogOpen(false);
               refetch();
             }} />
           </DialogContent>
