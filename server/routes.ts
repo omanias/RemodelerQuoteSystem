@@ -10,58 +10,26 @@ import {
   templates, notifications, companies, settings,
   type Quote, type Settings, type Contact
 } from "@db/schema";
-import { eq, and, type InferSelectModel } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
-import { APIError } from "./index";
-import { z } from "zod";
 
-// Type-safe quote content schema
-const QuoteContentSchema = z.object({
-  products: z.array(z.object({
-    name: z.string(),
-    description: z.string().optional(),
-    quantity: z.number(),
-    unit: z.string().optional(),
-    price: z.number(),
-    category: z.string().optional(),
-  }))
-});
-
-type QuoteContent = z.infer<typeof QuoteContentSchema>;
-
-// Helper function to generate quote number with proper error handling
+// Helper function to generate quote number
 async function generateQuoteNumber(companyId: number): Promise<string> {
-  try {
-    const date = new Date();
-    const year = date.getFullYear().toString().slice(-2);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
 
-    const existingQuotes = await db.query.quotes.findMany({
-      where: and(
-        eq(quotes.companyId, companyId)
-      )
-    });
+  // Get the count of quotes for this company this month
+  const existingQuotes = await db.query.quotes.findMany({
+    where: and(
+      eq(quotes.companyId, companyId)
+    )
+  });
 
-    // Type check the query result
-    if (!Array.isArray(existingQuotes)) {
-      throw new Error('Invalid query result');
-    }
+  const quoteCount = existingQuotes.length + 1;
+  const sequenceNumber = quoteCount.toString().padStart(4, '0');
 
-    const quoteCount = existingQuotes.length + 1;
-    const sequenceNumber = quoteCount.toString().padStart(4, '0');
-
-    return `Q${year}${month}${sequenceNumber}`;
-  } catch (error) {
-    throw new APIError(500, 'Failed to generate quote number', { error });
-  }
-}
-
-// Helper to safely parse numeric values
-function safeParseFloat(value: string | number | null | undefined): number {
-  if (typeof value === 'number') return value;
-  if (!value) return 0;
-  const parsed = parseFloat(value.toString());
-  return isNaN(parsed) ? 0 : parsed;
+  return `Q${year}${month}${sequenceNumber}`;
 }
 
 export function registerRoutes(app: Express): Server {
@@ -100,14 +68,11 @@ export function registerRoutes(app: Express): Server {
         signature,
       } = req.body;
 
-      // Validate quote content
-      const parsedContent = QuoteContentSchema.parse(content);
-
       // Generate quote number
       const quoteNumber = await generateQuoteNumber(req.user!.companyId);
 
       // Create new quote with proper type checking
-      const result = await db
+      const newQuote = await db
         .insert(quotes)
         .values({
           number: quoteNumber,
@@ -120,17 +85,17 @@ export function registerRoutes(app: Express): Server {
           clientAddress,
           status,
           paymentMethod,
-          subtotal: safeParseFloat(subtotal),
-          total: safeParseFloat(total),
+          subtotal: parseFloat(subtotal) || 0,
+          total: parseFloat(total) || 0,
           downPaymentType,
-          downPaymentValue: safeParseFloat(downPaymentValue),
-          remainingBalance: safeParseFloat(remainingBalance),
+          downPaymentValue: parseFloat(downPaymentValue) || 0,
+          remainingBalance: parseFloat(remainingBalance) || 0,
           discountType,
-          discountValue: safeParseFloat(discountValue),
+          discountValue: parseFloat(discountValue) || 0,
           discountCode,
-          taxRate: safeParseFloat(taxRate),
-          taxAmount: safeParseFloat(taxAmount),
-          content: parsedContent,
+          taxRate: parseFloat(taxRate) || 0,
+          taxAmount: parseFloat(taxAmount) || 0,
+          content,
           signature,
           companyId: req.user!.companyId,
           userId: req.user!.id,
@@ -139,18 +104,10 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      if (!Array.isArray(result) || result.length === 0) {
-        throw new APIError(500, "Failed to create quote");
-      }
-
-      const newQuote = result[0];
-      res.status(201).json(newQuote);
+      res.status(201).json(newQuote[0]);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new APIError(400, "Invalid quote content format", error.errors);
-      }
       console.error('Error creating quote:', error);
-      throw new APIError(500, "Failed to create quote", { error });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -194,7 +151,7 @@ export function registerRoutes(app: Express): Server {
     try {
       const quoteId = parseInt(req.params.id);
       if (isNaN(quoteId)) {
-        throw new APIError(400, "Invalid quote ID");
+        return res.status(400).json({ message: "Invalid quote ID" });
       }
 
       // Get quote with its template and company
@@ -207,11 +164,8 @@ export function registerRoutes(app: Express): Server {
       });
 
       if (!quote) {
-        throw new APIError(404, "Quote not found");
+        return res.status(404).json({ message: "Quote not found" });
       }
-
-      // Parse and validate quote content
-      const content = QuoteContentSchema.parse(quote.content);
 
       // Get quote settings
       const quoteSettings = await db.query.settings.findFirst({
@@ -222,7 +176,16 @@ export function registerRoutes(app: Express): Server {
       const pdfBuffer = await generateQuotePDF({
         quote: {
           ...quote,
-          content,
+          content: quote.content as { 
+            products: Array<{ 
+              name: string; 
+              description?: string; 
+              quantity: number; 
+              unit?: string; 
+              price: number; 
+              category?: string; 
+            }> 
+          }
         },
         company: quote.company,
         settings: {
@@ -239,9 +202,6 @@ export function registerRoutes(app: Express): Server {
       // Send PDF
       res.send(pdfBuffer);
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        throw new APIError(400, "Invalid quote content format", error.errors);
-      }
       console.error('Error generating PDF:', error);
       res.status(500).json({ message: "Error generating PDF" });
     }
