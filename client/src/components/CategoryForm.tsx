@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 
 const categoryFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -37,9 +37,11 @@ interface CategoryFormProps {
 
 export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [formChanged, setFormChanged] = useState(false);
   const [subcategories, setSubcategories] = useState<string[]>(
     category?.subcategories || []
   );
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -52,23 +54,45 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     },
   });
 
+  // Track form changes with proper TypeScript types
+  useEffect(() => {
+    const subscription = form.watch((_, { name, type }) => {
+      if (type === 'change') {
+        setFormChanged(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
+
+  // Track subcategories changes
+  useEffect(() => {
+    const currentSubcategories = JSON.stringify(subcategories);
+    const originalSubcategories = JSON.stringify(category?.subcategories || []);
+    if (currentSubcategories !== originalSubcategories) {
+      setFormChanged(true);
+    }
+  }, [subcategories, category?.subcategories]);
+
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
+      const formattedData = {
+        ...data,
+        subcategories,
+      };
+
       const response = await fetch(
         category ? `/api/categories/${category.id}` : "/api/categories",
         {
           method: category ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...data,
-            subcategories,
-          }),
+          body: JSON.stringify(formattedData),
           credentials: "include",
         }
       );
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorData = await response.text();
+        throw new Error(errorData);
       }
 
       return response.json();
@@ -79,7 +103,11 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         title: `Category ${category ? "updated" : "created"} successfully`,
         description: `The category has been ${category ? "updated" : "created"} in the system.`,
       });
-      onSuccess?.();
+      setFormChanged(false);
+      setIsLoading(false);
+      if (onSuccess) {
+        onSuccess();
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -87,6 +115,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         description: error.message,
         variant: "destructive",
       });
+      setIsLoading(false);
     },
   });
 
@@ -94,7 +123,8 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     setIsLoading(true);
     try {
       await mutation.mutateAsync(data);
-    } finally {
+    } catch {
+      // Error is handled in mutation.onError
       setIsLoading(false);
     }
   };
@@ -184,8 +214,19 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
+        <Button 
+          type="submit" 
+          disabled={isLoading || !formChanged}
+          className="w-full"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {category ? "Updating..." : "Creating..."}
+            </>
+          ) : (
+            category ? "Update Category" : "Create Category"
+          )}
         </Button>
       </form>
     </Form>

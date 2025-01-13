@@ -171,7 +171,7 @@ export function Categories() {
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>
-                    {category.subcategories?.length 
+                    {category.subcategories?.length
                       ? category.subcategories.join(", ")
                       : "-"}
                   </TableCell>
@@ -188,17 +188,23 @@ export function Categories() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog open={editDialogOpen && editCategory?.id === category.id} 
-                               onOpenChange={(open) => {
-                                 setEditDialogOpen(open);
-                                 if (!open) setEditCategory(null);
-                               }}>
+                        <Dialog 
+                          open={editDialogOpen && editCategory?.id === category.id} 
+                          onOpenChange={(open) => {
+                            if (!open) {
+                              setEditDialogOpen(false);
+                              setEditCategory(null);
+                            }
+                          }}
+                        >
                           <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditCategory(category);
-                              setEditDialogOpen(true);
-                            }}>
+                            <DropdownMenuItem 
+                              onSelect={(e) => {
+                                e.preventDefault();
+                                setEditCategory(category);
+                                setEditDialogOpen(true);
+                              }}
+                            >
                               Edit
                             </DropdownMenuItem>
                           </DialogTrigger>
