@@ -1,0 +1,87 @@
+Overview:
+Create a fresh, stable, and functional quote editing/creation page that meets the following requirements. Ensure the design and functionality follow best practices to prevent crashes or performance issues.
+
+Features Required:
+User Authentication & Sales Rep Identification:
+
+Retrieve and display the signed-in user's information (e.g., name, email, role) as the sales rep.
+Client Information Retrieval:
+
+Query the database to retrieve client information using a unique identifier (e.g., client ID).
+Display the following client details:
+Name
+Phone
+Email
+Address
+Category & Template Selection:
+
+Fetch categories and templates from the database.
+Allow the user to:
+Choose a category.
+View templates specific to the selected category.
+Product Display by Category:
+
+Filter and display products based on the selected category.
+Include fields such as product name, description, price, and stock availability.
+Quote Table Fields:
+
+Display all fields from the quote table in the database. Key fields include:
+Quote ID
+Client details
+Products/Services
+Total cost
+Discounts
+Taxes
+Notes or additional instructions
+Status (Pending, Accepted, Rejected)
+PDF Generation:
+
+Integrate the existing PDF export service to:
+Generate a professional-looking PDF version of the quote.
+Include all relevant details, such as company logo, client details, quote items, and terms.
+Settings Table Integration:
+
+Fetch and incorporate values from the quote settings table to populate:
+Tax rates
+Default terms and conditions
+Currency preferences
+Validity periods for quotes
+Signature Approval:
+
+When a quote is marked as "Accepted,":
+Display a signature screen for the client to approve.
+Retrieve and display signature-related data stored in the database (e.g., signature image, timestamp, approver details).
+Technical Requirements:
+Frontend:
+
+Use React, Vue.js, or a similar modern framework to build a responsive and user-friendly interface.
+Include form validation to prevent empty or invalid fields.
+Backend:
+
+Use Node.js, Flask, or another backend framework supported by Replit.
+Ensure the backend can handle:
+Fetching user, client, category, template, product, and settings data.
+Handling quote creation, editing, and status updates (e.g., Pending → Accepted).
+Database Queries:
+
+Write optimized queries to retrieve data from tables:
+Users (for sales rep info)
+Clients
+Categories
+Templates
+Products
+Quotes
+Settings
+Signatures
+Error Handling:
+
+Implement robust error handling for:
+Database connection issues.
+Missing or invalid data.
+PDF generation errors.
+Performance Optimization:
+
+Optimize data loading with lazy loading or pagination for large datasets (e.g., products or quotes).
+Testing:
+
+Include unit and integration tests for key functionalities, such as data retrieval, quote generation, and status updates.
