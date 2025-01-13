@@ -72,10 +72,10 @@ export function registerRoutes(app: Express): Server {
       const quoteNumber = await generateQuoteNumber(req.user!.companyId);
 
       // Create new quote with proper type checking
-      const [newQuote] = await db
+      const newQuote = await db
         .insert(quotes)
         .values({
-          number: quoteNumber, // Add quote number
+          number: quoteNumber,
           contactId: contactId ? parseInt(contactId) : null,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
@@ -104,7 +104,7 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      res.status(201).json(newQuote);
+      res.status(201).json(newQuote[0]);
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Internal server error" });
@@ -146,7 +146,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // PDF Export route with proper typing
+  // Update the PDF Export route to properly handle content type
   app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
@@ -154,7 +154,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid quote ID" });
       }
 
-      // Get quote with its template and necessary relations
+      // Get quote with its template and company
       const quote = await db.query.quotes.findFirst({
         where: eq(quotes.id, quoteId),
         with: {
@@ -167,14 +167,26 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Quote not found" });
       }
 
-      // Get quote settings with proper type checking
+      // Get quote settings
       const quoteSettings = await db.query.settings.findFirst({
         where: eq(settings.companyId, req.user!.companyId)
       });
 
-      // Generate PDF with settings
-      const pdfBuffer = await generateQuotePDF({ 
-        quote,
+      // Generate PDF with properly typed content
+      const pdfBuffer = await generateQuotePDF({
+        quote: {
+          ...quote,
+          content: quote.content as { 
+            products: Array<{ 
+              name: string; 
+              description?: string; 
+              quantity: number; 
+              unit?: string; 
+              price: number; 
+              category?: string; 
+            }> 
+          }
+        },
         company: quote.company,
         settings: {
           showUnitPrice: quoteSettings?.showUnitPrice ?? true,
