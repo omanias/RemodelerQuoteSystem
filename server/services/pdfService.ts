@@ -3,9 +3,25 @@ import { Quote, Company, Template } from '@db/schema';
 import path from 'path';
 import fs from 'fs';
 
+interface Product {
+  name: string;
+  description?: string;
+  category?: string;
+  variation?: string;
+  quantity: number;
+  unit?: string;
+  price: number;
+}
+
+interface QuoteContent {
+  products: Product[];
+}
+
 interface GenerateQuotePDFParams {
   quote: Quote & {
     template: Template;
+    company: Company;
+    content: QuoteContent;
   };
   company: Company;
   settings: {
@@ -133,7 +149,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       let currentY = tableTop;
 
       // Table Header
-      const drawTableHeader = (y: number) => {
+      const drawTableHeader = (y: number): number => {
         const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
         doc.rect(50, y, tableWidth, 20).fill('#f3f4f6').stroke('#e5e7eb');
         let xPos = 60;
@@ -152,90 +168,135 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
 
       currentY = drawTableHeader(currentY);
 
-      // Products
-      const products = (quote.content as { products?: any[] })?.products || [];
+      // Parse and group products by category
+      const products = quote.content.products || [];
+      const productsByCategory = products.reduce<Record<string, Product[]>>((acc, product) => {
+        const categoryName = product.category || 'Uncategorized';
+        if (!acc[categoryName]) {
+          acc[categoryName] = [];
+        }
+        acc[categoryName].push(product);
+        return acc;
+      }, {});
 
-      products.forEach((product: any, index: number) => {
-        const productText = product.variation 
-          ? `${product.name} (${product.variation})`
-          : product.name;
+      // Iterate through categories and their products
+      Object.entries(productsByCategory).forEach(([categoryName, categoryProducts], categoryIndex) => {
+        // Calculate height needed for category header
+        const categoryHeaderHeight = 25;
 
-        const descriptionText = product.description || '';
-        const quantityText = product.unit
-          ? `${product.quantity} ${product.unit}`
-          : product.quantity.toString();
-
-        // Calculate required height for this product
-        const productHeight = Math.max(
-          doc.heightOfString(productText, { width: columnWidths[0] }),
-          doc.heightOfString(descriptionText, { width: columnWidths[1] })
-        ) + 20; // Add padding
-
-        // Check if we need a new page
-        if (currentY + productHeight > pageHeight) {
+        // Check if we need a new page for the category
+        if (currentY + categoryHeaderHeight > pageHeight) {
           doc.addPage();
           currentY = doc.page.margins.top;
           currentY = drawTableHeader(currentY);
         }
 
-        // Draw row background
+        // Draw category header
         const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-        const isEvenRow = index % 2 === 0;
-        if (isEvenRow) {
-          doc.rect(50, currentY - 4, tableWidth, productHeight)
-             .fill('#f8fafc');
-        }
+        doc.font('Helvetica-Bold')
+           .fontSize(12)
+           .text(categoryName, 60, currentY, {
+             width: tableWidth - 20,
+             align: 'left'
+           });
 
-        // Product details
-        let xPos = 60;
-        doc.font('Helvetica')
-           .fontSize(10)
-           .fillColor('#000000');
+        currentY += categoryHeaderHeight;
 
-        // Product name
-        doc.text(productText, xPos, currentY, { width: columnWidths[0] });
+        // Process products in this category
+        categoryProducts.forEach((product, index) => {
+          const productText = product.variation 
+            ? `${product.name} (${product.variation})`
+            : product.name;
 
-        // Description
-        xPos += columnWidths[0];
-        doc.text(descriptionText, xPos, currentY, { width: columnWidths[1] });
+          const descriptionText = product.description || '';
+          const quantityText = product.unit
+            ? `${product.quantity} ${product.unit}`
+            : product.quantity.toString();
 
-        // Quantity
-        xPos += columnWidths[1];
-        doc.text(quantityText, xPos, currentY, {
-          width: columnWidths[2],
-          align: 'right'
+          // Calculate required height for this product
+          const productHeight = Math.max(
+            doc.heightOfString(productText, { width: columnWidths[0] }),
+            doc.heightOfString(descriptionText, { width: columnWidths[1] })
+          ) + 20; // Add padding
+
+          // Check if we need a new page
+          if (currentY + productHeight > pageHeight) {
+            doc.addPage();
+            currentY = doc.page.margins.top;
+            currentY = drawTableHeader(currentY);
+
+            // Redraw category header on new page
+            doc.font('Helvetica-Bold')
+               .fontSize(12)
+               .text(categoryName, 60, currentY, {
+                 width: tableWidth - 20,
+                 align: 'left'
+               });
+            currentY += categoryHeaderHeight;
+          }
+
+          // Draw row background
+          const isEvenRow = index % 2 === 0;
+          if (isEvenRow) {
+            doc.rect(50, currentY - 4, tableWidth, productHeight)
+               .fill('#f8fafc');
+          }
+
+          // Product details
+          let xPos = 60;
+          doc.font('Helvetica')
+             .fontSize(10)
+             .fillColor('#000000');
+
+          // Product name
+          doc.text(productText, xPos, currentY, { width: columnWidths[0] });
+
+          // Description
+          xPos += columnWidths[0];
+          doc.text(descriptionText, xPos, currentY, { width: columnWidths[1] });
+
+          // Quantity
+          xPos += columnWidths[1];
+          doc.text(quantityText, xPos, currentY, {
+            width: columnWidths[2],
+            align: 'right'
+          });
+
+          // Unit Price (if enabled)
+          if (settings.showUnitPrice) {
+            xPos += columnWidths[2];
+            const unitPrice = Number(product.price).toFixed(2);
+            doc.text(`$${unitPrice}`, xPos, currentY, {
+              width: columnWidths[3],
+              align: 'right'
+            });
+          }
+
+          // Total (if enabled)
+          if (settings.showTotalPrice) {
+            xPos += (settings.showUnitPrice ? columnWidths[3] : columnWidths[2]);
+            const total = Number(product.price) * Number(product.quantity);
+            doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
+              width: settings.showUnitPrice ? columnWidths[4] : columnWidths[3],
+              align: 'right'
+            });
+          }
+
+          currentY += productHeight;
+
+          // Add separator line if not the last product in the category
+          if (index < categoryProducts.length - 1) {
+            doc.strokeColor('#e5e7eb')
+               .moveTo(50, currentY - 10)
+               .lineTo(50 + tableWidth, currentY - 10)
+               .stroke()
+               .strokeColor('#000000');
+          }
         });
 
-        // Unit Price (if enabled)
-        if (settings.showUnitPrice) {
-          xPos += columnWidths[2];
-          const unitPrice = Number(product.price).toFixed(2);
-          doc.text(`$${unitPrice}`, xPos, currentY, {
-            width: columnWidths[3],
-            align: 'right'
-          });
-        }
-
-        // Total (if enabled)
-        if (settings.showTotalPrice) {
-          xPos += (settings.showUnitPrice ? columnWidths[3] : columnWidths[2]);
-          const total = Number(product.price) * Number(product.quantity);
-          doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
-            width: settings.showUnitPrice ? columnWidths[4] : columnWidths[3],
-            align: 'right'
-          });
-        }
-
-        currentY += productHeight;
-
-        // Add separator line if not the last item
-        if (index < products.length - 1) {
-          const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-          doc.strokeColor('#e5e7eb')
-             .moveTo(50, currentY - 10)
-             .lineTo(50 + tableWidth, currentY - 10)
-             .stroke()
-             .strokeColor('#000000');
+        // Add extra space between categories
+        if (categoryIndex < Object.keys(productsByCategory).length - 1) {
+          currentY += 15;
         }
       });
 
@@ -303,11 +364,9 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            ].join('\n'));
       }
 
-      // Terms and Conditions Section with improved formatting
+      // Terms and Conditions Section
       if (quote.template?.termsAndConditions) {
         doc.addPage();
-
-        // Add section header with proper spacing and styling
         doc.font('Helvetica-Bold')
            .fontSize(16)
            .text('Terms and Conditions', {
@@ -316,27 +375,21 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            })
            .moveDown(1);
 
-        // Split the terms into sections based on line breaks
         const sections = quote.template.termsAndConditions.split(/\n\s*\n/);
-
         doc.font('Helvetica')
            .fontSize(11)
-           .lineGap(2); // Add consistent line spacing
+           .lineGap(2);
 
-        sections.forEach((section, index) => {
-          // Check if section starts with a title (ends with a colon)
+        sections.forEach((section: string, index: number) => {
           const isSectionTitle = section.trim().endsWith(':');
-
           if (isSectionTitle) {
-            // Format section titles
             doc.font('Helvetica-Bold')
                .text(section.trim(), {
                  align: 'left',
                  paragraphGap: 10
                })
-               .font('Helvetica'); // Reset to regular font
+               .font('Helvetica');
           } else {
-            // Format regular paragraphs
             doc.text(section.trim(), {
               align: 'justify',
               paragraphGap: 12,
@@ -345,7 +398,6 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
             });
           }
 
-          // Add space between sections, but not after the last one
           if (index < sections.length - 1) {
             doc.moveDown(0.8);
           }
