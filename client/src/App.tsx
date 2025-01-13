@@ -9,6 +9,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
 import { QuoteDetail } from "@/pages/QuoteDetail";
 import { Products } from "@/pages/Products";
+import { Categories } from "@/pages/Categories";  // Add Categories import
 import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
@@ -16,7 +17,6 @@ import { Contacts } from "@/pages/Contacts";
 import { ContactDetail } from "@/pages/ContactDetail";
 import { Companies } from "@/pages/Companies";
 import { SuperAdminDashboard } from "@/pages/SuperAdminDashboard";
-// Import the Workflows page
 import WorkflowsPage from "@/pages/workflows";
 import { Settings } from "@/pages/Settings";
 
@@ -58,6 +58,7 @@ function App() {
         <Route path="/contacts/new" component={ContactDetail} />
         <Route path="/contacts/:id" component={ContactDetail} />
         <Route path="/products" component={Products} />
+        <Route path="/products/categories" component={Categories} />  {/* Add Categories route */}
         <Route path="/templates" component={Templates} />
         <Route path="/users" component={Users} />
         <Route path="/permissions" component={AdminPermissions} />

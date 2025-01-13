@@ -35,10 +35,6 @@ interface Category {
     id: number;
     name: string;
   }>;
-  templates: Array<{
-    id: number;
-    name: string;
-  }>;
 }
 
 export function Categories() {
@@ -46,7 +42,6 @@ export function Categories() {
 
   const { data: categories = [], isLoading, refetch } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
-    retry: false
   });
 
   const filteredCategories = categories.filter((category) =>
@@ -103,14 +98,13 @@ export function Categories() {
               <TableHead>Name</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Products</TableHead>
-              <TableHead>Templates</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={4} className="text-center py-8">
                   <div className="flex justify-center items-center">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
@@ -118,7 +112,7 @@ export function Categories() {
               </TableRow>
             ) : filteredCategories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
+                <TableCell colSpan={4} className="text-center py-8">
                   {search ? "No categories found matching your search" : "No categories found"}
                 </TableCell>
               </TableRow>
@@ -127,8 +121,7 @@ export function Categories() {
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>{category.description || "-"}</TableCell>
-                  <TableCell>{Array.isArray(category.products) ? category.products.length : 0}</TableCell>
-                  <TableCell>{Array.isArray(category.templates) ? category.templates.length : 0}</TableCell>
+                  <TableCell>{category.products?.length || 0}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
