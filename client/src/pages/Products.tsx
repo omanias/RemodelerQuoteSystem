@@ -126,7 +126,7 @@ export function Products() {
         </div>
 
         <div className="flex gap-2">
-          <Link href="/categories">
+          <Link href="/products/categories">
             <Button variant="outline">
               <FolderTree className="mr-2 h-4 w-4" />
               Categories

@@ -285,6 +285,82 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add categories routes after existing /api/categories GET endpoint
+  app.post("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const { name, description } = req.body;
+
+      // Create new category
+      const [newCategory] = await db
+        .insert(categories)
+        .values({
+          name,
+          description,
+          companyId: req.user!.companyId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      // Get the created category with its relations
+      const createdCategory = await db.query.categories.findFirst({
+        where: eq(categories.id, newCategory.id),
+        with: {
+          products: true
+        }
+      });
+
+      res.status(201).json(createdCategory);
+    } catch (error) {
+      console.error('Error creating category:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/categories/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: "Invalid category ID" });
+      }
+
+      // Verify category exists and belongs to company
+      const existingCategory = await db.query.categories.findFirst({
+        where: and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingCategory) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      // Update category
+      await db
+        .update(categories)
+        .set({
+          name: req.body.name,
+          description: req.body.description,
+          updatedAt: new Date()
+        })
+        .where(eq(categories.id, categoryId));
+
+      // Get updated category
+      const updatedCategory = await db.query.categories.findFirst({
+        where: eq(categories.id, categoryId),
+        with: {
+          products: true
+        }
+      });
+
+      res.json(updatedCategory);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Contacts routes with proper middleware chain
   app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
