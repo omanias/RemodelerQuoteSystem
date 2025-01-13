@@ -253,11 +253,12 @@ const tables = {
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   }),
+  // Categories table definition update
   categories: pgTable("categories", {
     id: serial("id").primaryKey(),
     name: text("name").notNull(),
     description: text("description"),
-    subcategory: text("subcategory"),
+    subcategories: text("subcategories").array().default([]),
     companyId: integer("company_id")
       .references(() => companies.id, { onDelete: 'cascade' })
       .notNull(),

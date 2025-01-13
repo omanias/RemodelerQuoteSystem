@@ -42,7 +42,7 @@ interface Category {
   id: number;
   name: string;
   description: string | null;
-  subcategory: string | null;
+  subcategories: string[] | null;
   products: Array<{
     id: number;
     name: string;
@@ -64,7 +64,7 @@ export function Categories() {
   const filteredCategories = categories.filter((category) =>
     category.name.toLowerCase().includes(search.toLowerCase()) ||
     (category.description || "").toLowerCase().includes(search.toLowerCase()) ||
-    (category.subcategory || "").toLowerCase().includes(search.toLowerCase())
+    (category.subcategories || []).flat().join('').toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDelete = async () => {
@@ -145,7 +145,7 @@ export function Categories() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Subcategory</TableHead>
+              <TableHead>Subcategories</TableHead>
               <TableHead>Description</TableHead>
               <TableHead>Products</TableHead>
               <TableHead className="w-[50px]"></TableHead>
@@ -170,7 +170,11 @@ export function Categories() {
               filteredCategories.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
-                  <TableCell>{category.subcategory || "-"}</TableCell>
+                  <TableCell>
+                    {category.subcategories?.length 
+                      ? category.subcategories.join(", ")
+                      : "-"}
+                  </TableCell>
                   <TableCell>{category.description || "-"}</TableCell>
                   <TableCell>{category.products?.length || 0}</TableCell>
                   <TableCell>
@@ -207,7 +211,7 @@ export function Categories() {
                                 id: category.id,
                                 name: category.name,
                                 description: category.description || undefined,
-                                subcategory: category.subcategory || undefined
+                                subcategories: category.subcategories || undefined
                               }}
                               onSuccess={() => {
                                 setEditDialogOpen(false);

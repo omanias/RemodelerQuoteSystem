@@ -15,11 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { Plus, X } from "lucide-react";
 
 const categoryFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   description: z.string().optional(),
-  subcategory: z.string().optional(),
+  subcategories: z.array(z.string()).default([]),
 });
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
@@ -29,13 +30,16 @@ interface CategoryFormProps {
     id: number;
     name: string;
     description?: string;
-    subcategory?: string;
+    subcategories?: string[];
   };
   onSuccess?: () => void;
 }
 
 export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [subcategories, setSubcategories] = useState<string[]>(
+    category?.subcategories || []
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -44,7 +48,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     defaultValues: {
       name: category?.name || "",
       description: category?.description || "",
-      subcategory: category?.subcategory || "",
+      subcategories: category?.subcategories || [],
     },
   });
 
@@ -55,7 +59,10 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         {
           method: category ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            ...data,
+            subcategories,
+          }),
           credentials: "include",
         }
       );
@@ -92,6 +99,20 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     }
   };
 
+  const addSubcategory = () => {
+    setSubcategories([...subcategories, ""]);
+  };
+
+  const removeSubcategory = (index: number) => {
+    setSubcategories(subcategories.filter((_, i) => i !== index));
+  };
+
+  const updateSubcategory = (index: number, value: string) => {
+    const newSubcategories = [...subcategories];
+    newSubcategories[index] = value;
+    setSubcategories(newSubcategories);
+  };
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -109,22 +130,42 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="subcategory"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Subcategory</FormLabel>
-              <FormControl>
-                <Input 
-                  placeholder="Enter subcategory (optional)" 
-                  {...field} 
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <FormLabel>Subcategories</FormLabel>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addSubcategory}
+              className="h-8"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Subcategory
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {subcategories.map((subcategory, index) => (
+              <div key={index} className="flex gap-2">
+                <Input
+                  value={subcategory}
+                  onChange={(e) => updateSubcategory(index, e.target.value)}
+                  placeholder="Enter subcategory"
+                  className="flex-1"
                 />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeSubcategory(index)}
+                  className="h-10 w-10"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
 
         <FormField
           control={form.control}
@@ -143,7 +184,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={isLoading}>
+        <Button type="submit" disabled={isLoading} className="w-full">
           {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
         </Button>
       </form>
