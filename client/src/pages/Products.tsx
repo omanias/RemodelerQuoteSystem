@@ -33,9 +33,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, MoreVertical, FolderTree, Loader2 } from "lucide-react";
+import { Plus, MoreVertical, FolderTree, Loader2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Product {
   id: number;
@@ -63,10 +71,16 @@ export function Products() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const { toast } = useToast();
 
   const { data: products = [], isLoading, refetch } = useQuery<Product[]>({
     queryKey: ["/api/products"],
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["/api/categories"],
   });
 
   const handleEdit = async (product: Product) => {
@@ -102,7 +116,6 @@ export function Products() {
         description: "The product has been deleted successfully.",
       });
 
-      // Important: Refetch the products list after successful deletion
       await refetch();
     } catch (error: any) {
       toast({
@@ -114,6 +127,13 @@ export function Products() {
       setDeleteProduct(null);
     }
   };
+
+  // Filter products based on search query and selected category
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === "all" || product.category?.id.toString() === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <div className="space-y-6">
@@ -152,6 +172,34 @@ export function Products() {
         </div>
       </div>
 
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search products..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select
+          value={selectedCategory}
+          onValueChange={setSelectedCategory}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Select category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id.toString()}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
@@ -173,14 +221,16 @@ export function Products() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : products.length === 0 ? (
+            ) : filteredProducts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8">
-                  No products found
+                  {searchQuery || selectedCategory !== "all"
+                    ? "No products found matching your filters"
+                    : "No products found"}
                 </TableCell>
               </TableRow>
             ) : (
-              products.map((product) => (
+              filteredProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>{product.name}</TableCell>
                   <TableCell>{product.category?.name || "Uncategorized"}</TableCell>
