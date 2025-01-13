@@ -7,7 +7,8 @@ import { storage, UPLOADS_PATH } from "./storage";
 import { db } from "@db";
 import { 
   users, quotes, contacts, products, categories, 
-  templates, notifications, companies, settings 
+  templates, notifications, companies, settings,
+  type Quote, type Settings
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
@@ -202,7 +203,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // PDF Export route
+  // PDF Export route with proper typing
   app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const quoteId = parseInt(req.params.id);
@@ -210,11 +211,12 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid quote ID" });
       }
 
-      // Get quote with its template
+      // Get quote with its template and necessary relations
       const quote = await db.query.quotes.findFirst({
         where: eq(quotes.id, quoteId),
         with: {
-          template: true
+          template: true,
+          company: true,
         }
       });
 
@@ -222,30 +224,18 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Quote not found" });
       }
 
-      // Get company info
-      const company = await db.query.companies.findFirst({
-        where: eq(companies.id, req.user!.companyId)
-      });
-
-      if (!company) {
-        return res.status(404).json({ message: "Company not found" });
-      }
-
-      // Get quote settings
+      // Get quote settings with proper type checking
       const quoteSettings = await db.query.settings.findFirst({
         where: eq(settings.companyId, req.user!.companyId)
-      }) || {
-        showUnitPrice: true, // Default to true for backwards compatibility
-        showTotalPrice: true // Default to true for backwards compatibility
-      };
+      });
 
       // Generate PDF with settings
       const pdfBuffer = await generateQuotePDF({ 
-        quote, 
-        company,
+        quote,
+        company: quote.company,
         settings: {
-          showUnitPrice: quoteSettings.showUnitPrice,
-          showTotalPrice: quoteSettings.showTotalPrice
+          showUnitPrice: quoteSettings?.showUnitPrice ?? true,
+          showTotalPrice: quoteSettings?.showTotalPrice ?? true
         }
       });
 
@@ -393,24 +383,25 @@ export function registerRoutes(app: Express): Server {
         where: eq(settings.companyId, req.user!.companyId)
       });
 
+      const settingsData = {
+        ...req.body,
+        companyId: req.user!.companyId,
+        updatedAt: new Date()
+      };
+
       if (existingSettings) {
         // Update existing settings
         await db
           .update(settings)
-          .set({
-            ...req.body,
-            updatedAt: new Date()
-          })
+          .set(settingsData)
           .where(eq(settings.companyId, req.user!.companyId));
       } else {
         // Create new settings
         await db
           .insert(settings)
           .values({
-            ...req.body,
-            companyId: req.user!.companyId,
-            createdAt: new Date(),
-            updatedAt: new Date()
+            ...settingsData,
+            createdAt: new Date()
           });
       }
 

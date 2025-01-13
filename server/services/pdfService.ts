@@ -82,7 +82,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
          .text('QUOTE', { align: 'center' })
          .moveDown(0.5);
 
-      // Quote Details Boxes
+      // Quote Details
       const quoteDetailsY = doc.y;
 
       // QUOTE TO Box
@@ -115,7 +115,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       doc.moveDown(4);
       const tableTop = doc.y;
 
-      // Dynamically build headers and column widths based on settings
+      // Dynamically build headers based on settings
       const tableHeaders = ['Product', 'Description', 'Quantity'];
       let columnWidths = [200, 160, 80]; // Base widths
 
@@ -209,7 +209,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         // Unit Price (if enabled)
         if (settings.showUnitPrice) {
           xPos += columnWidths[2];
-          doc.text(`$${Number(product.price).toFixed(2)}`, xPos, currentY, {
+          const unitPrice = Number(product.price).toFixed(2);
+          doc.text(`$${unitPrice}`, xPos, currentY, {
             width: columnWidths[3],
             align: 'right'
           });
@@ -245,15 +246,19 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         currentY = doc.page.margins.top + 20;
       }
 
-      doc.rect(320, currentY, 225, 120)
+      // Summary Box
+      const summaryWidth = 225;
+      const summaryX = doc.page.width - doc.page.margins.right - summaryWidth;
+
+      doc.rect(summaryX, currentY, summaryWidth, 120)
          .stroke();
 
       // Subtotal
       const subtotal = Number(quote.subtotal || 0);
       doc.font('Helvetica')
          .fontSize(10)
-         .text('Subtotal:', 330, currentY + 10)
-         .text(`$${subtotal.toFixed(2)}`, 495, currentY + 10, { align: 'right' });
+         .text('Subtotal:', summaryX + 10, currentY + 10)
+         .text(`$${subtotal.toFixed(2)}`, summaryX + summaryWidth - 60, currentY + 10, { align: 'right' });
 
       let summaryY = currentY + 30;
 
@@ -263,8 +268,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         const discountLabel = quote.discountType === 'PERCENTAGE'
           ? `Discount (${discountValue}%):`
           : 'Discount (fixed):';
-        doc.text(discountLabel, 330, summaryY)
-           .text(`-$${discountValue.toFixed(2)}`, 495, summaryY, { align: 'right' });
+        doc.text(discountLabel, summaryX + 10, summaryY)
+           .text(`-$${discountValue.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
@@ -272,16 +277,16 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       if (quote.taxRate) {
         const taxRate = Number(quote.taxRate);
         const taxAmount = (subtotal * (taxRate / 100));
-        doc.text(`Tax (${taxRate}%):`, 330, summaryY)
-           .text(`$${taxAmount.toFixed(2)}`, 495, summaryY, { align: 'right' });
+        doc.text(`Tax (${taxRate}%):`, summaryX + 10, summaryY)
+           .text(`$${taxAmount.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
       // Total
       const total = Number(quote.total || 0);
       doc.font('Helvetica-Bold')
-         .text('Total:', 330, summaryY)
-         .text(`$${total.toFixed(2)}`, 495, summaryY, { align: 'right' });
+         .text('Total:', summaryX + 10, summaryY)
+         .text(`$${total.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
 
       // Payment Terms (if applicable)
       if (quote.downPaymentValue) {
@@ -298,7 +303,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            ].join('\n'));
       }
 
-      // Terms and Conditions (only if provided)
+      // Terms and Conditions
       if (quote.template?.termsAndConditions) {
         doc.addPage()
            .font('Helvetica-Bold')
@@ -315,7 +320,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            });
       }
 
-      // Signature Section (if available)
+      // Signature Section
       if (quote.signature) {
         if (doc.y + 200 > pageHeight) {
           doc.addPage();
@@ -352,12 +357,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         }
       }
 
-      try {
-        doc.end();
-      } catch (endError) {
-        console.error('Error ending PDF document:', endError);
-        reject(endError);
-      }
+      // Complete the PDF generation
+      doc.end();
     } catch (error) {
       console.error('Error generating PDF:', error);
       reject(error);
