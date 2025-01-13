@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,7 @@ export function ContactDetail() {
 
   const { data: contact, isLoading: isLoadingContact } = useQuery({
     queryKey: [`/api/contacts/${id}`],
-    enabled: !!id
+    enabled: !!id,
   });
 
   // Fetch associated quotes for this contact
@@ -98,9 +98,8 @@ export function ContactDetail() {
         },
         body: JSON.stringify({
           ...data,
-          // Add required fields that are not in the form
-          assignedUserId: 1, // This should be replaced with the current user's ID or a selected user
-          companyId: 1, // This should be replaced with the current company's ID
+          assignedUserId: 1,
+          companyId: 1,
         }),
       });
 
@@ -137,7 +136,6 @@ export function ContactDetail() {
         },
         body: JSON.stringify({
           ...data,
-          // Add required fields that are not in the form
           assignedUserId: contact?.assignedUserId || 1,
           companyId: contact?.companyId || 1,
         }),
@@ -166,29 +164,57 @@ export function ContactDetail() {
     },
   });
 
+  const defaultValues: ContactFormValues = {
+    firstName: "",
+    lastName: "",
+    primaryEmail: "",
+    secondaryEmail: "",
+    primaryPhone: "",
+    mobilePhone: "",
+    leadStatus: LeadStatus.NEW,
+    leadSource: LeadSource.WEBSITE,
+    propertyType: PropertyType.SINGLE_FAMILY,
+    primaryAddress: "",
+    projectAddress: "",
+    projectTimeline: "",
+    budgetRangeMin: undefined,
+    budgetRangeMax: undefined,
+    productInterests: "",
+    notes: "",
+    assignedUserId: undefined,
+    companyId: undefined,
+  };
+
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactFormSchema),
-    defaultValues: contact || {
-      firstName: "",
-      lastName: "",
-      primaryEmail: "",
-      secondaryEmail: "",
-      primaryPhone: "",
-      mobilePhone: "",
-      leadStatus: LeadStatus.NEW,
-      leadSource: LeadSource.WEBSITE,
-      propertyType: PropertyType.SINGLE_FAMILY,
-      primaryAddress: "",
-      projectAddress: "",
-      projectTimeline: "",
-      budgetRangeMin: undefined,
-      budgetRangeMax: undefined,
-      productInterests: "",
-      notes: "",
-      assignedUserId: undefined,
-      companyId: undefined,
-    },
+    defaultValues,
   });
+
+  // Update form when contact data changes
+  useEffect(() => {
+    if (contact) {
+      form.reset({
+        firstName: contact.firstName || "",
+        lastName: contact.lastName || "",
+        primaryEmail: contact.primaryEmail || "",
+        secondaryEmail: contact.secondaryEmail || "",
+        primaryPhone: contact.primaryPhone || "",
+        mobilePhone: contact.mobilePhone || "",
+        leadStatus: contact.leadStatus || LeadStatus.NEW,
+        leadSource: contact.leadSource || LeadSource.WEBSITE,
+        propertyType: contact.propertyType || PropertyType.SINGLE_FAMILY,
+        primaryAddress: contact.primaryAddress || "",
+        projectAddress: contact.projectAddress || "",
+        projectTimeline: contact.projectTimeline || "",
+        budgetRangeMin: contact.budgetRangeMin,
+        budgetRangeMax: contact.budgetRangeMax,
+        productInterests: contact.productInterests || "",
+        notes: contact.notes || "",
+        assignedUserId: contact.assignedUserId,
+        companyId: contact.companyId,
+      });
+    }
+  }, [contact, form]);
 
   const onSubmit = async (data: ContactFormValues) => {
     if (id) {
