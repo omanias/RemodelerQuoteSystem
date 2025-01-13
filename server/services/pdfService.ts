@@ -6,20 +6,22 @@ import fs from 'fs';
 interface Product {
   name: string;
   description?: string;
-  category: {
-    name: string;
-  };
+  category?: string;
   variation?: string;
   quantity: number;
   unit?: string;
   price: number;
 }
 
+interface QuoteContent {
+  products: Product[];
+}
+
 interface GenerateQuotePDFParams {
   quote: Quote & {
     template: Template;
     company: Company;
-    products: Product[]; //Corrected type
+    content: QuoteContent;
   };
   company: Company;
   settings: {
@@ -167,9 +169,9 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       currentY = drawTableHeader(currentY);
 
       // Parse and group products by category
-      const products = quote.products || [];
+      const products = quote.content.products || [];
       const productsByCategory = products.reduce<Record<string, Product[]>>((acc, product) => {
-        const categoryName = product.category?.name || 'Uncategorized';
+        const categoryName = product.category || 'Uncategorized';
         if (!acc[categoryName]) {
           acc[categoryName] = [];
         }
@@ -189,7 +191,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           currentY = drawTableHeader(currentY);
         }
 
-        // Draw category header in bold
+        // Draw category header
         const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
         doc.font('Helvetica-Bold')
            .fontSize(12)
