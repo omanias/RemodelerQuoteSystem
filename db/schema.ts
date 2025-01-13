@@ -140,7 +140,7 @@ const tables = {
     email: text("email").notNull().unique(),
     name: text("name").notNull(),
     role: text("role").notNull().$type<keyof typeof UserRole>(),
-    status: text("status").notNull().$type<keyof typeof UserStatus>(),
+    status: text("status").notNull().$type<keyof typeof UserStatus>().default('ACTIVE'),
     password: text("password").notNull(),
     companyId: integer("company_id")
       .references(() => companies.id, { onDelete: 'restrict' })

@@ -1,13 +1,13 @@
 import passport from "passport";
 import { IVerifyOptions, Strategy as LocalStrategy } from "passport-local";
-import { type Express, Request, Response, NextFunction } from "express";
+import { type Express } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, type User as SelectUser } from "@db/schema";
 import { db } from "@db";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 const crypto = {
@@ -82,10 +82,7 @@ export function setupAuth(app: Express) {
             .select()
             .from(users)
             .where(
-              and(
-                eq(users.email, email),
-                eq(users.companyId, companyId)
-              )
+              eq(users.email, email)
             )
             .limit(1);
 
@@ -120,10 +117,7 @@ export function setupAuth(app: Express) {
         .select()
         .from(users)
         .where(
-          and(
-            eq(users.id, data.id),
-            eq(users.companyId, data.companyId)
-          )
+          eq(users.id, data.id)
         )
         .limit(1);
 
