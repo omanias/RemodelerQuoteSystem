@@ -1,12 +1,44 @@
 import { useState } from "react";
 import { useLocation, useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { QuoteForm } from "@/components/QuoteForm";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileEdit } from "lucide-react";
-import { type Quote, type User, type Contact } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { QuoteForm, QuoteStatus } from "@/components/QuoteForm";
+
+export interface Quote {
+  id: number;
+  number: string;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  clientAddress: string | null;
+  status: QuoteStatus;
+  total: number;
+  subtotal: number;
+  downPaymentValue: number | null;
+  remainingBalance: number | null;
+  createdAt: string;
+  contactId: number | null;
+  categoryId: number;
+  templateId: number;
+  content: {
+    products: Array<{
+      productId: number;
+      quantity: number;
+      variation?: string;
+      unitPrice: number;
+    }>;
+  };
+  paymentMethod?: string | null;
+  discountType?: "PERCENTAGE" | "FIXED" | null;
+  discountValue?: number | null;
+  discountCode?: string | null;
+  downPaymentType?: "PERCENTAGE" | "FIXED" | null;
+  taxRate?: number | null;
+  notes?: string | null;
+}
 
 export function QuoteDetail() {
   const [, setLocation] = useLocation();
@@ -21,12 +53,24 @@ export function QuoteDetail() {
     enabled: !!id,
   });
 
-  const { data: contact } = useQuery<Contact>({
+  const { data: contact } = useQuery<{
+    id: number;
+    firstName: string;
+    lastName: string;
+    primaryEmail: string;
+    primaryPhone: string;
+    primaryAddress: string;
+  }>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId,
   });
 
-  const { data: user } = useQuery<User>({
+  const { data: user } = useQuery<{
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  }>({
     queryKey: ["/api/auth/user"],
   });
 
@@ -49,7 +93,6 @@ export function QuoteDetail() {
         </div>
 
         <QuoteForm
-          quote={quote}
           user={user}
           defaultContactId={contactId}
           contact={contact}
@@ -73,7 +116,7 @@ export function QuoteDetail() {
           <div>
             <h1 className="text-2xl font-bold">Quote {quote?.number}</h1>
             {quote?.status && (
-              <Badge variant={quote.status === 'ACCEPTED' ? 'default' : 'secondary'}>
+              <Badge variant={quote.status === QuoteStatus.ACCEPTED ? 'default' : 'secondary'}>
                 {quote.status}
               </Badge>
             )}
@@ -117,7 +160,7 @@ export function QuoteDetail() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-medium">{quote.clientEmail}</p>
+                      <p className="font-medium">{quote.clientEmail || 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
@@ -137,22 +180,28 @@ export function QuoteDetail() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="font-medium">${Number(quote.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="font-medium">
+                        ${Number(quote.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Created</p>
                       <p className="font-medium">{new Date(quote.createdAt).toLocaleDateString()}</p>
                     </div>
-                    {quote.downPaymentValue && (
+                    {quote.downPaymentValue !== null && (
                       <div>
                         <p className="text-sm text-muted-foreground">Down Payment</p>
-                        <p className="font-medium">${Number(quote.downPaymentValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="font-medium">
+                          ${Number(quote.downPaymentValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
                       </div>
                     )}
-                    {quote.remainingBalance && (
+                    {quote.remainingBalance !== null && (
                       <div>
                         <p className="text-sm text-muted-foreground">Remaining Balance</p>
-                        <p className="font-medium">${Number(quote.remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                        <p className="font-medium">
+                          ${Number(quote.remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
                       </div>
                     )}
                   </div>

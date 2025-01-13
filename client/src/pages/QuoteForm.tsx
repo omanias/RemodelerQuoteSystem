@@ -1,4 +1,4 @@
-import { useState, useEffect, KeyboardEvent } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,30 +25,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus, Save, Users } from "lucide-react";
 import { Link } from "wouter";
 
-const PaymentMethod = {
-  CASH: "Cash",
-  CREDIT_CARD: "Credit Card",
-  BANK_TRANSFER: "Bank Transfer",
-  PAYMENT_PLAN: "Payment Plan",
-} as const;
+export enum QuoteStatus {
+  DRAFT = "DRAFT",
+  SENT = "SENT",
+  ACCEPTED = "ACCEPTED",
+  REJECTED = "REJECTED",
+  REVISED = "REVISED"
+}
 
-const QuoteStatus = {
-  DRAFT: "DRAFT",
-  SENT: "SENT",
-  ACCEPTED: "ACCEPTED",
-  REJECTED: "REJECTED",
-  REVISED: "REVISED",
-} as const;
+export enum PaymentMethod {
+  CASH = "Cash",
+  CREDIT_CARD = "Credit Card",
+  BANK_TRANSFER = "Bank Transfer",
+  PAYMENT_PLAN = "Payment Plan"
+}
 
-// Update the schema to match the database schema
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
   categoryId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").nullable(),
-  clientPhone: z.string().nullable(),
-  clientAddress: z.string().nullable(),
+  clientEmail: z.string().email("Invalid email address").optional(),
+  clientPhone: z.string().optional(),
+  clientAddress: z.string().optional(),
   status: z.nativeEnum(QuoteStatus),
   content: z.object({
     products: z.array(z.object({
@@ -57,18 +56,18 @@ const quoteFormSchema = z.object({
       variation: z.string().optional(),
       unitPrice: z.number()
     }))
-  }),
-  subtotal: z.number().min(0),
-  total: z.number().min(0),
-  notes: z.string().nullable(),
-  paymentMethod: z.nativeEnum(PaymentMethod).nullable(),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  discountValue: z.number().min(0).nullable(),
-  discountCode: z.string().nullable(),
-  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  downPaymentValue: z.number().min(0).nullable(),
-  taxRate: z.number().min(0).nullable(),
-  remainingBalance: z.number().min(0).nullable()
+  }).optional(),
+  subtotal: z.number().min(0).optional(),
+  total: z.number().min(0).optional(),
+  notes: z.string().optional(),
+  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  discountValue: z.number().min(0).optional(),
+  discountCode: z.string().optional(),
+  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  downPaymentValue: z.number().min(0).optional(),
+  taxRate: z.number().min(0).optional(),
+  remainingBalance: z.number().min(0).optional()
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
@@ -218,24 +217,22 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       templateId: quote?.templateId?.toString(),
       categoryId: quote?.categoryId?.toString(),
       clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
-      clientEmail: quote?.clientEmail || contact?.primaryEmail || null,
-      clientPhone: quote?.clientPhone || contact?.primaryPhone || null,
-      clientAddress: quote?.clientAddress || contact?.primaryAddress || null,
-      status: (quote?.status || "DRAFT") as keyof typeof QuoteStatus,
-      content: { 
-        products: quote?.content?.products || [] 
-      },
-      subtotal: quote ? parseFloat(quote.subtotal.toString()) : 0,
-      total: quote ? parseFloat(quote.total.toString()) : 0,
-      notes: quote?.notes || null,
-      paymentMethod: quote?.paymentMethod || null,
-      discountType: quote?.discountType || null,
-      discountValue: quote?.discountValue || null,
-      discountCode: quote?.discountCode || null,
-      downPaymentType: quote?.downPaymentType || null,
-      downPaymentValue: quote?.downPaymentValue ? parseFloat(quote.downPaymentValue.toString()) : null,
-      taxRate: quote?.taxRate || null,
-      remainingBalance: quote?.remainingBalance ? parseFloat(quote.remainingBalance.toString()) : null,
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || undefined,
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || undefined,
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || undefined,
+      status: quote?.status || QuoteStatus.DRAFT,
+      content: quote?.content,
+      subtotal: quote ? Number(quote.subtotal) || 0 : 0,
+      total: quote ? Number(quote.total) || 0 : 0,
+      notes: quote?.notes || undefined,
+      paymentMethod: quote?.paymentMethod || undefined,
+      discountType: quote?.discountType || undefined,
+      discountValue: quote?.discountValue ? Number(quote.discountValue) : undefined,
+      discountCode: quote?.discountCode || undefined,
+      downPaymentType: quote?.downPaymentType || undefined,
+      downPaymentValue: quote?.downPaymentValue ? Number(quote.downPaymentValue) : undefined,
+      taxRate: quote?.taxRate ? Number(quote.taxRate) : undefined,
+      remainingBalance: quote?.remainingBalance ? Number(quote.remainingBalance) : undefined,
     }
   });
 
@@ -502,7 +499,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           {...field}
                           type="number"
                           step="0.01"
-                          onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={field.value === undefined ? "" : field.value.toString()}
                         />
                       </FormControl>
                       <FormMessage />
@@ -557,7 +555,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           {...field}
                           type="number"
                           step="0.01"
-                          onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={field.value === undefined ? "" : field.value.toString()}
                         />
                       </FormControl>
                       <FormMessage />
@@ -576,7 +575,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           {...field}
                           type="number"
                           step="0.01"
-                          onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={field.value === undefined ? "" : field.value.toString()}
                         />
                       </FormControl>
                       <FormMessage />
@@ -595,7 +595,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           {...field}
                           type="number"
                           step="0.01"
-                          onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                          value={field.value === undefined ? "" : field.value.toString()}
                         />
                       </FormControl>
                       <FormMessage />

@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type KeyboardEventHandler } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useDebouncedCallback } from "@/hooks/use-debounce";
 import {
   Form,
   FormControl,
@@ -22,68 +21,55 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
-import { SignatureCanvas } from "@/components/SignatureCanvas";
+
+export enum QuoteStatus {
+  DRAFT = "DRAFT",
+  SENT = "SENT",
+  ACCEPTED = "ACCEPTED",
+  REJECTED = "REJECTED",
+  REVISED = "REVISED"
+}
+
+export enum PaymentMethod {
+  CASH = "Cash",
+  CREDIT_CARD = "Credit Card",
+  BANK_TRANSFER = "Bank Transfer",
+  PAYMENT_PLAN = "Payment Plan"
+}
 
 const quoteFormSchema = z.object({
-  contactId: z.string().min(1, "Contact is required"),
+  contactId: z.string().optional(),
+  templateId: z.string().optional(),
+  categoryId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address"),
-  clientPhone: z.string().optional(),
-  clientAddress: z.string().optional(),
-  categoryId: z.string().min(1, "Category is required"),
+  clientEmail: z.string().email("Invalid email address").optional().or(z.literal("")),
+  clientPhone: z.string().optional().or(z.literal("")),
+  clientAddress: z.string().optional().or(z.literal("")),
   status: z.nativeEnum(QuoteStatus),
-  paymentMethod: z.nativeEnum(PaymentMethod),
-  discountType: z.enum(["percentage", "fixed"]).optional(),
-  discountValue: z.string().optional(),
-  discountCode: z.string().optional(),
-  taxRate: z.string().optional(),
-  downPaymentType: z.enum(["percentage", "fixed"]).optional(),
-  downPaymentValue: z.string().optional(),
-  notes: z.string().optional(),
-  templateId: z.string().min(1, "Template is required"),
+  content: z.object({
+    products: z.array(z.object({
+      productId: z.number(),
+      quantity: z.number(),
+      variation: z.string().optional(),
+      unitPrice: z.number()
+    }))
+  }).optional(),
+  subtotal: z.number().min(0).optional(),
+  total: z.number().min(0).optional(),
+  notes: z.string().optional().or(z.literal("")),
+  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  discountValue: z.string().optional().or(z.literal("")),
+  discountCode: z.string().optional().or(z.literal("")),
+  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  downPaymentValue: z.string().optional().or(z.literal("")),
+  taxRate: z.string().optional().or(z.literal(""))
 });
 
-type QuoteFormData = z.infer<typeof quoteFormSchema>;
-
-interface QuoteFormProps {
-  quote?: Quote;
-  onSuccess?: () => void;
-  user?: {
-    id: number;
-    email: string;
-    name: string;
-  };
-  defaultContactId?: string | null;
-  contact?: any | null;
-}
-
-interface Contact {
-  id: number;
-  firstName: string;
-  lastName: string;
-  primaryEmail: string;
-  primaryPhone: string;
-  primaryAddress: string;
-}
-
-interface Product {
-  id: number;
-  name: string;
-  basePrice: number;
-  unit: string;
-  categoryId: number;
-  variations?: Array<{ name: string; price: string }>;
-}
-
-interface Category {
-  id: number;
-  name: string;
-  products: Product[];
-}
+type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
 interface SelectedProduct {
   productId: number;
@@ -92,27 +78,76 @@ interface SelectedProduct {
   unitPrice: number;
 }
 
+interface QuoteFormProps {
+  quote?: {
+    id: number;
+    number: string;
+    contactId: number | null;
+    categoryId: number;
+    templateId: number;
+    clientName: string;
+    clientEmail: string | null;
+    clientPhone: string | null;
+    clientAddress: string | null;
+    status: QuoteStatus;
+    content: {
+      products: Array<{
+        productId: number;
+        quantity: number;
+        variation?: string;
+        unitPrice: number;
+      }>;
+    };
+    total: number;
+    subtotal: number;
+    paymentMethod: PaymentMethod | null;
+    discountType: "PERCENTAGE" | "FIXED" | null;
+    discountValue: number | null;
+    discountCode: string | null;
+    downPaymentType: "PERCENTAGE" | "FIXED" | null;
+    downPaymentValue: number | null;
+    taxRate: number | null;
+    remainingBalance: number | null;
+    notes: string | null;
+    createdAt: string;
+  };
+  onSuccess?: () => void;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  defaultContactId?: string | null;
+  contact?: {
+    firstName: string;
+    lastName: string;
+    primaryEmail: string;
+    primaryPhone: string;
+    primaryAddress: string;
+  } | null;
+}
 
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedProducts, setSelectedProducts] = useState(() => {
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
     if (quote?.content?.products) {
-      return quote.content.products.map((p: any) => ({
-        productId: p.id,
+      return quote.content.products.map(p => ({
+        productId: p.productId,
         quantity: p.quantity || 1,
         variation: p.variation,
-        unitPrice: parseFloat(p.price) || 0,
+        unitPrice: p.unitPrice
       }));
     }
     return [];
   });
 
-  const { data: contacts = [] } = useQuery<Contact[]>({
+  const { data: contacts = [] } = useQuery<any[]>({
     queryKey: ["/api/contacts"],
   });
 
-  const { data: categories = [] } = useQuery<Category[]>({
+  const { data: categories = [] } = useQuery<any[]>({
     queryKey: ["/api/categories"],
   });
 
@@ -120,187 +155,64 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     queryKey: ["/api/templates"],
   });
 
-  const form = useForm<QuoteFormData>({
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(
+    quote?.categoryId?.toString() || undefined
+  );
+
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
+    queryKey: ["/api/products", selectedCategoryId],
+    enabled: !!selectedCategoryId,
+  });
+
+  const handleKeyDown: KeyboardEventHandler<HTMLFormElement> = (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      form.handleSubmit(onSubmit)(e);
+    }
+  };
+
+  const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      contactId: quote?.contactId?.toString() || defaultContactId || "",
-      clientName: quote?.clientName || contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
+      contactId: quote?.contactId?.toString() || defaultContactId || undefined,
+      templateId: quote?.templateId?.toString(),
+      categoryId: quote?.categoryId?.toString(),
+      clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
       clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
       clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
       clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
-      categoryId: quote?.categoryId?.toString() || "",
       status: quote?.status || QuoteStatus.DRAFT,
-      paymentMethod: quote?.paymentMethod || PaymentMethod.CASH,
-      discountType: quote?.discountType || "percentage",
-      discountValue: quote?.discountValue?.toString() || "0",
-      discountCode: quote?.discountCode || "",
-      taxRate: quote?.taxRate?.toString() || "0",
-      downPaymentType: quote?.downPaymentType || "percentage",
-      downPaymentValue: quote?.downPaymentValue?.toString() || "0",
+      content: quote?.content,
+      subtotal: quote?.subtotal || 0,
+      total: quote?.total || 0,
       notes: quote?.notes || "",
-      templateId: quote?.templateId?.toString() || "",
-    },
+      paymentMethod: quote?.paymentMethod || undefined,
+      discountType: quote?.discountType || undefined,
+      discountValue: quote?.discountValue?.toString() || "",
+      discountCode: quote?.discountCode || "",
+      taxRate: quote?.taxRate?.toString() || "",
+      downPaymentType: quote?.downPaymentType || undefined,
+      downPaymentValue: quote?.downPaymentValue?.toString() || ""
+    }
   });
 
   useEffect(() => {
     if (contact) {
-      form.setValue("contactId", contact.id.toString());
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
-      form.setValue("clientEmail", contact.primaryEmail);
-      form.setValue("clientPhone", contact.primaryPhone);
-      form.setValue("clientAddress", contact.primaryAddress);
+      form.setValue("clientEmail", contact.primaryEmail || "");
+      form.setValue("clientPhone", contact.primaryPhone || "");
+      form.setValue("clientAddress", contact.primaryAddress || "");
     }
   }, [contact, form]);
 
-  const selectedContactId = form.watch("contactId");
   useEffect(() => {
-    if (selectedContactId && !contact) {
-      const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
-      if (selectedContact) {
-        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
-        form.setValue("clientEmail", selectedContact.primaryEmail);
-        form.setValue("clientPhone", selectedContact.primaryPhone);
-        form.setValue("clientAddress", selectedContact.primaryAddress);
-      }
+    const categoryId = form.watch("categoryId");
+    if (categoryId) {
+      setSelectedCategoryId(categoryId);
     }
-  }, [selectedContactId, contacts, form, contact]);
-
-  const selectedCategoryId = form.watch("categoryId");
-  useEffect(() => {
-    if (quote?.categoryId && !selectedCategoryId) {
-      form.setValue("categoryId", quote.categoryId.toString());
-    }
-  }, [quote, form, selectedCategoryId]);
-
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    select: (data) =>
-      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
-    enabled: !!selectedCategoryId,
-  });
-
-  useEffect(() => {
-    if (selectedCategoryId && templates?.length > 0) {
-      const categoryTemplates = templates.filter((t) => t.categoryId.toString() === selectedCategoryId);
-      const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
-
-      if (defaultTemplate) {
-        form.setValue("templateId", defaultTemplate.id.toString());
-      }
-    }
-  }, [selectedCategoryId, templates, form]);
-
-  const parseNumber = (value: any): number => {
-    if (value === undefined || value === null || value === '') return 0;
-    const parsed = parseFloat(value.toString());
-    return isNaN(parsed) ? 0 : parsed;
-  };
-
-  const calculateSubtotal = (products: SelectedProduct[]): number => {
-    if (!products.length) return 0;
-    return products.reduce((sum: number, item: SelectedProduct) => {
-      const quantity = parseNumber(item.quantity);
-      const price = parseNumber(item.unitPrice);
-      return sum + (quantity * price);
-    }, 0);
-  };
-
-  const calculateDiscount = () => {
-    const subtotal = calculateSubtotal(selectedProducts);
-    const discountType = form.watch("discountType");
-    const discountValue = parseNumber(form.watch("discountValue"));
-
-    return discountType === "percentage"
-      ? (subtotal * discountValue) / 100
-      : discountValue;
-  };
-
-  const calculateTax = () => {
-    const subtotal = calculateSubtotal(selectedProducts);
-    const discount = calculateDiscount();
-    const taxRate = parseNumber(form.watch("taxRate"));
-
-    return ((subtotal - discount) * taxRate) / 100;
-  };
-
-  const calculateTotal = () => {
-    const subtotal = calculateSubtotal(selectedProducts);
-    const discount = calculateDiscount();
-    const tax = calculateTax();
-    return subtotal - discount + tax;
-  };
-
-  const calculateDownPayment = () => {
-    const total = calculateTotal();
-    const downPaymentType = form.watch("downPaymentType");
-    const downPaymentValue = parseNumber(form.watch("downPaymentValue"));
-
-    return downPaymentType === "percentage"
-      ? (total * downPaymentValue) / 100
-      : downPaymentValue;
-  };
-
-  const calculateRemainingBalance = () => {
-    const total = calculateTotal();
-    const downPayment = calculateDownPayment();
-    return total - downPayment;
-  };
-
-  const addProduct = (product: Product, variationPrice?: string) => {
-    if (variationPrice) {
-      // For products with variations, add only the selected variation
-      const variation = product.variations?.find(v => v.price === variationPrice);
-      if (variation) {
-        setSelectedProducts(prev => [
-          ...prev,
-          {
-            productId: product.id,
-            quantity: 1,
-            variation: variation.name,
-            unitPrice: parseFloat(variationPrice),
-          }
-        ]);
-      }
-    } else {
-      // For products without variations, add the base product
-      setSelectedProducts(prev => [
-        ...prev,
-        {
-          productId: product.id,
-          quantity: 1,
-          unitPrice: product.basePrice,
-        }
-      ]);
-    }
-  };
-
-  const updateQuantity = (index: number, value: number) => {
-    setSelectedProducts(prev =>
-      prev.map((item, i) =>
-        i === index ? { ...item, quantity: Math.max(1, value) } : item
-      )
-    );
-  };
-
-  const removeProduct = (index: number) => {
-    setSelectedProducts(prev => prev.filter((_, i) => i !== index));
-  };
+  }, [form.watch("categoryId")]);
 
   const mutation = useMutation({
-    mutationFn: async (data: QuoteFormData) => {
-      const total = calculateSubtotal(selectedProducts);
-      const formattedProducts = selectedProducts.map((item: SelectedProduct) => {
-        const product = products.find(p => p.id === item.productId);
-        return {
-          id: item.productId,
-          quantity: item.quantity,
-          name: product?.name,
-          price: parseNumber(item.unitPrice),
-          variation: item.variation,
-          unit: product?.unit
-        };
-      });
-
+    mutationFn: async (data: QuoteFormValues) => {
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
@@ -309,16 +221,20 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         credentials: "include",
         body: JSON.stringify({
           ...data,
+          contactId: data.contactId ? parseInt(data.contactId) : null,
+          templateId: data.templateId ? parseInt(data.templateId) : null,
+          categoryId: data.categoryId ? parseInt(data.categoryId) : null,
           content: {
-            products: formattedProducts,
+            products: selectedProducts,
           },
-          total,
+          discountValue: data.discountValue ? parseFloat(data.discountValue) : null,
+          taxRate: data.taxRate ? parseFloat(data.taxRate) : null,
+          downPaymentValue: data.downPaymentValue ? parseFloat(data.downPaymentValue) : null,
         }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to save quote");
+        throw new Error(await response.text());
       }
 
       return response.json();
@@ -335,169 +251,48 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
-      console.error("Quote submission error:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to save quote",
+        description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const onSubmit = async (data: QuoteFormData) => {
+  const onSubmit = async (data: QuoteFormValues) => {
     try {
-      if (selectedProducts.length === 0) {
-        toast({
-          title: "Error",
-          description: "Please add at least one product to the quote",
-          variant: "destructive",
-        });
-        return;
-      }
       await mutation.mutateAsync(data);
     } catch (error) {
       console.error("Form submission error:", error);
     }
   };
 
-  const autoSaveMutation = useMutation({
-    mutationFn: async (data: QuoteFormData) => {
-      if (!quote?.id) return; // Only auto-save existing quotes
-
-      const total = calculateTotal();
-      const downPayment = calculateDownPayment();
-      const remainingBalance = calculateRemainingBalance();
-      const subtotal = calculateSubtotal(selectedProducts);
-      const discount = calculateDiscount();
-      const tax = calculateTax();
-
-      const formattedProducts = selectedProducts.map(item => {
-        const product = products.find(p => p.id === item.productId);
-        return {
-          id: item.productId,
-          quantity: item.quantity,
-          name: product?.name,
-          price: parseNumber(item.unitPrice),
-          variation: item.variation,
-          unit: product?.unit
-        };
-      });
-
-      setIsAutoSaving(true);
-
-      const response = await fetch(`/api/quotes/${quote.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contactId: parseInt(data.contactId),
-          categoryId: parseInt(data.categoryId),
-          templateId: parseInt(data.templateId),
-          clientName: data.clientName,
-          clientEmail: data.clientEmail,
-          clientPhone: data.clientPhone,
-          clientAddress: data.clientAddress,
-          selectedProducts: formattedProducts,
-          subtotal: parseNumber(subtotal),
-          total: parseNumber(total),
-          downPaymentValue: parseNumber(downPayment),
-          remainingBalance: parseNumber(remainingBalance),
-          discountType: data.discountType,
-          discountValue: parseNumber(data.discountValue),
-          discountCode: data.discountCode,
-          taxRate: parseNumber(data.taxRate),
-          taxAmount: parseNumber(tax),
-          status: data.status,
-          paymentMethod: data.paymentMethod,
-          downPaymentType: data.downPaymentType,
-          notes: data.notes,
-          content: {
-            products: formattedProducts,
-            calculations: {
-              subtotal: parseNumber(subtotal),
-              total: parseNumber(total),
-              downPayment: parseNumber(downPayment),
-              remainingBalance: parseNumber(remainingBalance),
-              discount: parseNumber(discount),
-              tax: parseNumber(tax)
-            },
-          },
-          signature: data.signature,
-        }),
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
+  const addProduct = (product: any) => {
+    setSelectedProducts(prev => [
+      ...prev,
+      {
+        productId: product.id,
+        quantity: 1,
+        unitPrice: product.basePrice,
       }
-
-      setLastSaved(new Date());
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-    },
-    onError: (error: Error) => {
-      console.error("Auto-save error:", error);
-      toast({
-        title: "Auto-save failed",
-        description: "Changes couldn't be saved automatically. Please save manually.",
-        variant: "destructive",
-      });
-    },
-    onSettled: () => {
-      setIsAutoSaving(false);
-    },
-  });
-
-  const debouncedAutoSave = useDebouncedCallback((data: QuoteFormData) => {
-    if (quote?.id) {
-      autoSaveMutation.mutate(data);
-    }
-  }, 2000); // Auto-save after 2 seconds of no changes
-
-  useEffect(() => {
-    const subscription = form.watch((value) => {
-      if (quote?.id && Object.keys(form.formState.dirtyFields).length > 0) {
-        debouncedAutoSave(value as QuoteFormData);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form, quote?.id, debouncedAutoSave]);
-
-  const [showSignature, setShowSignature] = useState(false);
-  const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
-
-  const handleSignatureSave = (signatureData: {
-    data: string;
-    timestamp: string;
-    metadata: {
-      browserInfo: string;
-      ipAddress: string;
-      signedAt: string;
-      timezone: string;
-    };
-  }) => {
-    const formData = form.getValues();
-    mutation.mutate({
-      ...formData,
-      signature: signatureData,
-    });
+    ]);
   };
 
-  const status = form.watch("status");
-  useEffect(() => {
-    if (status === QuoteStatus.ACCEPTED && !quote?.signature) {
-      setShowSignature(true);
-    }
-  }, [status, quote?.signature]);
+  const updateQuantity = (index: number, value: number) => {
+    setSelectedProducts(prev =>
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: Math.max(1, value) } : item
+      )
+    );
+  };
+
+  const removeProduct = (index: number) => {
+    setSelectedProducts(prev => prev.filter((_, i) => i !== index));
+  };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onKeyDown={handleKeyDown} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -510,6 +305,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
+        {/* Contact Information */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -537,7 +333,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                     <SelectContent>
                       {contacts.map((contact) => (
                         <SelectItem key={contact.id} value={contact.id.toString()}>
-                          {contact.firstName} {contact.lastName} - {contact.primaryEmail}
+                          {contact.firstName} {contact.lastName}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -561,6 +357,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="clientEmail"
@@ -568,12 +365,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Email</FormLabel>
                     <FormControl>
-                      <Input type="email" {...field} />
+                      <Input {...field} type="email" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="clientPhone"
@@ -581,12 +379,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Phone</FormLabel>
                     <FormControl>
-                      <Input type="tel" {...field} />
+                      <Input {...field} type="tel" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="clientAddress"
@@ -604,6 +403,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
+        {/* Quote Details */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Details</h3>
@@ -621,7 +421,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories.map((category) => (
+                        {categories.map((category: any) => (
                           <SelectItem key={category.id} value={category.id.toString()}>
                             {category.name}
                           </SelectItem>
@@ -647,12 +447,37 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       </FormControl>
                       <SelectContent>
                         {templates
-                          .filter((t) => t.categoryId.toString() === form.watch("categoryId"))
-                          .map((template) => (
+                          .filter((t: any) => t.categoryId.toString() === selectedCategoryId)
+                          .map((template: any) => (
                             <SelectItem key={template.id} value={template.id.toString()}>
-                              {template.name} {template.isDefault && "(Default)"}
+                              {template.name}
                             </SelectItem>
                           ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.values(QuoteStatus).map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -663,7 +488,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {form.watch("categoryId") && (
+        {/* Products */}
+        {selectedCategoryId && (
           <Card>
             <CardContent className="pt-6">
               <h3 className="font-semibold mb-4">Products</h3>
@@ -674,42 +500,25 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <div className="text-center py-4">No products found in this category</div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {products.map((product) => (
+                    {products.map((product: any) => (
                       <Card key={product.id}>
                         <CardContent className="pt-6">
                           <div className="flex justify-between items-start">
                             <div>
                               <h4 className="font-medium">{product.name}</h4>
                               <p className="text-sm text-muted-foreground">
-                                Base Price: ${product.basePrice}/{product.unit}
+                                Base Price: ${product.basePrice}
                               </p>
                             </div>
-                            {product.variations?.length ? (
-                              <Select onValueChange={(value) => addProduct(product, value)}>
-                                <FormControl>
-                                  <SelectTrigger className="w-[140px]">
-                                    <SelectValue placeholder="Select variant" />
-                                  </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {product.variations.map((variation) => (
-                                    <SelectItem key={variation.name} value={variation.price}>
-                                      {variation.name} - ${variation.price}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => addProduct(product)}
-                                className="h-8 w-8"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => addProduct(product)}
+                              className="h-8 w-8"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -722,16 +531,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => {
-                        const product = products.find(p => p.id === item.productId);
+                        const product = products.find((p: any) => p.id === item.productId);
                         return (
                           <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                             <div className="flex-1">
-                              <p className="font-medium">
-                                {product?.name}
-                                {item.variation && ` - ${item.variation}`}
-                              </p>
+                              <p className="font-medium">{product?.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                ${item.unitPrice}/{product?.unit}
+                                ${item.unitPrice}
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -777,10 +583,36 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
+        {/* Quote Settings */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Settings</h3>
             <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="paymentMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Payment Method</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select payment method" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.values(PaymentMethod).map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {method}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="discountType"
@@ -794,8 +626,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="percentage">Percentage</SelectItem>
-                        <SelectItem value="fixed">Fixed Amount</SelectItem>
+                        <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                        <SelectItem value="FIXED">Fixed Amount</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -808,12 +640,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 name="discountValue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Discount Value
-                      {form.watch("discountType") === "percentage" ? " (%)" : " ($)"}
-                    </FormLabel>
+                    <FormLabel>Discount Value</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" {...field} />
+                      <Input {...field} type="number" step="0.01" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -841,34 +670,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Tax Rate (%)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" {...field} />
+                      <Input {...field} type="number" step="0.01" />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="paymentMethod"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Payment Method</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.values(PaymentMethod).map((method) => (
-                          <SelectItem key={method} value={method}>
-                            {method}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -887,32 +690,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="percentage">Percentage</SelectItem>
-                        <SelectItem value="fixed">Fixed Amount</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.values(QuoteStatus).map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                        <SelectItem value="FIXED">Fixed Amount</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -925,97 +704,33 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 name="downPaymentValue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Down Payment Value
-                      {form.watch("downPaymentType") === "percentage" ? " (%)" : " ($)"}
-                    </FormLabel>
+                    <FormLabel>Down Payment Value</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" {...field} />
+                      <Input {...field} type="number" step="0.01" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Subtotal:</span>
-                <span>${calculateSubtotal(selectedProducts).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Discount:</span>
-                <span>-${calculateDiscount().toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Tax:</span>
-                <span>${calculateTax().toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-bold">
-                <span>Total:</span>
-                <span>${calculateTotal().toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Down Payment:</span>
-                <span>${calculateDownPayment().toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Remaining Balance:</span>
-                <span>${calculateRemainingBalance().toFixed(2)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {status === QuoteStatus.ACCEPTED && !quote?.signature && (
-          <SignatureCanvas
-            isOpen={showSignature}
-            onClose={() => setShowSignature(false)}
-            onSave={handleSignatureSave}
-            title="Sign Quote"
-            description="Please sign below to accept this quote. Your signature will be recorded with a timestamp and other verification data."
-          />
-        )}
-
-        {quote?.signature && (
-          <Card>
-            <CardContent className="pt-6">
-              <h3 className="font-semibold mb-2">Signature Information</h3>
-              <div className="space-y-2">
-                <img
-                  src={quote.signature.data}
-                  alt="Signature"
-                  className="border rounded p-2 max-w-md"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Signed on: {new Date(quote.signature.timestamp).toLocaleString()}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Timezone: {quote.signature.metadata.timezone}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end">
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending
               ? quote
