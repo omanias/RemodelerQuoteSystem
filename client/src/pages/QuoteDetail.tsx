@@ -16,7 +16,7 @@ export function QuoteDetail() {
     enabled: !!id,
   });
 
-  const { data: contact } = useQuery<Contact>({
+  const { data: contact, isLoading: isLoadingContact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId,
   });
@@ -26,7 +26,7 @@ export function QuoteDetail() {
   });
 
   // Show loading state
-  if (id && isLoadingQuote) {
+  if (id && (isLoadingQuote || isLoadingContact)) {
     return (
       <div className="container mx-auto py-6 max-w-5xl space-y-6">
         <div className="flex items-center gap-4">
