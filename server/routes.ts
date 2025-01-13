@@ -409,17 +409,17 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add categories routes after existing /api/categories GET endpoint
   app.post("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const { name, description } = req.body;
+      const { name, description, subcategories } = req.body;
 
-      // Create new category
+      // Create new category with subcategories array
       const [newCategory] = await db
         .insert(categories)
         .values({
           name,
           description,
+          subcategories: subcategories || [], // Ensure subcategories is always an array
           companyId: req.user!.companyId,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -460,12 +460,13 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Category not found" });
       }
 
-      // Update category
+      // Update category with subcategories array
       await db
         .update(categories)
         .set({
           name: req.body.name,
           description: req.body.description,
+          subcategories: req.body.subcategories || [], // Ensure subcategories is always an array
           updatedAt: new Date()
         })
         .where(eq(categories.id, categoryId));
