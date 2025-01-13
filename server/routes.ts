@@ -726,12 +726,73 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Quotes routes with proper middleware chain
+  // Get single quote by ID - more specific route first
+  app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      // Get quote with all necessary relations
+      const quote = await db.query.quotes.findFirst({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, req.user!.companyId)
+        ),
+        with: {
+          template: true,
+          company: true,
+          contact: true,
+          category: true
+        }
+      });
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Format numeric values and ensure proper typing
+      const formattedQuote = {
+        ...quote,
+        id: quote.id,
+        number: quote.number,
+        total: typeof quote.total === 'string' ? parseFloat(quote.total) : quote.total,
+        subtotal: typeof quote.subtotal === 'string' ? parseFloat(quote.subtotal) : quote.subtotal,
+        downPaymentValue: quote.downPaymentValue ? (typeof quote.downPaymentValue === 'string' ? parseFloat(quote.downPaymentValue) : quote.downPaymentValue) : null,
+        remainingBalance: quote.remainingBalance ? (typeof quote.remainingBalance === 'string' ? parseFloat(quote.remainingBalance) : quote.remainingBalance) : null,
+        discountValue: quote.discountValue ? (typeof quote.discountValue === 'string' ? parseFloat(quote.discountValue) : quote.discountValue) : 0,
+        taxAmount: quote.taxAmount ? (typeof quote.taxAmount === 'string' ? parseFloat(quote.taxAmount) : quote.taxAmount) : 0,
+        taxRate: quote.taxRate ? (typeof quote.taxRate === 'string' ? parseFloat(quote.taxRate) : quote.taxRate) : 0,
+        content: typeof quote.content === 'string' ? JSON.parse(quote.content) : quote.content,
+        // Ensure all required data is properly formatted
+        calculations: {
+          total: typeof quote.total === 'string' ? parseFloat(quote.total) : quote.total,
+          subtotal: typeof quote.subtotal === 'string' ? parseFloat(quote.subtotal) : quote.subtotal,
+          tax: quote.taxAmount ? (typeof quote.taxAmount === 'string' ? parseFloat(quote.taxAmount) : quote.taxAmount) : 0,
+          discount: quote.discountValue ? (typeof quote.discountValue === 'string' ? parseFloat(quote.discountValue) : quote.discountValue) : 0,
+          downPayment: quote.downPaymentValue ? (typeof quote.downPaymentValue === 'string' ? parseFloat(quote.downPaymentValue) : quote.downPaymentValue) : null,
+          remainingBalance: quote.remainingBalance ? (typeof quote.remainingBalance === 'string' ? parseFloat(quote.remainingBalance) : quote.remainingBalance) : null,
+        }
+      };
+
+      res.json(formattedQuote);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get all quotes - general route after specific route
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const companyQuotes = await db
-        .select()
-        .from(quotes)
-        .where(eq(quotes.companyId, req.user!.companyId));
+      const companyQuotes = await db.query.quotes.findMany({
+        where: eq(quotes.companyId, req.user!.companyId),
+        orderBy: (quotes, { desc }) => [desc(quotes.createdAt)],
+        with: {
+          contact: true
+        }
+      });
 
       res.json(companyQuotes);
     } catch (error) {
@@ -740,7 +801,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add this endpoint after the quotes GET endpoint (line 716)
+
+  // Add this endpoint after the quotes GET endpoint
   app.get("/api/contacts/:id/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const contactId = parseInt(req.params.id);

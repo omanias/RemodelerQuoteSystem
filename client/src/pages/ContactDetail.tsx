@@ -714,7 +714,7 @@ export function ContactDetail() {
                       </div>
                       <Link href={`/quotes/${quote.id}`}>
                         <Button variant="outline" size="sm">
-                          View Quote
+                          Edit Quote
                         </Button>
                       </Link>
                     </div>
