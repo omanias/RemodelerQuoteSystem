@@ -27,26 +27,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus, Save, Users } from "lucide-react";
 import { Link } from "wouter";
 
-interface SelectedProduct {
-  productId: number;
-  quantity: number;
-  variation?: string;
-  unitPrice: number;
-}
-
-interface QuoteFormProps {
-  quote?: Quote;
-  onSuccess?: () => void;
-  user?: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  };
-  defaultContactId?: string | null;
-  contact?: any;
-}
-
+// Update the PaymentMethod enum values in the schema
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
@@ -55,23 +36,12 @@ const quoteFormSchema = z.object({
   clientEmail: z.string().email("Invalid email address").optional(),
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
-  status: z.enum([
-    QuoteStatus.DRAFT,
-    QuoteStatus.SENT,
-    QuoteStatus.ACCEPTED,
-    QuoteStatus.REJECTED,
-    QuoteStatus.REVISED,
-  ]),
+  status: z.nativeEnum(QuoteStatus),
   content: z.any(),
   subtotal: z.number().min(0),
   total: z.number().min(0),
   notes: z.string().optional(),
-  paymentMethod: z.enum([
-    PaymentMethod.CASH,
-    PaymentMethod.CHECK,
-    PaymentMethod.CREDIT_CARD,
-    PaymentMethod.BANK_TRANSFER,
-  ]).optional(),
+  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   discountValue: z.number().min(0).optional(),
   discountCode: z.string().optional(),
@@ -117,20 +87,22 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const url = quote ? `/api/quotes/${quote.id}` : "/api/quotes";
       const method = quote ? "PUT" : "POST";
 
+      const requestBody = {
+        ...data,
+        contactId: data.contactId ? parseInt(data.contactId) : null,
+        templateId: data.templateId ? parseInt(data.templateId) : null,
+        categoryId: data.categoryId ? parseInt(data.categoryId) : null,
+        content: {
+          products: selectedProducts,
+        },
+      };
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...data,
-          contactId: data.contactId ? parseInt(data.contactId) : null,
-          templateId: data.templateId ? parseInt(data.templateId) : null,
-          categoryId: data.categoryId ? parseInt(data.categoryId) : null,
-          content: {
-            products: selectedProducts,
-          },
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -162,35 +134,37 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
-    defaultValues: quote ? {
-      contactId: quote.contactId?.toString(),
-      templateId: quote.templateId?.toString(),
-      categoryId: quote.categoryId?.toString(),
-      clientName: quote.clientName,
-      clientEmail: quote.clientEmail,
-      clientPhone: quote.clientPhone || "",
-      clientAddress: quote.clientAddress || "",
-      status: quote.status as QuoteStatus,
-      content: quote.content,
-      subtotal: parseFloat(quote.subtotal.toString()),
-      total: parseFloat(quote.total.toString()),
-      notes: quote.notes || "",
-      paymentMethod: quote.paymentMethod as PaymentMethod,
-      discountType: quote.discountType as "PERCENTAGE" | "FIXED",
-      discountValue: quote.discountValue ? parseFloat(quote.discountValue.toString()) : undefined,
-      discountCode: quote.discountCode,
-      downPaymentType: quote.downPaymentType as "PERCENTAGE" | "FIXED",
-      downPaymentValue: quote.downPaymentValue ? parseFloat(quote.downPaymentValue.toString()) : undefined,
-    } : {
-      clientName: contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
-      clientEmail: contact?.primaryEmail || "",
-      clientPhone: contact?.primaryPhone || "",
-      clientAddress: contact?.primaryAddress || "",
-      contactId: defaultContactId || undefined,
-      status: QuoteStatus.DRAFT,
-      subtotal: 0,
-      total: 0,
-    },
+    defaultValues: quote
+      ? {
+          contactId: quote.contactId?.toString(),
+          templateId: quote.templateId?.toString(),
+          categoryId: quote.categoryId?.toString(),
+          clientName: quote.clientName,
+          clientEmail: quote.clientEmail,
+          clientPhone: quote.clientPhone || "",
+          clientAddress: quote.clientAddress || "",
+          status: quote.status as QuoteStatus,
+          content: quote.content,
+          subtotal: parseFloat(quote.subtotal.toString()),
+          total: parseFloat(quote.total.toString()),
+          notes: quote.notes || "",
+          paymentMethod: quote.paymentMethod as PaymentMethod,
+          discountType: quote.discountType as "PERCENTAGE" | "FIXED",
+          discountValue: quote.discountValue ? parseFloat(quote.discountValue.toString()) : undefined,
+          discountCode: quote.discountCode,
+          downPaymentType: quote.downPaymentType as "PERCENTAGE" | "FIXED",
+          downPaymentValue: quote.downPaymentValue ? parseFloat(quote.downPaymentValue.toString()) : undefined,
+        }
+      : {
+          clientName: contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
+          clientEmail: contact?.primaryEmail || "",
+          clientPhone: contact?.primaryPhone || "",
+          clientAddress: contact?.primaryAddress || "",
+          contactId: defaultContactId || undefined,
+          status: QuoteStatus.DRAFT,
+          subtotal: 0,
+          total: 0,
+        },
   });
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -551,4 +525,24 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       </form>
     </Form>
   );
+}
+
+interface SelectedProduct {
+  productId: number;
+  quantity: number;
+  variation?: string;
+  unitPrice: number;
+}
+
+interface QuoteFormProps {
+  quote?: Quote;
+  onSuccess?: () => void;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  defaultContactId?: string | null;
+  contact?: any;
 }
