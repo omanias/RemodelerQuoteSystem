@@ -1,12 +1,12 @@
 import PDFDocument from 'pdfkit';
-import { Quote, Company, Template, Category } from '@db/schema';
+import { Quote, Company, Template } from '@db/schema';
 import path from 'path';
 import fs from 'fs';
 
 interface Product {
   name: string;
   description?: string;
-  category?: Category;
+  category?: string;
   variation?: string;
   quantity: number;
   unit?: string;
@@ -28,18 +28,6 @@ interface GenerateQuotePDFParams {
     showUnitPrice: boolean;
     showTotalPrice: boolean;
   };
-}
-
-// Helper function to safely format monetary values
-function formatMoney(value: string | number | null): string {
-  if (value === null) return '-';
-  const numericValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(numericValue)) return '-';
-  return numericValue.toLocaleString('en-US', {
-    style: 'decimal',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
 }
 
 export async function generateQuotePDF({ quote, company, settings }: GenerateQuotePDFParams): Promise<Buffer> {
@@ -183,7 +171,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Parse and group products by category
       const products = quote.content.products || [];
       const productsByCategory = products.reduce<Record<string, Product[]>>((acc, product) => {
-        const categoryName = product.category?.name || 'Uncategorized';
+        const categoryName = product.category || 'Uncategorized';
         if (!acc[categoryName]) {
           acc[categoryName] = [];
         }
@@ -191,11 +179,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         return acc;
       }, {});
 
-      // Sort categories alphabetically to ensure consistent order
-      const sortedCategories = Object.entries(productsByCategory).sort(([a], [b]) => a.localeCompare(b));
-
       // Iterate through categories and their products
-      sortedCategories.forEach(([categoryName, categoryProducts], categoryIndex) => {
+      Object.entries(productsByCategory).forEach(([categoryName, categoryProducts], categoryIndex) => {
         // Calculate height needed for category header
         const categoryHeaderHeight = 25;
 
@@ -280,8 +265,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           // Unit Price (if enabled)
           if (settings.showUnitPrice) {
             xPos += columnWidths[2];
-            const unitPrice = formatMoney(product.price); // Use formatMoney function
-            doc.text(unitPrice, xPos, currentY, {
+            const unitPrice = Number(product.price).toFixed(2);
+            doc.text(`$${unitPrice}`, xPos, currentY, {
               width: columnWidths[3],
               align: 'right'
             });
@@ -291,8 +276,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           if (settings.showTotalPrice) {
             xPos += (settings.showUnitPrice ? columnWidths[3] : columnWidths[2]);
             const total = Number(product.price) * Number(product.quantity);
-            const formattedTotal = formatMoney(total); // Use formatMoney function
-            doc.text(formattedTotal, xPos, currentY, {
+            doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
               width: settings.showUnitPrice ? columnWidths[4] : columnWidths[3],
               align: 'right'
             });
@@ -311,7 +295,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         });
 
         // Add extra space between categories
-        if (categoryIndex < sortedCategories.length - 1) {
+        if (categoryIndex < Object.keys(productsByCategory).length - 1) {
           currentY += 15;
         }
       });
@@ -335,7 +319,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       doc.font('Helvetica')
          .fontSize(10)
          .text('Subtotal:', summaryX + 10, currentY + 10)
-         .text(`$${formatMoney(subtotal)}`, summaryX + summaryWidth - 60, currentY + 10, { align: 'right' });
+         .text(`$${subtotal.toFixed(2)}`, summaryX + summaryWidth - 60, currentY + 10, { align: 'right' });
 
       let summaryY = currentY + 30;
 
@@ -346,7 +330,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           ? `Discount (${discountValue}%):`
           : 'Discount (fixed):';
         doc.text(discountLabel, summaryX + 10, summaryY)
-           .text(`-$${formatMoney(discountValue)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+           .text(`-$${discountValue.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
@@ -355,7 +339,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         const taxRate = Number(quote.taxRate);
         const taxAmount = (subtotal * (taxRate / 100));
         doc.text(`Tax (${taxRate}%):`, summaryX + 10, summaryY)
-           .text(`$${formatMoney(taxAmount)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+           .text(`$${taxAmount.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
@@ -363,7 +347,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       const total = Number(quote.total || 0);
       doc.font('Helvetica-Bold')
          .text('Total:', summaryX + 10, summaryY)
-         .text(`$${formatMoney(total)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+         .text(`$${total.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
 
       // Payment Terms (if applicable)
       if (quote.downPaymentValue) {
@@ -375,8 +359,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            .text('Payment Terms:', 50, summaryY)
            .moveDown(0.5)
            .text([
-             `Down Payment Required: $${formatMoney(downPayment)} (${quote.downPaymentType})`,
-             `Remaining Balance: $${formatMoney(remainingBalance)}`
+             `Down Payment Required: $${downPayment.toFixed(2)} (${quote.downPaymentType})`,
+             `Remaining Balance: $${remainingBalance.toFixed(2)}`
            ].join('\n'));
       }
 
@@ -418,6 +402,43 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
             doc.moveDown(0.8);
           }
         });
+      }
+
+      // Signature Section
+      if (quote.signature) {
+        if (doc.y + 200 > pageHeight) {
+          doc.addPage();
+        } else {
+          doc.moveDown(4);
+        }
+
+        doc.font('Helvetica-Bold')
+           .fontSize(14)
+           .text('Authorization', { align: 'center' })
+           .moveDown()
+           .font('Helvetica')
+           .fontSize(10)
+           .text('By signing below, you agree to the terms and conditions outlined in this quote and authorize the work to proceed.', { align: 'center' })
+           .moveDown(2);
+
+        const signatureData = quote.signature.data;
+        if (signatureData) {
+          try {
+            const imgBuffer = Buffer.from(signatureData.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+            doc.image(imgBuffer, { width: 200, align: 'center' });
+
+            doc.moveDown(0.5)
+               .fontSize(10)
+               .text(`Signed by: ${quote.clientName}`, { align: 'center' })
+               .text(`Date: ${new Date(quote.signature.timestamp).toLocaleDateString()}`, { align: 'center' })
+               .moveDown(0.5)
+               .fontSize(8)
+               .fillColor('#666666')
+               .text(`Document signed electronically. IP Address: ${quote.signature.metadata.ipAddress}`, { align: 'center' });
+          } catch (signatureError) {
+            console.error('Error adding signature to PDF:', signatureError);
+          }
+        }
       }
 
       // Complete the PDF generation
