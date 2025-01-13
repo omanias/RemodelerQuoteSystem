@@ -361,6 +361,40 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.delete("/api/categories/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: "Invalid category ID" });
+      }
+
+      // Verify category exists and belongs to company
+      const existingCategory = await db.query.categories.findFirst({
+        where: and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingCategory) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      // Delete the category
+      await db
+        .delete(categories)
+        .where(and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        ));
+
+      res.json({ message: "Category deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Contacts routes with proper middleware chain
   app.get("/api/contacts", requireAuth, requireCompanyAccess, async (req, res) => {
     try {

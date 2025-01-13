@@ -16,6 +16,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -26,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { MoreVertical, Plus, Search, ArrowLeft, Loader2 } from "lucide-react";
 import { CategoryForm } from "@/components/CategoryForm";
 import { Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 
 interface Category {
   id: number;
@@ -40,6 +51,10 @@ interface Category {
 export function Categories() {
   const [search, setSearch] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editCategory, setEditCategory] = useState<Category | null>(null);
+  const [deleteCategory, setDeleteCategory] = useState<Category | null>(null);
+  const { toast } = useToast();
 
   const { data: categories = [], isLoading, refetch } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -49,6 +64,36 @@ export function Categories() {
     category.name.toLowerCase().includes(search.toLowerCase()) ||
     (category.description || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleDelete = async () => {
+    if (!deleteCategory) return;
+
+    try {
+      const response = await fetch(`/api/categories/${deleteCategory.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      toast({
+        title: "Category deleted",
+        description: "The category has been deleted successfully.",
+      });
+
+      await refetch();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteCategory(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -135,9 +180,17 @@ export function Categories() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog>
+                        <Dialog open={editDialogOpen && editCategory?.id === category.id} 
+                               onOpenChange={(open) => {
+                                 setEditDialogOpen(open);
+                                 if (!open) setEditCategory(null);
+                               }}>
                           <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                            <DropdownMenuItem onSelect={(e) => {
+                              e.preventDefault();
+                              setEditCategory(category);
+                              setEditDialogOpen(true);
+                            }}>
                               Edit
                             </DropdownMenuItem>
                           </DialogTrigger>
@@ -152,11 +205,19 @@ export function Categories() {
                                 description: category.description || undefined
                               }}
                               onSuccess={() => {
+                                setEditDialogOpen(false);
+                                setEditCategory(null);
                                 refetch();
                               }}
                             />
                           </DialogContent>
                         </Dialog>
+                        <DropdownMenuItem 
+                          className="text-destructive"
+                          onSelect={() => setDeleteCategory(category)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -166,6 +227,24 @@ export function Categories() {
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog open={!!deleteCategory} onOpenChange={(open) => !open && setDeleteCategory(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the category
+              "{deleteCategory?.name}" and remove it from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
