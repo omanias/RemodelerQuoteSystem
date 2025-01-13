@@ -315,7 +315,7 @@ export function Quotes() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Link href={`/quotes/${quote.id}`}>
+                        <Link href={`/quotes/${quote.id}?edit=true`}>
                           <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                             Edit
                           </DropdownMenuItem>

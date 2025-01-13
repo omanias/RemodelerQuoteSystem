@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { QuoteStatus, type Quote, type Category, type Template, type PaymentMethod } from "@db/schema"; // Import PaymentMethod
+import { QuoteStatus, PaymentMethod, type Quote, type Category, type Template } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileEdit, UserPlus } from "lucide-react";
 import { Link } from "wouter";
@@ -40,7 +40,7 @@ const quoteFormSchema = z.object({
   subtotal: z.number().min(0),
   total: z.number().min(0),
   notes: z.string().nullable(),
-  paymentMethod: z.nativeEnum(PaymentMethod).nullable(), // Use nativeEnum for PaymentMethod
+  paymentMethod: z.nativeEnum(PaymentMethod).nullable(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
   discountValue: z.number().min(0).nullable(),
   discountCode: z.string().nullable(),
