@@ -22,26 +22,51 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
+import { type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus, Save, Users } from "lucide-react";
 import { Link } from "wouter";
+import { Search } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Update the PaymentMethod enum values in the schema
+// Define the enums first
+export const QuoteStatus = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  ACCEPTED: "ACCEPTED",
+  REJECTED: "REJECTED",
+  REVISED: "REVISED",
+} as const;
+
+export const PaymentMethod = {
+  CASH: "CASH",
+  CHECK: "CHECK",
+  CREDIT_CARD: "CREDIT_CARD",
+  BANK_TRANSFER: "BANK_TRANSFER",
+} as const;
+
+// Update the schema with proper types
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
   categoryId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").optional(),
+  clientEmail: z.string().email("Invalid email address").optional().nullable(),
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
-  status: z.nativeEnum(QuoteStatus),
-  content: z.any(),
+  status: z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "REVISED"]),
+  content: z.object({
+    products: z.array(z.object({
+      productId: z.number(),
+      quantity: z.number(),
+      variation: z.string().optional(),
+      unitPrice: z.number()
+    })).optional()
+  }).optional(),
   subtotal: z.number().min(0),
   total: z.number().min(0),
   notes: z.string().optional(),
-  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+  paymentMethod: z.enum(["CASH", "CHECK", "CREDIT_CARD", "BANK_TRANSFER"]).optional(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   discountValue: z.number().min(0).optional(),
   discountCode: z.string().optional(),
@@ -51,35 +76,67 @@ const quoteFormSchema = z.object({
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
+interface Product {
+  id: number;
+  name: string;
+  description?: string;
+  sku?: string;
+  price: number;
+}
+
+interface SelectedProduct {
+  productId: number;
+  quantity: number;
+  variation?: string;
+  unitPrice: number;
+}
+
+interface QuoteFormProps {
+  quote?: Quote;
+  onSuccess?: () => void;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  defaultContactId?: string | null;
+  contact?: {
+    firstName?: string;
+    lastName?: string;
+    primaryEmail?: string;
+    primaryPhone?: string;
+    primaryAddress?: string;
+  };
+}
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
-    if (quote?.content?.products) {
+    if (quote?.content && Array.isArray(quote.content.products)) {
       return quote.content.products.map((p: any) => ({
         productId: p.id,
         quantity: p.quantity || 1,
-        variation: p.variation,
-        unitPrice: parseFloat(p.price) || 0,
+        variation: p.variation || "",
+        unitPrice: typeof p.price === 'number' ? p.price : parseFloat(p.price) || 0,
       }));
     }
     return [];
   });
 
-  // Query for categories and templates
-  const { data: categories = [] } = useQuery({
-    queryKey: ["/api/categories"],
-  });
-
-  const { data: templates = [] } = useQuery({
-    queryKey: ["/api/templates"],
-  });
-
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(
     quote?.categoryId?.toString() || undefined
   );
+
+  // Query for categories and templates
+  const { data: categories = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: templates = [] } = useQuery<any[]>({
+    queryKey: ["/api/templates"],
+  });
 
   // Create/Update quote mutation
   const mutation = useMutation({
@@ -143,12 +200,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           clientEmail: quote.clientEmail,
           clientPhone: quote.clientPhone || "",
           clientAddress: quote.clientAddress || "",
-          status: quote.status as QuoteStatus,
-          content: quote.content,
+          status: quote.status,
+          content: quote.content || { products: [] },
           subtotal: parseFloat(quote.subtotal.toString()),
           total: parseFloat(quote.total.toString()),
           notes: quote.notes || "",
-          paymentMethod: quote.paymentMethod as PaymentMethod,
+          paymentMethod: quote.paymentMethod,
           discountType: quote.discountType as "PERCENTAGE" | "FIXED",
           discountValue: quote.discountValue ? parseFloat(quote.discountValue.toString()) : undefined,
           discountCode: quote.discountCode,
@@ -157,15 +214,64 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         }
       : {
           clientName: contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
-          clientEmail: contact?.primaryEmail || "",
+          clientEmail: contact?.primaryEmail || null,
           clientPhone: contact?.primaryPhone || "",
           clientAddress: contact?.primaryAddress || "",
           contactId: defaultContactId || undefined,
-          status: QuoteStatus.DRAFT,
+          status: "DRAFT",
+          content: { products: [] },
           subtotal: 0,
           total: 0,
         },
   });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+
+  // Add products query
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products", selectedCategoryId],
+    enabled: !!selectedCategoryId,
+  });
+
+  // Update filtered products when search query or products change
+  useEffect(() => {
+    if (!products.length) {
+      setFilteredProducts([]);
+      return;
+    }
+
+    const lowercaseQuery = searchQuery.toLowerCase();
+    const filtered = products.filter((product) =>
+      product.name.toLowerCase().includes(lowercaseQuery) ||
+      product.description?.toLowerCase().includes(lowercaseQuery) ||
+      product.sku?.toLowerCase().includes(lowercaseQuery)
+    );
+
+    setFilteredProducts(filtered);
+  }, [searchQuery, products]);
+
+  const addProduct = (product: Product) => {
+    setSelectedProducts((prev) => [
+      ...prev,
+      {
+        productId: product.id,
+        quantity: 1,
+        variation: "",
+        unitPrice: product.price,
+      },
+    ]);
+  };
+
+  const removeProduct = (productId: number) => {
+    setSelectedProducts((prev) => prev.filter((p) => p.productId !== productId));
+  };
+
+  const updateProductQuantity = (productId: number, quantity: number) => {
+    setSelectedProducts((prev) =>
+      prev.map((p) => (p.productId === productId ? { ...p, quantity } : p))
+    );
+  };
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && e.ctrlKey) {
@@ -236,7 +342,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Email</FormLabel>
                     <FormControl>
-                      <Input {...field} type="email" />
+                      <Input {...field} type="email" value={field.value || ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -359,8 +465,110 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">
-                <h3 className="font-semibold">Products</h3>
-                {/* Add product selection UI here */}
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold">Products</h3>
+                  <div className="relative w-64">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search products..."
+                      className="pl-8"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Selected Products */}
+                  {selectedProducts.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium">Selected Products</h4>
+                      <div className="space-y-2">
+                        {selectedProducts.map((selected) => {
+                          const product = products.find((p: Product) => p.id === selected.productId);
+                          if (!product) return null;
+
+                          return (
+                            <div key={selected.productId} className="flex items-center justify-between p-2 border rounded-md">
+                              <div className="flex-1">
+                                <p className="font-medium">{product.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  ${Number(selected.unitPrice).toLocaleString()} per unit
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateProductQuantity(selected.productId, Math.max(1, selected.quantity - 1))}
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <Input
+                                  type="number"
+                                  min="1"
+                                  value={selected.quantity}
+                                  onChange={(e) =>
+                                    updateProductQuantity(selected.productId, Math.max(1, parseInt(e.target.value) || 1))
+                                  }
+                                  className="w-16 text-center"
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  onClick={() => updateProductQuantity(selected.productId, selected.quantity + 1)}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeProduct(selected.productId)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Available Products */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Available Products</h4>
+                    <ScrollArea className="h-[300px] pr-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {filteredProducts.map((product) => (
+                          <div
+                            key={product.id}
+                            className="p-4 border rounded-lg hover:border-primary/50 transition-colors"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="font-medium">{product.name}</h4>
+                                <p className="text-sm text-muted-foreground">{product.description}</p>
+                                {product.sku && (
+                                  <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
+                                )}
+                              </div>
+                              <p className="font-medium">${Number(product.price).toLocaleString()}</p>
+                            </div>
+                            <Button
+                              className="w-full mt-2"
+                              variant="outline"
+                              onClick={() => addProduct(product)}
+                              disabled={selectedProducts.some((p) => p.productId === product.id)}
+                            >
+                              {selectedProducts.some((p) => p.productId === product.id) ? "Added" : "Add to Quote"}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -525,24 +733,4 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       </form>
     </Form>
   );
-}
-
-interface SelectedProduct {
-  productId: number;
-  quantity: number;
-  variation?: string;
-  unitPrice: number;
-}
-
-interface QuoteFormProps {
-  quote?: Quote;
-  onSuccess?: () => void;
-  user?: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  };
-  defaultContactId?: string | null;
-  contact?: any;
 }

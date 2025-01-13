@@ -14,7 +14,7 @@ export function QuoteStatusActions({ quote }: QuoteStatusActionsProps) {
   const queryClient = useQueryClient();
 
   const updateQuoteStatus = useMutation({
-    mutationFn: async ({ status, signature }: { status: keyof typeof QuoteStatus, signature?: string }) => {
+    mutationFn: async ({ status, signature }: { status: keyof typeof QuoteStatus, signature?: { data: string; timestamp: string; metadata: any } }) => {
       const response = await fetch(`/api/quotes/${quote.id}`, {
         method: "PUT",
         headers: {
@@ -58,10 +58,10 @@ export function QuoteStatusActions({ quote }: QuoteStatusActionsProps) {
     }
   };
 
-  const handleSignatureSave = (signatureData: string) => {
+  const handleSignatureSave = (signature: { data: string; timestamp: string; metadata: any }) => {
     updateQuoteStatus.mutate({
       status: "ACCEPTED",
-      signature: signatureData,
+      signature,
     });
   };
 
@@ -73,7 +73,7 @@ export function QuoteStatusActions({ quote }: QuoteStatusActionsProps) {
         )}
         {quote.status === "SENT" && (
           <>
-            <Button onClick={() => handleStatusChange("ACCEPTED")} variant="success">
+            <Button onClick={() => handleStatusChange("ACCEPTED")} variant="default" className="bg-green-600 hover:bg-green-700">
               Accept
             </Button>
             <Button onClick={() => handleStatusChange("REJECTED")} variant="destructive">
