@@ -124,7 +124,7 @@ export function ContactDetail() {
         credentials: 'include',
         body: JSON.stringify({
           ...data,
-          assignedUserId: 1,
+          // Remove hardcoded assignedUserId
           companyId: 1,
         }),
       });
