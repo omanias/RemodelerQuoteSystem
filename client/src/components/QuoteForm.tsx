@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
 import {
   Form,
   FormControl,
@@ -23,44 +24,65 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { QuoteStatus, PaymentMethod, type Quote } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
-import { UserPlus } from "lucide-react";
+import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
+import { SignatureCanvas } from "@/components/SignatureCanvas";
 
-// Quote form schema that matches the database types
 const quoteFormSchema = z.object({
-  contactId: z.string().nullable(),
-  templateId: z.string().nullable(),
-  categoryId: z.string().nullable(),
+  contactId: z.string().min(1, "Contact is required"),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").nullable(),
-  clientPhone: z.string().nullable(),
-  clientAddress: z.string().nullable(),
+  clientEmail: z.string().email("Invalid email address"),
+  clientPhone: z.string().optional(),
+  clientAddress: z.string().optional(),
+  categoryId: z.string().min(1, "Category is required"),
   status: z.nativeEnum(QuoteStatus),
-  content: z.record(z.any()).default({}),
-  subtotal: z.number().min(0),
-  total: z.number().min(0),
-  notes: z.string().nullable(),
-  paymentMethod: z.nativeEnum(PaymentMethod).nullable(),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  discountValue: z.number().min(0).nullable(),
-  discountCode: z.string().nullable(),
-  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  downPaymentValue: z.number().min(0).nullable(),
+  paymentMethod: z.nativeEnum(PaymentMethod),
+  discountType: z.enum(["percentage", "fixed"]).optional(),
+  discountValue: z.string().optional(),
+  discountCode: z.string().optional(),
+  taxRate: z.string().optional(),
+  downPaymentType: z.enum(["percentage", "fixed"]).optional(),
+  downPaymentValue: z.string().optional(),
+  notes: z.string().optional(),
+  templateId: z.string().min(1, "Template is required"),
 });
 
-type QuoteFormValues = z.infer<typeof quoteFormSchema>;
+type QuoteFormData = z.infer<typeof quoteFormSchema>;
 
 interface QuoteFormProps {
   quote?: Quote;
   onSuccess?: () => void;
   user?: {
     id: number;
-    name: string;
     email: string;
-    role: string;
+    name: string;
   };
   defaultContactId?: string | null;
-  contact?: any;
+  contact?: any | null;
+}
+
+interface Contact {
+  id: number;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  primaryPhone: string;
+  primaryAddress: string;
+}
+
+interface Product {
+  id: number;
+  name: string;
+  basePrice: number;
+  unit: string;
+  categoryId: number;
+  variations?: Array<{ name: string; price: string }>;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  products: Product[];
 }
 
 interface SelectedProduct {
@@ -70,47 +92,259 @@ interface SelectedProduct {
   unitPrice: number;
 }
 
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
-    if (quote?.content && typeof quote.content === 'object' && 'products' in quote.content) {
-      return (quote.content.products as any[]).map((p: any) => ({
+  const [selectedProducts, setSelectedProducts] = useState(() => {
+    if (quote?.content?.products) {
+      return quote.content.products.map((p: any) => ({
         productId: p.id,
         quantity: p.quantity || 1,
         variation: p.variation,
-        unitPrice: Number(p.price) || 0,
+        unitPrice: parseFloat(p.price) || 0,
       }));
     }
     return [];
   });
 
-  const form = useForm<QuoteFormValues>({
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+  });
+
+  const { data: templates = [] } = useQuery<any[]>({
+    queryKey: ["/api/templates"],
+  });
+
+  const form = useForm<QuoteFormData>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      contactId: quote?.contactId?.toString() || defaultContactId || null,
-      templateId: quote?.templateId?.toString() || null,
-      categoryId: quote?.categoryId?.toString() || null,
-      clientName: quote?.clientName || (contact ? `${contact.firstName || ''} ${contact.lastName || ''}`.trim() : ""),
-      clientEmail: quote?.clientEmail || contact?.primaryEmail || null,
-      clientPhone: quote?.clientPhone || contact?.primaryPhone || null,
-      clientAddress: quote?.clientAddress || contact?.primaryAddress || null,
+      contactId: quote?.contactId?.toString() || defaultContactId || "",
+      clientName: quote?.clientName || contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
+      categoryId: quote?.categoryId?.toString() || "",
       status: quote?.status || QuoteStatus.DRAFT,
-      content: quote?.content || {},
-      subtotal: quote ? Number(quote.subtotal) : 0,
-      total: quote ? Number(quote.total) : 0,
-      notes: quote?.notes || null,
-      paymentMethod: quote?.paymentMethod || null,
-      discountType: (quote?.discountType as "PERCENTAGE" | "FIXED" | null) || null,
-      discountValue: quote?.discountValue ? Number(quote.discountValue) : null,
-      discountCode: null,
-      downPaymentType: (quote?.downPaymentType as "PERCENTAGE" | "FIXED" | null) || null,
-      downPaymentValue: quote?.downPaymentValue ? Number(quote.downPaymentValue) : null,
+      paymentMethod: quote?.paymentMethod || PaymentMethod.CASH,
+      discountType: quote?.discountType || "percentage",
+      discountValue: quote?.discountValue?.toString() || "0",
+      discountCode: quote?.discountCode || "",
+      taxRate: quote?.taxRate?.toString() || "0",
+      downPaymentType: quote?.downPaymentType || "percentage",
+      downPaymentValue: quote?.downPaymentValue?.toString() || "0",
+      notes: quote?.notes || "",
+      templateId: quote?.templateId?.toString() || "",
     },
   });
 
-  // Basic form submission handler
-  const onSubmit = async (data: QuoteFormValues) => {
+  useEffect(() => {
+    if (contact) {
+      form.setValue("contactId", contact.id.toString());
+      form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
+      form.setValue("clientEmail", contact.primaryEmail);
+      form.setValue("clientPhone", contact.primaryPhone);
+      form.setValue("clientAddress", contact.primaryAddress);
+    }
+  }, [contact, form]);
+
+  const selectedContactId = form.watch("contactId");
+  useEffect(() => {
+    if (selectedContactId && !contact) {
+      const selectedContact = contacts.find(c => c.id.toString() === selectedContactId);
+      if (selectedContact) {
+        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+        form.setValue("clientEmail", selectedContact.primaryEmail);
+        form.setValue("clientPhone", selectedContact.primaryPhone);
+        form.setValue("clientAddress", selectedContact.primaryAddress);
+      }
+    }
+  }, [selectedContactId, contacts, form, contact]);
+
+  const selectedCategoryId = form.watch("categoryId");
+  useEffect(() => {
+    if (quote?.categoryId && !selectedCategoryId) {
+      form.setValue("categoryId", quote.categoryId.toString());
+    }
+  }, [quote, form, selectedCategoryId]);
+
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    select: (data) =>
+      data.filter((product) => product.categoryId.toString() === selectedCategoryId),
+    enabled: !!selectedCategoryId,
+  });
+
+  useEffect(() => {
+    if (selectedCategoryId && templates?.length > 0) {
+      const categoryTemplates = templates.filter((t) => t.categoryId.toString() === selectedCategoryId);
+      const defaultTemplate = categoryTemplates.find((t) => t.isDefault) || categoryTemplates[0];
+
+      if (defaultTemplate) {
+        form.setValue("templateId", defaultTemplate.id.toString());
+      }
+    }
+  }, [selectedCategoryId, templates, form]);
+
+  const parseNumber = (value: any): number => {
+    if (value === undefined || value === null || value === '') return 0;
+    const parsed = parseFloat(value.toString());
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  const calculateSubtotal = (products: SelectedProduct[]): number => {
+    if (!products.length) return 0;
+    return products.reduce((sum: number, item: SelectedProduct) => {
+      const quantity = parseNumber(item.quantity);
+      const price = parseNumber(item.unitPrice);
+      return sum + (quantity * price);
+    }, 0);
+  };
+
+  const calculateDiscount = () => {
+    const subtotal = calculateSubtotal(selectedProducts);
+    const discountType = form.watch("discountType");
+    const discountValue = parseNumber(form.watch("discountValue"));
+
+    return discountType === "percentage"
+      ? (subtotal * discountValue) / 100
+      : discountValue;
+  };
+
+  const calculateTax = () => {
+    const subtotal = calculateSubtotal(selectedProducts);
+    const discount = calculateDiscount();
+    const taxRate = parseNumber(form.watch("taxRate"));
+
+    return ((subtotal - discount) * taxRate) / 100;
+  };
+
+  const calculateTotal = () => {
+    const subtotal = calculateSubtotal(selectedProducts);
+    const discount = calculateDiscount();
+    const tax = calculateTax();
+    return subtotal - discount + tax;
+  };
+
+  const calculateDownPayment = () => {
+    const total = calculateTotal();
+    const downPaymentType = form.watch("downPaymentType");
+    const downPaymentValue = parseNumber(form.watch("downPaymentValue"));
+
+    return downPaymentType === "percentage"
+      ? (total * downPaymentValue) / 100
+      : downPaymentValue;
+  };
+
+  const calculateRemainingBalance = () => {
+    const total = calculateTotal();
+    const downPayment = calculateDownPayment();
+    return total - downPayment;
+  };
+
+  const addProduct = (product: Product, variationPrice?: string) => {
+    if (variationPrice) {
+      // For products with variations, add only the selected variation
+      const variation = product.variations?.find(v => v.price === variationPrice);
+      if (variation) {
+        setSelectedProducts(prev => [
+          ...prev,
+          {
+            productId: product.id,
+            quantity: 1,
+            variation: variation.name,
+            unitPrice: parseFloat(variationPrice),
+          }
+        ]);
+      }
+    } else {
+      // For products without variations, add the base product
+      setSelectedProducts(prev => [
+        ...prev,
+        {
+          productId: product.id,
+          quantity: 1,
+          unitPrice: product.basePrice,
+        }
+      ]);
+    }
+  };
+
+  const updateQuantity = (index: number, value: number) => {
+    setSelectedProducts(prev =>
+      prev.map((item, i) =>
+        i === index ? { ...item, quantity: Math.max(1, value) } : item
+      )
+    );
+  };
+
+  const removeProduct = (index: number) => {
+    setSelectedProducts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const mutation = useMutation({
+    mutationFn: async (data: QuoteFormData) => {
+      const total = calculateSubtotal(selectedProducts);
+      const formattedProducts = selectedProducts.map((item: SelectedProduct) => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: parseNumber(item.unitPrice),
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
+
+      const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
+        method: quote ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          ...data,
+          content: {
+            products: formattedProducts,
+          },
+          total,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to save quote");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      if (quote?.id) {
+        queryClient.invalidateQueries({ queryKey: [`/api/quotes/${quote.id}`] });
+      }
+      toast({
+        title: "Success",
+        description: quote ? "Quote updated successfully" : "Quote created successfully",
+      });
+      onSuccess?.();
+    },
+    onError: (error: Error) => {
+      console.error("Quote submission error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save quote",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = async (data: QuoteFormData) => {
     try {
       if (selectedProducts.length === 0) {
         toast({
@@ -120,106 +354,146 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         });
         return;
       }
+      await mutation.mutateAsync(data);
+    } catch (error) {
+      console.error("Form submission error:", error);
+    }
+  };
 
-      const url = quote ? `/api/quotes/${quote.id}` : "/api/quotes";
-      const method = quote ? "PUT" : "POST";
+  const autoSaveMutation = useMutation({
+    mutationFn: async (data: QuoteFormData) => {
+      if (!quote?.id) return; // Only auto-save existing quotes
 
-      const response = await fetch(url, {
-        method,
+      const total = calculateTotal();
+      const downPayment = calculateDownPayment();
+      const remainingBalance = calculateRemainingBalance();
+      const subtotal = calculateSubtotal(selectedProducts);
+      const discount = calculateDiscount();
+      const tax = calculateTax();
+
+      const formattedProducts = selectedProducts.map(item => {
+        const product = products.find(p => p.id === item.productId);
+        return {
+          id: item.productId,
+          quantity: item.quantity,
+          name: product?.name,
+          price: parseNumber(item.unitPrice),
+          variation: item.variation,
+          unit: product?.unit
+        };
+      });
+
+      setIsAutoSaving(true);
+
+      const response = await fetch(`/api/quotes/${quote.id}`, {
+        method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...data,
+          contactId: parseInt(data.contactId),
+          categoryId: parseInt(data.categoryId),
+          templateId: parseInt(data.templateId),
+          clientName: data.clientName,
+          clientEmail: data.clientEmail,
+          clientPhone: data.clientPhone,
+          clientAddress: data.clientAddress,
+          selectedProducts: formattedProducts,
+          subtotal: parseNumber(subtotal),
+          total: parseNumber(total),
+          downPaymentValue: parseNumber(downPayment),
+          remainingBalance: parseNumber(remainingBalance),
+          discountType: data.discountType,
+          discountValue: parseNumber(data.discountValue),
+          discountCode: data.discountCode,
+          taxRate: parseNumber(data.taxRate),
+          taxAmount: parseNumber(tax),
+          status: data.status,
+          paymentMethod: data.paymentMethod,
+          downPaymentType: data.downPaymentType,
+          notes: data.notes,
           content: {
-            ...data.content,
-            products: selectedProducts,
+            products: formattedProducts,
+            calculations: {
+              subtotal: parseNumber(subtotal),
+              total: parseNumber(total),
+              downPayment: parseNumber(downPayment),
+              remainingBalance: parseNumber(remainingBalance),
+              discount: parseNumber(discount),
+              tax: parseNumber(tax)
+            },
           },
+          signature: data.signature,
         }),
         credentials: "include",
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to save quote");
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
+      setLastSaved(new Date());
+      return response.json();
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-      if (quote) {
-        queryClient.invalidateQueries({ queryKey: [`/api/quotes/${quote.id}`] });
-      }
-
+    },
+    onError: (error: Error) => {
+      console.error("Auto-save error:", error);
       toast({
-        title: "Success",
-        description: quote ? "Quote updated successfully" : "Quote created successfully",
-      });
-
-      onSuccess?.();
-    } catch (error) {
-      console.error("Form submission error:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save quote",
+        title: "Auto-save failed",
+        description: "Changes couldn't be saved automatically. Please save manually.",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      setIsAutoSaving(false);
+    },
+  });
+
+  const debouncedAutoSave = useDebouncedCallback((data: QuoteFormData) => {
+    if (quote?.id) {
+      autoSaveMutation.mutate(data);
     }
-  };
+  }, 2000); // Auto-save after 2 seconds of no changes
 
-  const { data: contacts = [] } = useQuery<any[]>({
-    queryKey: ["/api/contacts"],
-  });
-
-  const { data: categories = [] } = useQuery<any[]>({
-    queryKey: ["/api/categories"],
-  });
-
-  const { data: templates = [] } = useQuery<any[]>({
-    queryKey: ["/api/templates"],
-  });
-
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
-    queryKey: ["/api/products"],
-    select: (data) =>
-      data.filter((product:any) => product.categoryId.toString() === form.watch("categoryId")),
-    enabled: !!form.watch("categoryId"),
-  });
-
-
-  const addProduct = (product: any, variationPrice?: string) => {
-    if (variationPrice) {
-      const variation = product.variations?.find((v:any) => v.price === variationPrice);
-      if (variation) {
-        setSelectedProducts((prev) => [
-          ...prev,
-          {
-            productId: product.id,
-            quantity: 1,
-            variation: variation.name,
-            unitPrice: parseFloat(variationPrice),
-          },
-        ]);
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      if (quote?.id && Object.keys(form.formState.dirtyFields).length > 0) {
+        debouncedAutoSave(value as QuoteFormData);
       }
-    } else {
-      setSelectedProducts((prev) => [
-        ...prev,
-        {
-          productId: product.id,
-          quantity: 1,
-          unitPrice: product.basePrice,
-        },
-      ]);
+    });
+    return () => subscription.unsubscribe();
+  }, [form, quote?.id, debouncedAutoSave]);
+
+  const [showSignature, setShowSignature] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+  const handleSignatureSave = (signatureData: {
+    data: string;
+    timestamp: string;
+    metadata: {
+      browserInfo: string;
+      ipAddress: string;
+      signedAt: string;
+      timezone: string;
+    };
+  }) => {
+    const formData = form.getValues();
+    mutation.mutate({
+      ...formData,
+      signature: signatureData,
+    });
+  };
+
+  const status = form.watch("status");
+  useEffect(() => {
+    if (status === QuoteStatus.ACCEPTED && !quote?.signature) {
+      setShowSignature(true);
     }
-  };
-
-  const updateQuantity = (index: number, value: number) => {
-    setSelectedProducts((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, quantity: Math.max(1, value) } : item))
-    );
-  };
-
-  const removeProduct = (index: number) => {
-    setSelectedProducts((prev) => prev.filter((_, i) => i !== index));
-  };
+  }, [status, quote?.signature]);
 
   return (
     <Form {...form}>
@@ -261,7 +535,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {contacts.map((contact:any) => (
+                      {contacts.map((contact) => (
                         <SelectItem key={contact.id} value={contact.id.toString()}>
                           {contact.firstName} {contact.lastName} - {contact.primaryEmail}
                         </SelectItem>
@@ -347,7 +621,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories.map((category:any) => (
+                        {categories.map((category) => (
                           <SelectItem key={category.id} value={category.id.toString()}>
                             {category.name}
                           </SelectItem>
@@ -373,8 +647,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       </FormControl>
                       <SelectContent>
                         {templates
-                          .filter((t:any) => t.categoryId.toString() === form.watch("categoryId"))
-                          .map((template:any) => (
+                          .filter((t) => t.categoryId.toString() === form.watch("categoryId"))
+                          .map((template) => (
                             <SelectItem key={template.id} value={template.id.toString()}>
                               {template.name} {template.isDefault && "(Default)"}
                             </SelectItem>
@@ -400,7 +674,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <div className="text-center py-4">No products found in this category</div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {products.map((product:any) => (
+                    {products.map((product) => (
                       <Card key={product.id}>
                         <CardContent className="pt-6">
                           <div className="flex justify-between items-start">
@@ -418,7 +692,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {product.variations.map((variation:any) => (
+                                  {product.variations.map((variation) => (
                                     <SelectItem key={variation.name} value={variation.price}>
                                       {variation.name} - ${variation.price}
                                     </SelectItem>
@@ -433,7 +707,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                 onClick={() => addProduct(product)}
                                 className="h-8 w-8"
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <Plus className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
@@ -448,7 +722,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => {
-                        const product = products.find((p:any) => p.id === item.productId);
+                        const product = products.find(p => p.id === item.productId);
                         return (
                           <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                             <div className="flex-1">
@@ -467,7 +741,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                 size="icon"
                                 onClick={() => updateQuantity(index, item.quantity - 1)}
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <Minus className="h-4 w-4" />
                               </Button>
                               <Input
                                 type="number"
@@ -481,7 +755,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                 size="icon"
                                 onClick={() => updateQuantity(index, item.quantity + 1)}
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <Plus className="h-4 w-4" />
                               </Button>
                               <Button
                                 type="button"
@@ -489,7 +763,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                                 size="icon"
                                 onClick={() => removeProduct(index)}
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <X className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>
@@ -679,9 +953,77 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        <div className="flex justify-end">
-          <Button type="submit">
-            {quote ? "Update Quote" : "Create Quote"}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>${calculateSubtotal(selectedProducts).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount:</span>
+                <span>-${calculateDiscount().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Tax:</span>
+                <span>${calculateTax().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span>Total:</span>
+                <span>${calculateTotal().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Down Payment:</span>
+                <span>${calculateDownPayment().toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Remaining Balance:</span>
+                <span>${calculateRemainingBalance().toFixed(2)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {status === QuoteStatus.ACCEPTED && !quote?.signature && (
+          <SignatureCanvas
+            isOpen={showSignature}
+            onClose={() => setShowSignature(false)}
+            onSave={handleSignatureSave}
+            title="Sign Quote"
+            description="Please sign below to accept this quote. Your signature will be recorded with a timestamp and other verification data."
+          />
+        )}
+
+        {quote?.signature && (
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-2">Signature Information</h3>
+              <div className="space-y-2">
+                <img
+                  src={quote.signature.data}
+                  alt="Signature"
+                  className="border rounded p-2 max-w-md"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Signed on: {new Date(quote.signature.timestamp).toLocaleString()}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Timezone: {quote.signature.metadata.timezone}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending
+              ? quote
+                ? "Updating..."
+                : "Creating..."
+              : quote
+                ? "Update Quote"
+                : "Create Quote"}
           </Button>
         </div>
       </form>
