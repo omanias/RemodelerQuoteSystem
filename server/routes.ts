@@ -435,6 +435,62 @@ export function registerRoutes(app: Express): Server {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+  // Add PUT route for updating contacts
+  app.put("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      if (isNaN(contactId)) {
+        return res.status(400).json({ message: "Invalid contact ID" });
+      }
+
+      // Verify contact exists and belongs to company
+      const existingContact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingContact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Update contact
+      await db
+        .update(contacts)
+        .set({
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          primaryEmail: req.body.primaryEmail,
+          secondaryEmail: req.body.secondaryEmail,
+          primaryPhone: req.body.primaryPhone,
+          mobilePhone: req.body.mobilePhone,
+          leadStatus: req.body.leadStatus,
+          leadSource: req.body.leadSource,
+          propertyType: req.body.propertyType,
+          primaryAddress: req.body.primaryAddress,
+          projectAddress: req.body.projectAddress,
+          projectTimeline: req.body.projectTimeline,
+          budgetRangeMin: req.body.budgetRangeMin,
+          budgetRangeMax: req.body.budgetRangeMax,
+          productInterests: req.body.productInterests,
+          notes: req.body.notes,
+          assignedUserId: req.body.assignedUserId,
+          updatedAt: new Date()
+        })
+        .where(eq(contacts.id, contactId));
+
+      // Get updated contact
+      const updatedContact = await db.query.contacts.findFirst({
+        where: eq(contacts.id, contactId)
+      });
+
+      res.json(updatedContact);
+    } catch (error) {
+      console.error('Error updating contact:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // Quotes routes with proper middleware chain
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {

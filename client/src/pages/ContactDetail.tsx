@@ -164,6 +164,7 @@ export function ContactDetail() {
           assignedUserId: contact?.assignedUserId || 1,
           companyId: contact?.companyId || 1,
         }),
+        credentials: 'include',
       });
 
       if (!response.ok) {
