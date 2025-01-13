@@ -160,6 +160,12 @@ export function registerRoutes(app: Express): Server {
         with: {
           template: true,
           company: true,
+          category: true,
+          products: {
+            with: {
+              category: true
+            }
+          }
         }
       });
 
