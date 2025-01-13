@@ -727,6 +727,43 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add this endpoint after the quotes GET endpoint (line 716)
+  app.get("/api/contacts/:id/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      if (isNaN(contactId)) {
+        return res.status(400).json({ message: "Invalid contact ID" });
+      }
+
+      // Verify contact exists and belongs to company
+      const contact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!contact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Get quotes for this contact
+      const contactQuotes = await db.query.quotes.findMany({
+        where: and(
+          eq(quotes.contactId, contactId),
+          eq(quotes.companyId, req.user!.companyId)
+        ),
+        orderBy: (quotes, { desc }) => [desc(quotes.createdAt)]
+      });
+
+      res.json(contactQuotes);
+    } catch (error) {
+      console.error('Error fetching contact quotes:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+
   // Templates routes with proper middleware chain
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
