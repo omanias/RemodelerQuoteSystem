@@ -7,13 +7,14 @@ import { NotificationsMenu } from "@/components/ui/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { 
   LayoutDashboard, FileText, Package,
-  LogOut, Settings, Users, UserCircle2,
+  Settings, Users, UserCircle2,
   Building2, Share2
 } from "lucide-react";
 import { UserRole } from "@db/schema";
+import { LogoutDialog } from "@/components/LogoutDialog";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [location] = useLocation();
 
   // Fetch current company data
@@ -94,14 +95,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <p className="text-xs text-muted-foreground">{user.role}</p>
                 </div>
                 <NotificationsMenu />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => logout()}
-                  className="ml-2"
-                >
-                  <LogOut className="h-5 w-5" />
-                </Button>
+                <LogoutDialog />
               </div>
             </div>
           </div>
