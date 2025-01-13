@@ -24,6 +24,8 @@ const quoteSettingsSchema = z.object({
   defaultDownPaymentValue: z.string(),
   requireClientSignature: z.boolean(),
   autoSendEmails: z.boolean(),
+  showUnitPrice: z.boolean(), // New field
+  showTotalPrice: z.boolean(), // New field
 });
 
 type QuoteSettingsValues = z.infer<typeof quoteSettingsSchema>;
@@ -47,6 +49,8 @@ export function QuoteSettings() {
       defaultDownPaymentValue: settings?.defaultDownPaymentValue || "0",
       requireClientSignature: settings?.requireClientSignature || false,
       autoSendEmails: settings?.autoSendEmails || false,
+      showUnitPrice: settings?.showUnitPrice ?? true, // Default to true for backwards compatibility
+      showTotalPrice: settings?.showTotalPrice ?? true, // Default to true for backwards compatibility
     },
   });
 
@@ -218,6 +222,49 @@ export function QuoteSettings() {
         </div>
 
         <div className="space-y-4">
+          {/* Add new toggles for unit price and total price display */}
+          <FormField
+            control={form.control}
+            name="showUnitPrice"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel>Show Unit Price</FormLabel>
+                  <div className="text-sm text-muted-foreground">
+                    Display unit price in quotes and PDF exports
+                  </div>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="showTotalPrice"
+            render={({ field }) => (
+              <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel>Show Total Price</FormLabel>
+                  <div className="text-sm text-muted-foreground">
+                    Display total price per line item in quotes and PDF exports
+                  </div>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="requireClientSignature"

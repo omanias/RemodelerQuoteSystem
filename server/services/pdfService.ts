@@ -8,9 +8,13 @@ interface GenerateQuotePDFParams {
     template: Template;
   };
   company: Company;
+  settings: {
+    showUnitPrice: boolean;
+    showTotalPrice: boolean;
+  };
 }
 
-export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParams): Promise<Buffer> {
+export async function generateQuotePDF({ quote, company, settings }: GenerateQuotePDFParams): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
       // Create a document with proper settings
@@ -110,14 +114,28 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
       // Products Table
       doc.moveDown(4);
       const tableTop = doc.y;
-      const tableHeaders = ['Product', 'Description', 'Quantity', 'Unit Price', 'Total'];
-      const columnWidths = [150, 140, 70, 70, 65];
+
+      // Dynamically build headers and column widths based on settings
+      const tableHeaders = ['Product', 'Description', 'Quantity'];
+      let columnWidths = [200, 160, 80]; // Base widths
+
+      if (settings.showUnitPrice) {
+        tableHeaders.push('Unit Price');
+        columnWidths.push(80);
+      }
+
+      if (settings.showTotalPrice) {
+        tableHeaders.push('Total');
+        columnWidths.push(75);
+      }
+
       const pageHeight = doc.page.height - doc.page.margins.bottom;
       let currentY = tableTop;
 
       // Table Header
       const drawTableHeader = (y: number) => {
-        doc.rect(50, y, 495, 20).fill('#f3f4f6').stroke('#e5e7eb');
+        const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+        doc.rect(50, y, tableWidth, 20).fill('#f3f4f6').stroke('#e5e7eb');
         let xPos = 60;
         tableHeaders.forEach((header, i) => {
           doc.font('Helvetica-Bold')
@@ -136,7 +154,6 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
 
       // Products
       const products = (quote.content as { products?: any[] })?.products || [];
-      let isFirstProduct = true;
 
       products.forEach((product: any, index: number) => {
         const productText = product.variation 
@@ -162,9 +179,10 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
         }
 
         // Draw row background
+        const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
         const isEvenRow = index % 2 === 0;
         if (isEvenRow) {
-          doc.rect(50, currentY - 4, 495, productHeight)
+          doc.rect(50, currentY - 4, tableWidth, productHeight)
              .fill('#f8fafc');
         }
 
@@ -188,28 +206,33 @@ export async function generateQuotePDF({ quote, company }: GenerateQuotePDFParam
           align: 'right'
         });
 
-        // Unit Price
-        xPos += columnWidths[2];
-        doc.text(`$${Number(product.price).toFixed(2)}`, xPos, currentY, {
-          width: columnWidths[3],
-          align: 'right'
-        });
+        // Unit Price (if enabled)
+        if (settings.showUnitPrice) {
+          xPos += columnWidths[2];
+          doc.text(`$${Number(product.price).toFixed(2)}`, xPos, currentY, {
+            width: columnWidths[3],
+            align: 'right'
+          });
+        }
 
-        // Total
-        xPos += columnWidths[3];
-        const total = Number(product.price) * Number(product.quantity);
-        doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
-          width: columnWidths[4],
-          align: 'right'
-        });
+        // Total (if enabled)
+        if (settings.showTotalPrice) {
+          xPos += (settings.showUnitPrice ? columnWidths[3] : columnWidths[2]);
+          const total = Number(product.price) * Number(product.quantity);
+          doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
+            width: settings.showUnitPrice ? columnWidths[4] : columnWidths[3],
+            align: 'right'
+          });
+        }
 
         currentY += productHeight;
 
         // Add separator line if not the last item
         if (index < products.length - 1) {
+          const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
           doc.strokeColor('#e5e7eb')
              .moveTo(50, currentY - 10)
-             .lineTo(545, currentY - 10)
+             .lineTo(50 + tableWidth, currentY - 10)
              .stroke()
              .strokeColor('#000000');
         }
