@@ -588,89 +588,17 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Quotes routes with proper middleware chain and contact association
-  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+  // Quotes routes with proper middleware chain
+  app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const user = req.user!;
-      let contactId = req.body.contactId;
-      const clientEmail = req.body.clientEmail;
+      const companyQuotes = await db
+        .select()
+        .from(quotes)
+        .where(eq(quotes.companyId, req.user!.companyId));
 
-      // If no contact ID but email provided, try to find or create contact
-      if (!contactId && clientEmail) {
-        // Try to find existing contact by email
-        const existingContact = await db.query.contacts.findFirst({
-          where: and(
-            eq(contacts.primaryEmail, clientEmail),
-            eq(contacts.companyId, user.companyId)
-          )
-        });
-
-        if (existingContact) {
-          contactId = existingContact.id;
-        } else {
-          // Create new contact if none exists
-          const [newContact] = await db
-            .insert(contacts)
-            .values({
-              firstName: req.body.clientName.split(' ')[0] || '',
-              lastName: req.body.clientName.split(' ').slice(1).join(' ') || '',
-              primaryEmail: clientEmail,
-              primaryPhone: req.body.clientPhone || '',
-              primaryAddress: req.body.clientAddress || '',
-              companyId: user.companyId,
-              assignedUserId: user.id,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .returning();
-
-          contactId = newContact.id;
-        }
-      }
-
-      // Create new quote with contact association
-      const [newQuote] = await db
-        .insert(quotes)
-        .values({
-          number: `Q${Date.now()}`,
-          contactId,
-          templateId: req.body.templateId ? parseInt(req.body.templateId) : null,
-          categoryId: req.body.categoryId ? parseInt(req.body.categoryId) : null,
-          clientName: req.body.clientName,
-          clientEmail: req.body.clientEmail,
-          clientPhone: req.body.clientPhone,
-          clientAddress: req.body.clientAddress,
-          status: req.body.status,
-          content: req.body.content,
-          subtotal: req.body.subtotal.toString(),
-          total: req.body.total.toString(),
-          notes: req.body.notes,
-          paymentMethod: req.body.paymentMethod,
-          discountType: req.body.discountType,
-          discountValue: req.body.discountValue?.toString(),
-          discountCode: req.body.discountCode,
-          downPaymentType: req.body.downPaymentType,
-          downPaymentValue: req.body.downPaymentValue?.toString(),
-          companyId: user.companyId,
-          createdBy: user.id,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .returning();
-
-      // Get the created quote with its relations
-      const createdQuote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, newQuote.id),
-        with: {
-          contact: true,
-          template: true,
-          company: true,
-        }
-      });
-
-      res.status(201).json(createdQuote);
+      res.json(companyQuotes);
     } catch (error) {
-      console.error('Error creating quote:', error);
+      console.error('Error fetching quotes:', error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
