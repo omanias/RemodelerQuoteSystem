@@ -115,14 +115,14 @@ export function MessageTemplates() {
     updateTemplates.mutate(data);
   };
 
-  const insertVariable = (variable: string, fieldPath: `email.${keyof typeof TEMPLATE_TYPES[number]['id']}` | `sms.${keyof typeof TEMPLATE_TYPES[number]['id']}`) => {
-    const textValue = form.getValues(fieldPath) || '';
-    const textarea = document.querySelector(`textarea[name="${fieldPath}"]`) as HTMLTextAreaElement;
+  const insertVariable = (variable: string, fieldName: string) => {
+    const textarea = document.querySelector(`textarea[name="${fieldName}"]`) as HTMLTextAreaElement;
     if (textarea) {
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const newText = textValue.substring(0, start) + variable + textValue.substring(end);
-      form.setValue(fieldPath, newText);
+      const text = form.getValues(fieldName);
+      const newText = text.substring(0, start) + variable + text.substring(end);
+      form.setValue(fieldName as any, newText);
     }
   };
 
@@ -148,7 +148,7 @@ export function MessageTemplates() {
                   onClick={() => {
                     const activeField = document.activeElement as HTMLTextAreaElement;
                     if (activeField?.name) {
-                      insertVariable(variable.value, activeField.name as any);
+                      insertVariable(variable.value, activeField.name);
                     }
                   }}
                 >
