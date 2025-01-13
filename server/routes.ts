@@ -111,6 +111,41 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add DELETE route for quotes after the quote creation route
+  app.delete("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      // Verify quote exists and belongs to company
+      const existingQuote = await db.query.quotes.findFirst({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Delete the quote
+      await db
+        .delete(quotes)
+        .where(and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, req.user!.companyId)
+        ));
+
+      res.json({ message: "Quote deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // PDF Export route with proper typing
   app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
