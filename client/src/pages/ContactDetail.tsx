@@ -68,6 +68,20 @@ interface Note {
   };
 }
 
+// Update Quote interface to match the API response
+interface Quote {
+  id: number;
+  number: string;
+  status: string;
+  total: string | number;
+  downPaymentValue: string | number | null;
+  remainingBalance: string | number | null;
+  createdAt: string;
+  updatedAt: string;
+  contactId: number;
+}
+
+
 const contactFormSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -682,11 +696,9 @@ export function ContactDetail() {
             <CardContent>
               {isLoadingQuotes ? (
                 <div className="text-center py-4">Loading quotes...</div>
-              ) : quotes.length === 0 ? (
-                <div className="text-center py-4">No quotes available</div>
-              ) : (
+              ) : quotes && quotes.length > 0 ? (
                 <div className="space-y-4">
-                  {quotes.map((quote: any) => (
+                  {quotes.map((quote: Quote) => (
                     <div
                       key={quote.id}
                       className="flex items-center justify-between p-4 border rounded-lg"
@@ -697,7 +709,7 @@ export function ContactDetail() {
                           Status: {quote.status}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          Total: ${parseFloat(quote.total).toFixed(2)}
+                          Total: ${typeof quote.total === 'string' ? parseFloat(quote.total).toFixed(2) : quote.total.toFixed(2)}
                         </div>
                       </div>
                       <Link href={`/quotes/${quote.id}`}>
@@ -708,6 +720,8 @@ export function ContactDetail() {
                     </div>
                   ))}
                 </div>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">No quotes available</div>
               )}
             </CardContent>
           </Card>
