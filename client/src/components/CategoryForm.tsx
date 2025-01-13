@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,12 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X, Loader2 } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 const categoryFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   description: z.string().optional(),
-  subcategories: z.array(z.string().min(1, "Subcategory name is required")).default([]),
+  subcategories: z.array(z.string()).default([]),
 });
 
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
@@ -40,7 +40,6 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   const [subcategories, setSubcategories] = useState<string[]>(
     category?.subcategories || []
   );
-  const [formChanged, setFormChanged] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -53,44 +52,23 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     },
   });
 
-  // Track form changes
-  useEffect(() => {
-    const subscription = form.watch(() => {
-      setFormChanged(true);
-    });
-    return () => subscription.unsubscribe();
-  }, [form.watch]);
-
-  // Track subcategories changes
-  useEffect(() => {
-    if (JSON.stringify(subcategories) !== JSON.stringify(category?.subcategories || [])) {
-      setFormChanged(true);
-    }
-  }, [subcategories, category?.subcategories]);
-
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
-      const url = category ? `/api/categories/${category.id}` : "/api/categories";
-      const method = category ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...data,
-          subcategories,
-        }),
-        credentials: "include",
-      });
+      const response = await fetch(
+        category ? `/api/categories/${category.id}` : "/api/categories",
+        {
+          method: category ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...data,
+            subcategories,
+          }),
+          credentials: "include",
+        }
+      );
 
       if (!response.ok) {
-        const errorData = await response.text();
-        try {
-          const parsedError = JSON.parse(errorData);
-          throw new Error(parsedError.message || "Failed to save category");
-        } catch {
-          throw new Error(errorData || "Failed to save category");
-        }
+        throw new Error(await response.text());
       }
 
       return response.json();
@@ -101,7 +79,6 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         title: `Category ${category ? "updated" : "created"} successfully`,
         description: `The category has been ${category ? "updated" : "created"} in the system.`,
       });
-      setFormChanged(false);
       onSuccess?.();
     },
     onError: (error: Error) => {
@@ -114,13 +91,9 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   });
 
   const onSubmit = async (data: CategoryFormData) => {
-    if (!formChanged) return;
     setIsLoading(true);
     try {
-      await mutation.mutateAsync({
-        ...data,
-        subcategories,
-      });
+      await mutation.mutateAsync(data);
     } finally {
       setIsLoading(false);
     }
@@ -131,8 +104,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   };
 
   const removeSubcategory = (index: number) => {
-    const newSubcategories = subcategories.filter((_, i) => i !== index);
-    setSubcategories(newSubcategories);
+    setSubcategories(subcategories.filter((_, i) => i !== index));
   };
 
   const updateSubcategory = (index: number, value: string) => {
@@ -212,19 +184,8 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <Button 
-          type="submit" 
-          disabled={isLoading || !formChanged} 
-          className="w-full"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {category ? "Updating..." : "Creating..."}
-            </>
-          ) : (
-            category ? "Update Category" : "Create Category"
-          )}
+        <Button type="submit" disabled={isLoading} className="w-full">
+          {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
         </Button>
       </form>
     </Form>
