@@ -13,6 +13,25 @@ import {
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
 
+// Helper function to generate quote number
+async function generateQuoteNumber(companyId: number): Promise<string> {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+
+  // Get the count of quotes for this company this month
+  const existingQuotes = await db.query.quotes.findMany({
+    where: and(
+      eq(quotes.companyId, companyId)
+    )
+  });
+
+  const quoteCount = existingQuotes.length + 1;
+  const sequenceNumber = quoteCount.toString().padStart(4, '0');
+
+  return `Q${year}${month}${sequenceNumber}`;
+}
+
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
 
@@ -49,10 +68,14 @@ export function registerRoutes(app: Express): Server {
         signature,
       } = req.body;
 
+      // Generate quote number
+      const quoteNumber = await generateQuoteNumber(req.user!.companyId);
+
       // Create new quote with proper type checking
       const [newQuote] = await db
         .insert(quotes)
         .values({
+          number: quoteNumber, // Add quote number
           contactId: contactId ? parseInt(contactId) : null,
           categoryId: parseInt(categoryId),
           templateId: parseInt(templateId),
@@ -75,7 +98,7 @@ export function registerRoutes(app: Express): Server {
           content,
           signature,
           companyId: req.user!.companyId,
-          userId: req.user!.id, // Added userId
+          userId: req.user!.id,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
