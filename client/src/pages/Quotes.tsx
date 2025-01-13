@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, Link } from "wouter";
-import { QuoteForm } from "@/components/QuoteForm";
+import { useLocation as useLocationWouter } from "wouter";
+import { QuoteForm } from "./QuoteForm";
 import {
   Table,
   TableBody,
@@ -28,7 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { QuoteStatus } from "@db/schema";
 import { Plus, MoreVertical, FileText, Download, ArrowLeft, FileEdit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -36,11 +35,36 @@ interface Quote {
   id: number;
   number: string;
   clientName: string;
-  status: typeof QuoteStatus[keyof typeof QuoteStatus];
+  status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "REVISED";
   total: string | number;
   downPaymentValue: string | number | null;
   remainingBalance: string | number | null;
   createdAt: string;
+  content: {
+    products: Array<{
+      productId: number;
+      quantity: number;
+      variation?: string;
+      unitPrice: number;
+    }>;
+  };
+  templateId: number;
+  categoryId: number;
+  contactId: number | null;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  clientAddress: string | null;
+  notes: string | null;
+  paymentMethod: string | null;
+  discountType: "PERCENTAGE" | "FIXED" | null;
+  discountValue: number | null;
+  discountCode: string | null;
+  downPaymentType: "PERCENTAGE" | "FIXED" | null;
+  taxRate: number | null;
+  subtotal: number;
+  userId: number;
+  companyId: number;
+  updatedAt: string;
 }
 
 interface Contact {
@@ -56,6 +80,7 @@ interface User {
   id: number;
   email: string;
   name: string;
+  role: string;
 }
 
 // Helper function to safely format monetary values
@@ -71,17 +96,23 @@ function formatMoney(value: string | number | null): string {
 }
 
 export function Quotes() {
-  const [location, navigate] = useLocation();
+  const [location, setLocation] = useLocationWouter();
   const [deleteQuote, setDeleteQuote] = useState<Quote | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Extract contactId from URL if present
-  const urlParams = new URLSearchParams(location.split('?')[1]);
+  // Extract quoteId from URL if present for editing
+  const urlParams = new URLSearchParams(location.split('?')[1] || "");
   const contactId = urlParams.get('contactId');
+  const quoteId = location.match(/\/quotes\/(\d+)/)?.[1];
 
   const { data: quotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
+  });
+
+  const { data: quote } = useQuery<Quote>({
+    queryKey: [`/api/quotes/${quoteId}`],
+    enabled: !!quoteId,
   });
 
   const { data: user } = useQuery<User>({
@@ -99,7 +130,6 @@ export function Quotes() {
     try {
       const response = await fetch(`/api/quotes/${deleteQuote.id}`, {
         method: "DELETE",
-        credentials: "include",
       });
 
       if (!response.ok) {
@@ -125,44 +155,21 @@ export function Quotes() {
 
   const handleExportPDF = async (quote: Quote) => {
     try {
-      const response = await fetch(`/api/quotes/${quote.id}/export/pdf`, {
-        credentials: "include",
-      });
+      const response = await fetch(`/api/quotes/${quote.id}/export/pdf`);
 
       if (!response.ok) {
         throw new Error(await response.text());
       }
 
-      // Get the content-disposition header to extract the filename
-      const contentDisposition = response.headers.get('content-disposition');
-      let filename = `quote-${quote.number}.pdf`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1].replace(/['"]/g, '');
-        }
-      }
-
-      // Create blob with proper MIME type
       const blob = await response.blob();
-      const pdfBlob = new Blob([blob], { type: 'application/pdf' });
-
-      // Create object URL and trigger download
-      const url = window.URL.createObjectURL(pdfBlob);
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.style.display = 'none';
       a.href = url;
-      a.download = filename;
-
-      // Append to body, click and cleanup
+      a.download = `quote-${quote.number}.pdf`;
       document.body.appendChild(a);
       a.click();
-
-      // Cleanup after download starts
-      window.setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      }, 100);
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
 
       toast({
         title: "Success",
@@ -179,9 +186,7 @@ export function Quotes() {
 
   const handleExportCSV = async () => {
     try {
-      const response = await fetch('/api/quotes/export/csv', {
-        credentials: "include",
-      });
+      const response = await fetch('/api/quotes/export/csv');
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -210,25 +215,28 @@ export function Quotes() {
     }
   };
 
-  // If we're on the new quote page
-  if (location === '/quotes/new' || location.startsWith('/quotes/new?')) {
+  // If we're editing a quote or creating a new one
+  if (quoteId || location === '/quotes/new' || location.startsWith('/quotes/new?')) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/quotes')}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation('/quotes')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">New Quote</h1>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {quoteId ? 'Edit Quote' : 'New Quote'}
+            </h1>
             {contact && (
               <p className="text-muted-foreground">
-                Creating quote for {contact.firstName} {contact.lastName}
+                {quoteId ? 'Editing' : 'Creating'} quote for {contact.firstName} {contact.lastName}
               </p>
             )}
           </div>
         </div>
         <QuoteForm
-          onSuccess={() => navigate('/quotes')}
+          quote={quote}
+          onSuccess={() => setLocation('/quotes')}
           user={user}
           defaultContactId={contactId}
           contact={contact}
@@ -253,18 +261,14 @@ export function Quotes() {
             Export All (CSV)
           </Button>
 
-          <Link href="/templates">
-            <Button variant="outline">
-              <FileEdit className="mr-2 h-4 w-4" />
-              Templates
-            </Button>
-          </Link>
+          <Button variant="outline" onClick={() => setLocation('/templates')}>
+            <FileEdit className="mr-2 h-4 w-4" />
+            Templates
+          </Button>
 
-          <Link href="/quotes/new">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> New Quote
-            </Button>
-          </Link>
+          <Button onClick={() => setLocation('/quotes/new')}>
+            <Plus className="mr-2 h-4 w-4" /> New Quote
+          </Button>
         </div>
       </div>
 
@@ -315,14 +319,15 @@ export function Quotes() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Link href={`/quotes/${quote.id}`}>
-                          <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                            Edit
-                          </DropdownMenuItem>
-                        </Link>
                         <DropdownMenuItem
-                          className="text-destructive"
-                          onSelect={() => setDeleteQuote(quote)}
+                          onClick={() => setLocation(`/quotes/${quote.id}`)}
+                          className="cursor-pointer"
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive cursor-pointer"
+                          onClick={() => setDeleteQuote(quote)}
                         >
                           Delete
                         </DropdownMenuItem>
@@ -364,11 +369,11 @@ export function Quotes() {
 
 function getStatusVariant(status: string): "default" | "destructive" | "secondary" | "outline" {
   switch (status) {
-    case QuoteStatus.ACCEPTED:
+    case "ACCEPTED":
       return "default";
-    case QuoteStatus.REJECTED:
+    case "REJECTED":
       return "destructive";
-    case QuoteStatus.SENT:
+    case "SENT":
       return "outline";
     default:
       return "secondary";
