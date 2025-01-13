@@ -5,6 +5,8 @@ import fs from 'fs';
 
 interface Product {
   name: string;
+  quantity: number;
+  price: number;
 }
 
 interface QuoteContent {
@@ -168,7 +170,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            .fontSize(10)
            .fillColor('#000000');
 
-        // Product name
+        // Product name - only show the name without category
         doc.text(product.name, xPos, currentY, { width: columnWidths[0] });
 
         // Quantity
@@ -178,7 +180,6 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           width: columnWidths[1],
           align: 'right'
         });
-
 
         // Unit Price
         if (settings.showUnitPrice) {

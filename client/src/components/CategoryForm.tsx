@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 
 const categoryFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -54,21 +54,24 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
+      const formattedData = {
+        ...data,
+        subcategories: subcategories.filter(Boolean), // Filter out empty strings
+      };
+
       const response = await fetch(
         category ? `/api/categories/${category.id}` : "/api/categories",
         {
           method: category ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...data,
-            subcategories,
-          }),
+          body: JSON.stringify(formattedData),
           credentials: "include",
         }
       );
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        throw new Error(errorText || `Failed to ${category ? "update" : "create"} category`);
       }
 
       return response.json();
@@ -79,7 +82,10 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         title: `Category ${category ? "updated" : "created"} successfully`,
         description: `The category has been ${category ? "updated" : "created"} in the system.`,
       });
-      onSuccess?.();
+      setIsLoading(false);
+      if (onSuccess) {
+        onSuccess();
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -87,14 +93,19 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         description: error.message,
         variant: "destructive",
       });
+      setIsLoading(false);
     },
   });
 
   const onSubmit = async (data: CategoryFormData) => {
     setIsLoading(true);
     try {
-      await mutation.mutateAsync(data);
-    } finally {
+      await mutation.mutateAsync({
+        ...data,
+        subcategories: subcategories.filter(Boolean),
+      });
+    } catch (error) {
+      console.error('Category form submission error:', error);
       setIsLoading(false);
     }
   };
@@ -184,8 +195,19 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
+        <Button 
+          type="submit" 
+          disabled={isLoading} 
+          className="w-full"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {category ? "Updating..." : "Creating..."}
+            </>
+          ) : (
+            category ? "Update Category" : "Create Category"
+          )}
         </Button>
       </form>
     </Form>
