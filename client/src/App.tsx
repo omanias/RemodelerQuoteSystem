@@ -7,9 +7,9 @@ import { Login } from "@/pages/Login";
 // Pages
 import { Dashboard } from "@/pages/Dashboard";
 import { Quotes } from "@/pages/Quotes";
-import { QuoteDetail } from "@/pages/QuoteDetail";
+import { QuoteForm } from "@/pages/QuoteForm";  // Add QuoteForm import
 import { Products } from "@/pages/Products";
-import { Categories } from "@/pages/Categories";  // Add Categories import
+import { Categories } from "@/pages/Categories";
 import { Templates } from "@/pages/Templates";
 import { Users } from "@/pages/Users";
 import { AdminPermissions } from "@/pages/AdminPermissions";
@@ -52,13 +52,13 @@ function App() {
       <Switch>
         <Route path="/" component={homePage} />
         <Route path="/quotes" component={Quotes} />
-        <Route path="/quotes/new" component={QuoteDetail} />
-        <Route path="/quotes/:id" component={QuoteDetail} />
+        <Route path="/quotes/new" component={QuoteForm} />  {/* Add QuoteForm route */}
+        <Route path="/quotes/:id" component={QuoteForm} />  {/* Add QuoteForm route with id parameter */}
         <Route path="/contacts" component={Contacts} />
         <Route path="/contacts/new" component={ContactDetail} />
         <Route path="/contacts/:id" component={ContactDetail} />
         <Route path="/products" component={Products} />
-        <Route path="/products/categories" component={Categories} />  {/* Add Categories route */}
+        <Route path="/products/categories" component={Categories} />
         <Route path="/templates" component={Templates} />
         <Route path="/users" component={Users} />
         <Route path="/permissions" component={AdminPermissions} />

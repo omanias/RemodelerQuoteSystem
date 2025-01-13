@@ -3,15 +3,13 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
-import { storage, UPLOADS_PATH } from "./storage";
 import { db } from "@db";
 import { 
-  users, quotes, contacts, products, categories, 
+  users, quotes, products, categories, 
   templates, notifications, companies, settings,
-  type Quote, type Settings, type Contact
+  type Quote, type Settings
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
-import { generateQuotePDF } from "./services/pdfService";
 
 // Helper function to generate quote number
 async function generateQuoteNumber(companyId: number): Promise<string> {
@@ -45,40 +43,33 @@ export function registerRoutes(app: Express): Server {
   app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const {
-        contactId,
-        categoryId,
-        templateId,
         clientName,
         clientEmail,
         clientPhone,
         clientAddress,
         status,
+        categoryId,
+        templateId,
+        products: quoteProducts,
         paymentMethod,
         subtotal,
         total,
-        downPaymentType,
-        downPaymentValue,
-        remainingBalance,
         discountType,
         discountValue,
-        discountCode,
         taxRate,
-        taxAmount,
-        content,
-        signature,
+        notes,
       } = req.body;
 
       // Generate quote number
       const quoteNumber = await generateQuoteNumber(req.user!.companyId);
 
       // Create new quote with proper type checking
-      const newQuote = await db
+      const [newQuote] = await db
         .insert(quotes)
         .values({
           number: quoteNumber,
-          contactId: contactId ? parseInt(contactId) : null,
-          categoryId: parseInt(categoryId),
-          templateId: parseInt(templateId),
+          categoryId: categoryId ? parseInt(categoryId) : null,
+          templateId: templateId ? parseInt(templateId) : null,
           clientName,
           clientEmail,
           clientPhone,
@@ -87,16 +78,11 @@ export function registerRoutes(app: Express): Server {
           paymentMethod,
           subtotal: parseFloat(subtotal) || 0,
           total: parseFloat(total) || 0,
-          downPaymentType,
-          downPaymentValue: parseFloat(downPaymentValue) || 0,
-          remainingBalance: parseFloat(remainingBalance) || 0,
           discountType,
           discountValue: parseFloat(discountValue) || 0,
-          discountCode,
           taxRate: parseFloat(taxRate) || 0,
-          taxAmount: parseFloat(taxAmount) || 0,
-          content,
-          signature,
+          notes,
+          content: { products: quoteProducts },
           companyId: req.user!.companyId,
           userId: req.user!.id,
           createdAt: new Date(),
@@ -104,9 +90,24 @@ export function registerRoutes(app: Express): Server {
         })
         .returning();
 
-      res.status(201).json(newQuote[0]);
+      res.status(201).json(newQuote);
     } catch (error) {
       console.error('Error creating quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get quotes for the current company
+  app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const companyQuotes = await db.query.quotes.findMany({
+        where: eq(quotes.companyId, req.user!.companyId),
+        orderBy: (quotes, { desc }) => [desc(quotes.createdAt)]
+      });
+
+      res.json(companyQuotes);
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -207,7 +208,8 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Products routes with proper middleware chain
+
+  // Get available products for quotes
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyProducts = await db.query.products.findMany({
@@ -407,11 +409,7 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const companyCategories = await db.query.categories.findMany({
-        where: eq(categories.companyId, req.user!.companyId),
-        with: {
-          products: true,
-          templates: true
-        }
+        where: eq(categories.companyId, req.user!.companyId)
       });
 
       res.json(companyCategories);
@@ -777,13 +775,13 @@ export function registerRoutes(app: Express): Server {
   });
 
 
-  // Templates routes with proper middleware chain
+
+  // Get templates for quotes
   app.get("/api/templates", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      const companyTemplates = await db
-        .select()
-        .from(templates)
-        .where(eq(templates.companyId, req.user!.companyId));
+      const companyTemplates = await db.query.templates.findMany({
+        where: eq(templates.companyId, req.user!.companyId)
+      });
 
       res.json(companyTemplates);
     } catch (error) {

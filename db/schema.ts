@@ -152,11 +152,9 @@ const tables = {
     id: serial("id").primaryKey(),
     number: text("number").notNull(),
     categoryId: integer("category_id")
-      .references(() => categories.id)
-      .notNull(),
+      .references(() => categories.id),
     templateId: integer("template_id")
-      .references(() => templates.id)
-      .notNull(),
+      .references(() => templates.id),
     contactId: integer("contact_id")
       .references(() => contacts.id),
     clientName: text("client_name").notNull(),
@@ -164,15 +162,18 @@ const tables = {
     clientPhone: text("client_phone"),
     clientAddress: text("client_address"),
     status: text("status").notNull().$type<keyof typeof QuoteStatus>(),
-    content: jsonb("content").notNull(),
+    content: jsonb("content").$type<{
+      products: Array<{
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+      }>;
+    }>().notNull(),
     subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
     total: decimal("total", { precision: 10, scale: 2 }).notNull(),
-    downPaymentValue: decimal("down_payment_value", { precision: 10, scale: 2 }),
-    downPaymentType: text("down_payment_type"),
     discountType: text("discount_type"),
     discountValue: decimal("discount_value", { precision: 10, scale: 2 }),
     taxRate: decimal("tax_rate", { precision: 10, scale: 2 }),
-    remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }),
     paymentMethod: text("payment_method"),
     notes: text("notes"),
     userId: integer("user_id")
@@ -181,16 +182,6 @@ const tables = {
     companyId: integer("company_id")
       .references(() => companies.id, { onDelete: 'cascade' })
       .notNull(),
-    signature: jsonb("signature").$type<{
-      data: string;
-      timestamp: string;
-      metadata: {
-        browserInfo: string;
-        ipAddress: string;
-        signedAt: string;
-        timezone: string;
-      };
-    }>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   }),
@@ -867,7 +858,7 @@ export const insertTemplateSchema = createInsertSchema(templates);
 export const selectTemplateSchema = createSelectSchema(templates);
 export const insertCategorySchema = createInsertSchema(categories);
 export const selectCategorySchema = createSelectSchema(categories);
-export const insertContactSchema = createInsertSchema(contacts);
+export const insertContactSchema =createInsertSchema(contacts);
 export const selectContactSchema = createSelectSchema(contacts);
 export const insertQuoteSchema = createInsertSchema(quotes);
 export const selectQuoteSchema = createSelectSchema(quotes);
