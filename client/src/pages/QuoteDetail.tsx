@@ -14,7 +14,7 @@ export function QuoteDetail() {
   const searchParams = new URLSearchParams(window.location.search);
   const contactId = searchParams.get("contactId");
   const id = params.id;
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true); // Set to true by default for edit mode
 
   const { data: quote, isLoading: isLoadingQuote } = useQuery<Quote>({
     queryKey: [`/api/quotes/${id}`],
@@ -59,7 +59,7 @@ export function QuoteDetail() {
     );
   }
 
-  // If we have an ID, show the quote details view with edit option
+  // If we have an ID, directly show the quote form in edit mode
   return (
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
@@ -83,7 +83,7 @@ export function QuoteDetail() {
           variant={isEditing ? "ghost" : "default"}
           onClick={() => setIsEditing(!isEditing)}
         >
-          {isEditing ? "Cancel Edit" : (
+          {isEditing ? "View Quote" : (
             <>
               <FileEdit className="h-4 w-4 mr-2" />
               Edit Quote
