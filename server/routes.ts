@@ -553,6 +553,41 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add contact deletion route
+  app.delete("/api/contacts/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const contactId = parseInt(req.params.id);
+      if (isNaN(contactId)) {
+        return res.status(400).json({ message: "Invalid contact ID" });
+      }
+
+      // Verify contact exists and belongs to company
+      const existingContact = await db.query.contacts.findFirst({
+        where: and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingContact) {
+        return res.status(404).json({ message: "Contact not found" });
+      }
+
+      // Delete the contact
+      await db
+        .delete(contacts)
+        .where(and(
+          eq(contacts.id, contactId),
+          eq(contacts.companyId, req.user!.companyId)
+        ));
+
+      res.json({ message: "Contact deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Quotes routes with proper middleware chain
   app.get("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
