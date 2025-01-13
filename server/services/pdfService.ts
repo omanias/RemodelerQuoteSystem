@@ -303,21 +303,53 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
            ].join('\n'));
       }
 
-      // Terms and Conditions
+      // Terms and Conditions Section with improved formatting
       if (quote.template?.termsAndConditions) {
-        doc.addPage()
-           .font('Helvetica-Bold')
-           .fontSize(14)
-           .text('Terms and Conditions', { align: 'center' })
-           .moveDown()
-           .font('Helvetica')
-           .fontSize(10)
-           .text(quote.template.termsAndConditions, {
-             align: 'left',
-             columns: 1,
-             columnGap: 15,
-             height: 700
-           });
+        doc.addPage();
+
+        // Add section header with proper spacing and styling
+        doc.font('Helvetica-Bold')
+           .fontSize(16)
+           .text('Terms and Conditions', {
+             align: 'center',
+             paragraphGap: 15
+           })
+           .moveDown(1);
+
+        // Split the terms into sections based on line breaks
+        const sections = quote.template.termsAndConditions.split(/\n\s*\n/);
+
+        doc.font('Helvetica')
+           .fontSize(11)
+           .lineGap(2); // Add consistent line spacing
+
+        sections.forEach((section, index) => {
+          // Check if section starts with a title (ends with a colon)
+          const isSectionTitle = section.trim().endsWith(':');
+
+          if (isSectionTitle) {
+            // Format section titles
+            doc.font('Helvetica-Bold')
+               .text(section.trim(), {
+                 align: 'left',
+                 paragraphGap: 10
+               })
+               .font('Helvetica'); // Reset to regular font
+          } else {
+            // Format regular paragraphs
+            doc.text(section.trim(), {
+              align: 'justify',
+              paragraphGap: 12,
+              indent: 20,
+              lineGap: 2
+            });
+          }
+
+          // Add space between sections, but not after the last one
+          if (index < sections.length - 1) {
+            doc.moveDown(0.8);
+          }
+        });
       }
 
       // Signature Section
