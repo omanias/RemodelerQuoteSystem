@@ -6,9 +6,6 @@ import MemoryStore from "memorystore";
 import passport from "passport";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { companyMiddleware } from "./middleware/company";
-import { setupAuth } from "./auth";
-import path from "path";
 
 const app = express();
 app.use(express.json());
@@ -113,21 +110,7 @@ app.use((req, res, next) => {
     await db.execute(sql`SELECT 1`);
     log("Database connection verified");
 
-    // Set up authentication
-    setupAuth(app);
-
-    // Apply company middleware
-    app.use(companyMiddleware);
-
     const server = registerRoutes(app);
-
-    // Error handling middleware should be last
-    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-      console.error('Error:', err);
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
-      res.status(status).json({ message });
-    });
 
     if (app.get("env") === "development") {
       await setupVite(app, server);

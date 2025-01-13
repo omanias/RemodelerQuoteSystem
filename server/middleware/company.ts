@@ -1,18 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "@db";
-import { companies, type Company, UserRole } from "@db/schema";
+import { companies, type Company, type User, users, companyAccess, UserRole } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 
 declare global {
   namespace Express {
     interface Request {
       company?: Company;
-      user?: {
-        id: number;
-        role: keyof typeof UserRole;
-        companyId: number;
-        [key: string]: any;
-      };
+      user?: User;
     }
     interface Session {
       userId?: number;
@@ -67,6 +62,37 @@ export async function companyMiddleware(
         return next();
       }
 
+      // For MULTI_ADMIN, verify they have access to the requested company
+      if (user.role === UserRole.MULTI_ADMIN && req.session.companyId) {
+        const [company] = await db
+          .select()
+          .from(companies)
+          .where(eq(companies.id, req.session.companyId))
+          .limit(1);
+
+        if (!company) {
+          return res.status(404).json({ message: "Company not found" });
+        }
+
+        // Verify access through company_access table
+        const [hasAccess] = await db
+          .select()
+          .from(companyAccess)
+          .where(and(
+            eq(companyAccess.userId, user.id),
+            eq(companyAccess.companyId, company.id)
+          ))
+          .limit(1);
+
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Access denied to this company" });
+        }
+
+        req.company = company;
+        req.user = user;
+        return next();
+      }
+
       // For regular users, use their assigned company
       if (user.companyId) {
         const [company] = await db
@@ -108,6 +134,11 @@ export function requireCompanyAccess(req: Request, res: Response, next: NextFunc
   if (!req.company) {
     return res.status(403).json({ message: "Company access required" });
   }
+
+  if (!req.user) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+
   next();
 }
 
