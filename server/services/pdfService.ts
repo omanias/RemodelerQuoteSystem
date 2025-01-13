@@ -6,15 +6,11 @@ import fs from 'fs';
 interface Product {
   name: string;
   description?: string;
-  categoryId?: number;
+  category?: string;
   variation?: string;
   quantity: number;
   unit?: string;
   price: number;
-  category?: {
-    id: number;
-    name: string;
-  };
 }
 
 interface QuoteContent {
@@ -37,7 +33,7 @@ interface GenerateQuotePDFParams {
 export async function generateQuotePDF({ quote, company, settings }: GenerateQuotePDFParams): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
-      // Create a document
+      // Create a document with proper settings
       const doc = new PDFDocument({
         size: 'A4',
         margin: 50,
@@ -54,9 +50,17 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
 
       // Collect chunks in a buffer
       const chunks: Buffer[] = [];
-      doc.on('data', chunk => chunks.push(Buffer.from(chunk)));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+      doc.on('data', chunk => {
+        chunks.push(Buffer.from(chunk));
+      });
+
+      doc.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+
+      doc.on('error', (err) => {
+        reject(err);
+      });
 
       // Header Section
       const headerTop = 45;
@@ -126,7 +130,6 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Products Table
       doc.moveDown(4);
       const tableTop = doc.y;
-      const pageHeight = doc.page.height - doc.page.margins.bottom;
 
       // Dynamically build headers based on settings
       const tableHeaders = ['Product', 'Description', 'Quantity'];
@@ -142,6 +145,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         columnWidths.push(75);
       }
 
+      const pageHeight = doc.page.height - doc.page.margins.bottom;
       let currentY = tableTop;
 
       // Table Header
@@ -167,7 +171,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Parse and group products by category
       const products = quote.content.products || [];
       const productsByCategory = products.reduce<Record<string, Product[]>>((acc, product) => {
-        const categoryName = product.category?.name || 'Uncategorized';
+        const categoryName = product.category || 'Uncategorized';
         if (!acc[categoryName]) {
           acc[categoryName] = [];
         }
@@ -175,36 +179,28 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         return acc;
       }, {});
 
-      // Sort categories alphabetically (with "Uncategorized" at the end)
-      const sortedCategories = Object.entries(productsByCategory).sort(([a], [b]) => {
-        if (a === 'Uncategorized') return 1;
-        if (b === 'Uncategorized') return -1;
-        return a.localeCompare(b);
-      });
-
       // Iterate through categories and their products
-      sortedCategories.forEach(([categoryName, categoryProducts], categoryIndex) => {
+      Object.entries(productsByCategory).forEach(([categoryName, categoryProducts], categoryIndex) => {
+        // Calculate height needed for category header
+        const categoryHeaderHeight = 25;
+
         // Check if we need a new page for the category
-        if (currentY + 40 > pageHeight) {
+        if (currentY + categoryHeaderHeight > pageHeight) {
           doc.addPage();
           currentY = doc.page.margins.top;
           currentY = drawTableHeader(currentY);
         }
 
-        // Draw category header with bold font and background
+        // Draw category header
         const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
-        doc.rect(50, currentY - 5, tableWidth, 30)
-           .fillAndStroke('#f8fafc', '#e5e7eb');
-
         doc.font('Helvetica-Bold')
            .fontSize(12)
-           .fillColor('#000000')
-           .text(categoryName, 60, currentY + 5, {
+           .text(categoryName, 60, currentY, {
              width: tableWidth - 20,
              align: 'left'
            });
 
-        currentY += 35; // Space after category header
+        currentY += categoryHeaderHeight;
 
         // Process products in this category
         categoryProducts.forEach((product, index) => {
@@ -221,7 +217,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           const productHeight = Math.max(
             doc.heightOfString(productText, { width: columnWidths[0] }),
             doc.heightOfString(descriptionText, { width: columnWidths[1] })
-          ) + 15; // Add padding
+          ) + 20; // Add padding
 
           // Check if we need a new page
           if (currentY + productHeight > pageHeight) {
@@ -230,21 +226,23 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
             currentY = drawTableHeader(currentY);
 
             // Redraw category header on new page
-            doc.rect(50, currentY - 5, tableWidth, 30)
-               .fillAndStroke('#f8fafc', '#e5e7eb');
-
             doc.font('Helvetica-Bold')
                .fontSize(12)
-               .fillColor('#000000')
-               .text(categoryName, 60, currentY + 5, {
+               .text(categoryName, 60, currentY, {
                  width: tableWidth - 20,
                  align: 'left'
                });
-
-            currentY += 35;
+            currentY += categoryHeaderHeight;
           }
 
-          // Draw product row
+          // Draw row background
+          const isEvenRow = index % 2 === 0;
+          if (isEvenRow) {
+            doc.rect(50, currentY - 4, tableWidth, productHeight)
+               .fill('#f8fafc');
+          }
+
+          // Product details
           let xPos = 60;
           doc.font('Helvetica')
              .fontSize(10)
@@ -267,7 +265,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           // Unit Price (if enabled)
           if (settings.showUnitPrice) {
             xPos += columnWidths[2];
-            doc.text(`$${product.price.toFixed(2)}`, xPos, currentY, {
+            const unitPrice = Number(product.price).toFixed(2);
+            doc.text(`$${unitPrice}`, xPos, currentY, {
               width: columnWidths[3],
               align: 'right'
             });
@@ -276,7 +275,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           // Total (if enabled)
           if (settings.showTotalPrice) {
             xPos += (settings.showUnitPrice ? columnWidths[3] : columnWidths[2]);
-            const total = product.price * product.quantity;
+            const total = Number(product.price) * Number(product.quantity);
             doc.text(`$${total.toFixed(2)}`, xPos, currentY, {
               width: settings.showUnitPrice ? columnWidths[4] : columnWidths[3],
               align: 'right'
@@ -285,18 +284,19 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
 
           currentY += productHeight;
 
-          // Add separator line between products
+          // Add separator line if not the last product in the category
           if (index < categoryProducts.length - 1) {
             doc.strokeColor('#e5e7eb')
-               .moveTo(50, currentY - 5)
-               .lineTo(50 + tableWidth, currentY - 5)
-               .stroke();
+               .moveTo(50, currentY - 10)
+               .lineTo(50 + tableWidth, currentY - 10)
+               .stroke()
+               .strokeColor('#000000');
           }
         });
 
-        // Add space between categories
-        if (categoryIndex < sortedCategories.length - 1) {
-          currentY += 20;
+        // Add extra space between categories
+        if (categoryIndex < Object.keys(productsByCategory).length - 1) {
+          currentY += 15;
         }
       });
 
@@ -311,11 +311,11 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       const summaryWidth = 225;
       const summaryX = doc.page.width - doc.page.margins.right - summaryWidth;
 
-      // Draw summary box
-      doc.rect(summaryX, currentY, summaryWidth, 120).stroke();
+      doc.rect(summaryX, currentY, summaryWidth, 120)
+         .stroke();
 
       // Subtotal
-      const subtotal = Number(quote.subtotal);
+      const subtotal = Number(quote.subtotal || 0);
       doc.font('Helvetica')
          .fontSize(10)
          .text('Subtotal:', summaryX + 10, currentY + 10)
@@ -328,7 +328,7 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         const discountValue = Number(quote.discountValue);
         const discountLabel = quote.discountType === 'PERCENTAGE'
           ? `Discount (${discountValue}%):`
-          : 'Discount:';
+          : 'Discount (fixed):';
         doc.text(discountLabel, summaryX + 10, summaryY)
            .text(`-$${discountValue.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
@@ -337,14 +337,14 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Tax
       if (quote.taxRate) {
         const taxRate = Number(quote.taxRate);
-        const taxAmount = subtotal * (taxRate / 100);
+        const taxAmount = (subtotal * (taxRate / 100));
         doc.text(`Tax (${taxRate}%):`, summaryX + 10, summaryY)
            .text(`$${taxAmount.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
       // Total
-      const total = Number(quote.total);
+      const total = Number(quote.total || 0);
       doc.font('Helvetica-Bold')
          .text('Total:', summaryX + 10, summaryY)
          .text(`$${total.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
@@ -441,9 +441,8 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         }
       }
 
-      // Finalize the PDF
+      // Complete the PDF generation
       doc.end();
-
     } catch (error) {
       console.error('Error generating PDF:', error);
       reject(error);
