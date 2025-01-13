@@ -12,7 +12,6 @@ import {
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
-import * as z from 'zod';
 
 // Helper function to generate quote number
 async function generateQuoteNumber(companyId: number): Promise<string> {
@@ -32,13 +31,6 @@ async function generateQuoteNumber(companyId: number): Promise<string> {
 
   return `Q${year}${month}${sequenceNumber}`;
 }
-
-// Add type validation for category requests
-const categorySchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  description: z.string().optional(),
-  subcategories: z.array(z.string().min(1, "Subcategory cannot be empty")).default([]),
-});
 
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
@@ -419,16 +411,15 @@ export function registerRoutes(app: Express): Server {
 
   app.post("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
-      // Validate request body
-      const validatedData = categorySchema.parse(req.body);
+      const { name, description, subcategories } = req.body;
 
       // Create new category with subcategories array
       const [newCategory] = await db
         .insert(categories)
         .values({
-          name: validatedData.name,
-          description: validatedData.description,
-          subcategories: validatedData.subcategories,
+          name,
+          description,
+          subcategories: subcategories || [], // Ensure subcategories is always an array
           companyId: req.user!.companyId,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -446,12 +437,6 @@ export function registerRoutes(app: Express): Server {
       res.status(201).json(createdCategory);
     } catch (error) {
       console.error('Error creating category:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: error.errors 
-        });
-      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -462,9 +447,6 @@ export function registerRoutes(app: Express): Server {
       if (isNaN(categoryId)) {
         return res.status(400).json({ message: "Invalid category ID" });
       }
-
-      // Validate request body
-      const validatedData = categorySchema.parse(req.body);
 
       // Verify category exists and belongs to company
       const existingCategory = await db.query.categories.findFirst({
@@ -482,14 +464,14 @@ export function registerRoutes(app: Express): Server {
       await db
         .update(categories)
         .set({
-          name: validatedData.name,
-          description: validatedData.description,
-          subcategories: validatedData.subcategories,
+          name: req.body.name,
+          description: req.body.description,
+          subcategories: req.body.subcategories || [], // Ensure subcategories is always an array
           updatedAt: new Date()
         })
         .where(eq(categories.id, categoryId));
 
-      // Get updated category with relations
+      // Get updated category
       const updatedCategory = await db.query.categories.findFirst({
         where: eq(categories.id, categoryId),
         with: {
@@ -500,12 +482,6 @@ export function registerRoutes(app: Express): Server {
       res.json(updatedCategory);
     } catch (error) {
       console.error('Error updating category:', error);
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ 
-          message: "Validation error", 
-          errors: error.errors 
-        });
-      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
