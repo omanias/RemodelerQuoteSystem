@@ -36,7 +36,6 @@ interface CategoryFormProps {
 }
 
 export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
-  const [isLoading, setIsLoading] = useState(false);
   const [subcategories, setSubcategories] = useState<string[]>(
     category?.subcategories || []
   );
@@ -54,6 +53,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
+      console.log("Submitting form with data:", { ...data, subcategories });
       const response = await fetch(
         category ? `/api/categories/${category.id}` : "/api/categories",
         {
@@ -61,14 +61,20 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ...data,
-            subcategories,
+            subcategories: subcategories.filter(Boolean), // Filter out empty strings
           }),
           credentials: "include",
         }
       );
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || "Failed to save category");
+        } catch {
+          throw new Error(errorText || "Failed to save category");
+        }
       }
 
       return response.json();
@@ -91,11 +97,12 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   });
 
   const onSubmit = async (data: CategoryFormData) => {
-    setIsLoading(true);
     try {
+      console.log("Form submitted with data:", data);
       await mutation.mutateAsync(data);
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      // Error is handled by mutation error callback
+      console.error("Failed to submit category:", error);
     }
   };
 
@@ -184,8 +191,8 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
+        <Button type="submit" disabled={mutation.isPending} className="w-full">
+          {mutation.isPending ? "Saving..." : category ? "Update Category" : "Create Category"}
         </Button>
       </form>
     </Form>

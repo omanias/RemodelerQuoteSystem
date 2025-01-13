@@ -1,7 +1,28 @@
 import PDFDocument from 'pdfkit';
-import { Quote, Company, Template } from '@db/schema';
+import { Quote, Company, Template, quotes } from '@db/schema';
+import { db } from '@db';
 import path from 'path';
 import fs from 'fs';
+import { eq, and } from "drizzle-orm";
+
+// Add generateQuoteNumber function
+export async function generateQuoteNumber(companyId: number): Promise<string> {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+
+  // Get the count of quotes for this company this month
+  const existingQuotes = await db.query.quotes.findMany({
+    where: and(
+      eq(quotes.companyId, companyId)
+    )
+  });
+
+  const quoteCount = existingQuotes.length + 1;
+  const sequenceNumber = quoteCount.toString().padStart(4, '0');
+
+  return `Q${year}${month}${sequenceNumber}`;
+}
 
 interface Product {
   name: string;

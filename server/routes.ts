@@ -11,27 +11,9 @@ import {
   type Quote, type Settings, type Contact
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
-import { generateQuotePDF } from "./services/pdfService";
+import { generateQuotePDF, generateQuoteNumber } from "./services/pdfService";
 
-// Helper function to generate quote number
-async function generateQuoteNumber(companyId: number): Promise<string> {
-  const date = new Date();
-  const year = date.getFullYear().toString().slice(-2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-
-  // Get the count of quotes for this company this month
-  const existingQuotes = await db.query.quotes.findMany({
-    where: and(
-      eq(quotes.companyId, companyId)
-    )
-  });
-
-  const quoteCount = existingQuotes.length + 1;
-  const sequenceNumber = quoteCount.toString().padStart(4, '0');
-
-  return `Q${year}${month}${sequenceNumber}`;
-}
-
+// put application routes here
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
 
@@ -40,6 +22,75 @@ export function registerRoutes(app: Express): Server {
 
   // Apply company middleware to all routes after auth routes
   app.use(companyMiddleware);
+
+  // Categories routes with proper middleware chain
+  app.get("/api/categories", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const companyCategories = await db.query.categories.findMany({
+        where: eq(categories.companyId, req.user!.companyId),
+        with: {
+          products: true,
+          templates: true
+        }
+      });
+
+      res.json(companyCategories);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/categories/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: "Invalid category ID" });
+      }
+
+      const { name, description, subcategories } = req.body;
+
+      // Verify category exists and belongs to company
+      const existingCategory = await db.query.categories.findFirst({
+        where: and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingCategory) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      // Update category with proper type checking
+      await db
+        .update(categories)
+        .set({
+          name,
+          description,
+          subcategories: Array.isArray(subcategories) ? subcategories : [],
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        ));
+
+      // Get the updated category with its relations
+      const categoryWithRelations = await db.query.categories.findFirst({
+        where: eq(categories.id, categoryId),
+        with: {
+          products: true,
+          templates: true
+        }
+      });
+
+      res.json(categoryWithRelations);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // Quote creation route with proper typing
   app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -448,6 +499,8 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "Invalid category ID" });
       }
 
+      const { name, description, subcategories } = req.body;
+
       // Verify category exists and belongs to company
       const existingCategory = await db.query.categories.findFirst({
         where: and(
@@ -460,26 +513,31 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Category not found" });
       }
 
-      // Update category with subcategories array
-      await db
+      // Update category with proper type checking
+      const [updatedCategory] = await db
         .update(categories)
         .set({
-          name: req.body.name,
-          description: req.body.description,
-          subcategories: req.body.subcategories || [], // Ensure subcategories is always an array
+          name,
+          description,
+          subcategories: Array.isArray(subcategories) ? subcategories : [],
           updatedAt: new Date()
         })
-        .where(eq(categories.id, categoryId));
+        .where(and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        ))
+        .returning();
 
-      // Get updated category
-      const updatedCategory = await db.query.categories.findFirst({
+      // Get the updated category with its relations
+      const categoryWithRelations = await db.query.categories.findFirst({
         where: eq(categories.id, categoryId),
         with: {
-          products: true
+          products: true,
+          templates: true
         }
       });
 
-      res.json(updatedCategory);
+      res.json(categoryWithRelations);
     } catch (error) {
       console.error('Error updating category:', error);
       res.status(500).json({ message: "Internal server error" });
