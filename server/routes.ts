@@ -453,6 +453,51 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.put("/api/categories/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const categoryId = parseInt(req.params.id);
+      if (isNaN(categoryId)) {
+        return res.status(400).json({ message: "Invalid category ID" });
+      }
+
+      // Verify category exists and belongs to company
+      const existingCategory = await db.query.categories.findFirst({
+        where: and(
+          eq(categories.id, categoryId),
+          eq(categories.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingCategory) {
+        return res.status(404).json({ message: "Category not found" });
+      }
+
+      // Update category with subcategories array
+      await db
+        .update(categories)
+        .set({
+          name: req.body.name,
+          description: req.body.description,
+          subcategories: req.body.subcategories || [], // Ensure subcategories is always an array
+          updatedAt: new Date()
+        })
+        .where(eq(categories.id, categoryId));
+
+      // Get updated category
+      const updatedCategory = await db.query.categories.findFirst({
+        where: eq(categories.id, categoryId),
+        with: {
+          products: true
+        }
+      });
+
+      res.json(updatedCategory);
+    } catch (error) {
+      console.error('Error updating category:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/categories/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
       const categoryId = parseInt(req.params.id);
