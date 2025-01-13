@@ -26,46 +26,35 @@ const categoryFormSchema = z.object({
 type CategoryFormData = z.infer<typeof categoryFormSchema>;
 
 interface CategoryFormProps {
-  category?: {
-    id: number;
-    name: string;
-    description?: string;
-    subcategories?: string[];
-  };
   onSuccess?: () => void;
 }
 
-export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
+export function CategoryForm({ onSuccess }: CategoryFormProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [subcategories, setSubcategories] = useState<string[]>(
-    category?.subcategories || []
-  );
+  const [subcategories, setSubcategories] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const form = useForm<CategoryFormData>({
     resolver: zodResolver(categoryFormSchema),
     defaultValues: {
-      name: category?.name || "",
-      description: category?.description || "",
-      subcategories: category?.subcategories || [],
+      name: "",
+      description: "",
+      subcategories: [],
     },
   });
 
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormData) => {
-      const response = await fetch(
-        category ? `/api/categories/${category.id}` : "/api/categories",
-        {
-          method: category ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...data,
-            subcategories,
-          }),
-          credentials: "include",
-        }
-      );
+      const response = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          subcategories,
+        }),
+        credentials: "include",
+      });
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -76,8 +65,8 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
       toast({
-        title: `Category ${category ? "updated" : "created"} successfully`,
-        description: `The category has been ${category ? "updated" : "created"} in the system.`,
+        title: "Category created successfully",
+        description: "The category has been created in the system.",
       });
       onSuccess?.();
     },
@@ -185,7 +174,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         />
 
         <Button type="submit" disabled={isLoading} className="w-full">
-          {isLoading ? "Saving..." : category ? "Update Category" : "Create Category"}
+          {isLoading ? "Creating..." : "Create Category"}
         </Button>
       </form>
     </Form>

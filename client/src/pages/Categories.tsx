@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -33,7 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Plus, Search, ArrowLeft, Loader2 } from "lucide-react";
+import { Plus, MoreVertical, ArrowLeft, Loader2, Search } from "lucide-react";
 import { CategoryForm } from "@/components/CategoryForm";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -52,8 +51,6 @@ interface Category {
 export function Categories() {
   const [search, setSearch] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editCategory, setEditCategory] = useState<Category | null>(null);
   const [deleteCategory, setDeleteCategory] = useState<Category | null>(null);
   const { toast } = useToast();
 
@@ -110,12 +107,10 @@ export function Categories() {
           <h1 className="text-2xl font-bold">Categories</h1>
         </div>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Category
-            </Button>
-          </DialogTrigger>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Category
+          </Button>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
@@ -171,7 +166,7 @@ export function Categories() {
                 <TableRow key={category.id}>
                   <TableCell>{category.name}</TableCell>
                   <TableCell>
-                    {category.subcategories?.length 
+                    {category.subcategories?.length
                       ? category.subcategories.join(", ")
                       : "-"}
                   </TableCell>
@@ -180,48 +175,12 @@ export function Categories() {
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          className="h-8 w-8 p-0"
-                        >
+                        <Button variant="ghost" className="h-8 w-8 p-0">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <Dialog open={editDialogOpen && editCategory?.id === category.id} 
-                               onOpenChange={(open) => {
-                                 setEditDialogOpen(open);
-                                 if (!open) setEditCategory(null);
-                               }}>
-                          <DialogTrigger asChild>
-                            <DropdownMenuItem onSelect={(e) => {
-                              e.preventDefault();
-                              setEditCategory(category);
-                              setEditDialogOpen(true);
-                            }}>
-                              Edit
-                            </DropdownMenuItem>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Category</DialogTitle>
-                            </DialogHeader>
-                            <CategoryForm 
-                              category={{
-                                id: category.id,
-                                name: category.name,
-                                description: category.description || undefined,
-                                subcategories: category.subcategories || undefined
-                              }}
-                              onSuccess={() => {
-                                setEditDialogOpen(false);
-                                setEditCategory(null);
-                                refetch();
-                              }}
-                            />
-                          </DialogContent>
-                        </Dialog>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-destructive"
                           onSelect={() => setDeleteCategory(category)}
                         >
