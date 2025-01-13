@@ -8,7 +8,7 @@ import { db } from "@db";
 import { 
   users, quotes, contacts, products, categories, 
   templates, notifications, companies, settings,
-  type Quote, type Settings
+  type Quote, type Settings, type Contact
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
@@ -21,6 +21,121 @@ export function registerRoutes(app: Express): Server {
 
   // Apply company middleware to all routes after auth routes
   app.use(companyMiddleware);
+
+  // Quote creation route with proper typing
+  app.post("/api/quotes", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const {
+        contactId,
+        categoryId,
+        templateId,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
+        status,
+        paymentMethod,
+        subtotal,
+        total,
+        downPaymentType,
+        downPaymentValue,
+        remainingBalance,
+        discountType,
+        discountValue,
+        discountCode,
+        taxRate,
+        taxAmount,
+        content,
+        signature,
+      } = req.body;
+
+      // Create new quote with proper type checking
+      const [newQuote] = await db
+        .insert(quotes)
+        .values({
+          contactId: contactId ? parseInt(contactId) : null,
+          categoryId: parseInt(categoryId),
+          templateId: parseInt(templateId),
+          clientName,
+          clientEmail,
+          clientPhone,
+          clientAddress,
+          status,
+          paymentMethod,
+          subtotal: parseFloat(subtotal) || 0,
+          total: parseFloat(total) || 0,
+          downPaymentType,
+          downPaymentValue: parseFloat(downPaymentValue) || 0,
+          remainingBalance: parseFloat(remainingBalance) || 0,
+          discountType,
+          discountValue: parseFloat(discountValue) || 0,
+          discountCode,
+          taxRate: parseFloat(taxRate) || 0,
+          taxAmount: parseFloat(taxAmount) || 0,
+          content,
+          signature,
+          companyId: req.user!.companyId,
+          userId: req.user!.id, // Added userId
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      res.status(201).json(newQuote);
+    } catch (error) {
+      console.error('Error creating quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // PDF Export route with proper typing
+  app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      // Get quote with its template and necessary relations
+      const quote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, quoteId),
+        with: {
+          template: true,
+          company: true,
+        }
+      });
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Get quote settings with proper type checking
+      const quoteSettings = await db.query.settings.findFirst({
+        where: eq(settings.companyId, req.user!.companyId)
+      });
+
+      // Generate PDF with settings
+      const pdfBuffer = await generateQuotePDF({ 
+        quote,
+        company: quote.company,
+        settings: {
+          showUnitPrice: quoteSettings?.showUnitPrice ?? true,
+          showTotalPrice: quoteSettings?.showTotalPrice ?? true
+        }
+      });
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=quote-${quote.number}.pdf`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+
+      // Send PDF
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      res.status(500).json({ message: "Error generating PDF" });
+    }
+  });
 
   // Products routes with proper middleware chain
   app.get("/api/products", requireAuth, requireCompanyAccess, async (req, res) => {
@@ -200,55 +315,6 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error('Error fetching companies:', error);
       res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // PDF Export route with proper typing
-  app.get("/api/quotes/:id/export/pdf", requireAuth, requireCompanyAccess, async (req, res) => {
-    try {
-      const quoteId = parseInt(req.params.id);
-      if (isNaN(quoteId)) {
-        return res.status(400).json({ message: "Invalid quote ID" });
-      }
-
-      // Get quote with its template and necessary relations
-      const quote = await db.query.quotes.findFirst({
-        where: eq(quotes.id, quoteId),
-        with: {
-          template: true,
-          company: true,
-        }
-      });
-
-      if (!quote) {
-        return res.status(404).json({ message: "Quote not found" });
-      }
-
-      // Get quote settings with proper type checking
-      const quoteSettings = await db.query.settings.findFirst({
-        where: eq(settings.companyId, req.user!.companyId)
-      });
-
-      // Generate PDF with settings
-      const pdfBuffer = await generateQuotePDF({ 
-        quote,
-        company: quote.company,
-        settings: {
-          showUnitPrice: quoteSettings?.showUnitPrice ?? true,
-          showTotalPrice: quoteSettings?.showTotalPrice ?? true
-        }
-      });
-
-      // Set response headers
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=quote-${quote.number}.pdf`);
-      res.setHeader('Content-Length', pdfBuffer.length);
-
-      // Send PDF
-      res.send(pdfBuffer);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      res.status(500).json({ message: "Error generating PDF" });
     }
   });
 

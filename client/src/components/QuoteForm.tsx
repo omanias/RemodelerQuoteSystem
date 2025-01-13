@@ -35,8 +35,8 @@ const quoteFormSchema = z.object({
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
   categoryId: z.string().min(1, "Category is required"),
-  status: z.enum(Object.values(QuoteStatus) as [string, ...string[]]),
-  paymentMethod: z.enum(Object.values(PaymentMethod) as [string, ...string[]]),
+  status: z.nativeEnum(QuoteStatus),
+  paymentMethod: z.nativeEnum(PaymentMethod),
   discountType: z.enum(["percentage", "fixed"]).optional(),
   discountValue: z.string().optional(),
   discountCode: z.string().optional(),
@@ -45,17 +45,9 @@ const quoteFormSchema = z.object({
   downPaymentValue: z.string().optional(),
   notes: z.string().optional(),
   templateId: z.string().min(1, "Template is required"),
-  signature: z.object({
-    data: z.string(),
-    timestamp: z.string(),
-    metadata: z.object({
-      browserInfo: z.string(),
-      ipAddress: z.string(),
-      signedAt: z.string(),
-      timezone: z.string(),
-    }),
-  }).optional(),
 });
+
+type QuoteFormData = z.infer<typeof quoteFormSchema>;
 
 interface QuoteFormProps {
   quote?: Quote;
@@ -128,14 +120,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     queryKey: ["/api/templates"],
   });
 
-  const form = useForm({
+  const form = useForm<QuoteFormData>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
       contactId: quote?.contactId?.toString() || defaultContactId || "",
-      clientName: quote?.clientName || "",
-      clientEmail: quote?.clientEmail || "",
-      clientPhone: quote?.clientPhone || "",
-      clientAddress: quote?.clientAddress || "",
+      clientName: quote?.clientName || contact?.firstName ? `${contact.firstName} ${contact.lastName}` : "",
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
       categoryId: quote?.categoryId?.toString() || "",
       status: quote?.status || QuoteStatus.DRAFT,
       paymentMethod: quote?.paymentMethod || PaymentMethod.CASH,
@@ -147,7 +139,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       downPaymentValue: quote?.downPaymentValue?.toString() || "0",
       notes: quote?.notes || "",
       templateId: quote?.templateId?.toString() || "",
-      signature: quote?.signature || undefined,
     },
   });
 
@@ -205,9 +196,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     return isNaN(parsed) ? 0 : parsed;
   };
 
-  const calculateSubtotal = () => {
-    if (!selectedProducts.length) return 0;
-    return selectedProducts.reduce((sum, item) => {
+  const calculateSubtotal = (products: SelectedProduct[]): number => {
+    if (!products.length) return 0;
+    return products.reduce((sum: number, item: SelectedProduct) => {
       const quantity = parseNumber(item.quantity);
       const price = parseNumber(item.unitPrice);
       return sum + (quantity * price);
@@ -215,7 +206,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const calculateDiscount = () => {
-    const subtotal = calculateSubtotal();
+    const subtotal = calculateSubtotal(selectedProducts);
     const discountType = form.watch("discountType");
     const discountValue = parseNumber(form.watch("discountValue"));
 
@@ -225,7 +216,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const calculateTax = () => {
-    const subtotal = calculateSubtotal();
+    const subtotal = calculateSubtotal(selectedProducts);
     const discount = calculateDiscount();
     const taxRate = parseNumber(form.watch("taxRate"));
 
@@ -233,7 +224,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
+    const subtotal = calculateSubtotal(selectedProducts);
     const discount = calculateDiscount();
     const tax = calculateTax();
     return subtotal - discount + tax;
@@ -296,15 +287,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const mutation = useMutation({
-    mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
-      const total = calculateTotal();
-      const downPayment = calculateDownPayment();
-      const remainingBalance = calculateRemainingBalance();
-      const subtotal = calculateSubtotal();
-      const discount = calculateDiscount();
-      const tax = calculateTax();
-
-      const formattedProducts = selectedProducts.map(item => {
+    mutationFn: async (data: QuoteFormData) => {
+      const total = calculateSubtotal(selectedProducts);
+      const formattedProducts = selectedProducts.map((item: SelectedProduct) => {
         const product = products.find(p => p.id === item.productId);
         return {
           id: item.productId,
@@ -316,52 +301,24 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         };
       });
 
-      const quoteData = {
-        contactId: parseInt(data.contactId),
-        categoryId: parseInt(data.categoryId),
-        templateId: parseInt(data.templateId),
-        clientName: data.clientName,
-        clientEmail: data.clientEmail,
-        clientPhone: data.clientPhone,
-        clientAddress: data.clientAddress,
-        status: data.status,
-        paymentMethod: data.paymentMethod,
-        subtotal: parseNumber(subtotal),
-        total: parseNumber(total),
-        downPaymentType: data.downPaymentType,
-        downPaymentValue: parseNumber(data.downPaymentValue),
-        remainingBalance: parseNumber(remainingBalance),
-        discountType: data.discountType,
-        discountValue: parseNumber(data.discountValue),
-        discountCode: data.discountCode,
-        taxRate: parseNumber(data.taxRate),
-        taxAmount: parseNumber(tax),
-        content: {
-          products: formattedProducts,
-          calculations: {
-            subtotal: parseNumber(subtotal),
-            total: parseNumber(total),
-            downPayment: parseNumber(downPayment),
-            remainingBalance: parseNumber(remainingBalance),
-            discount: parseNumber(discount),
-            tax: parseNumber(tax)
-          },
-        },
-        signature: data.signature,
-      };
-
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(quoteData),
         credentials: "include",
+        body: JSON.stringify({
+          ...data,
+          content: {
+            products: formattedProducts,
+          },
+          total,
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText);
+        throw new Error(errorText || "Failed to save quote");
       }
 
       return response.json();
@@ -378,34 +335,39 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
+      console.error("Quote submission error:", error);
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || "Failed to save quote",
         variant: "destructive",
       });
     },
   });
 
-  const onSubmit = (data: z.infer<typeof quoteFormSchema>) => {
-    if (selectedProducts.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one product to the quote",
-        variant: "destructive",
-      });
-      return;
+  const onSubmit = async (data: QuoteFormData) => {
+    try {
+      if (selectedProducts.length === 0) {
+        toast({
+          title: "Error",
+          description: "Please add at least one product to the quote",
+          variant: "destructive",
+        });
+        return;
+      }
+      await mutation.mutateAsync(data);
+    } catch (error) {
+      console.error("Form submission error:", error);
     }
-    mutation.mutate(data);
   };
 
   const autoSaveMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof quoteFormSchema>) => {
+    mutationFn: async (data: QuoteFormData) => {
       if (!quote?.id) return; // Only auto-save existing quotes
 
       const total = calculateTotal();
       const downPayment = calculateDownPayment();
       const remainingBalance = calculateRemainingBalance();
-      const subtotal = calculateSubtotal();
+      const subtotal = calculateSubtotal(selectedProducts);
       const discount = calculateDiscount();
       const tax = calculateTax();
 
@@ -490,7 +452,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     },
   });
 
-  const debouncedAutoSave = useDebouncedCallback((data: z.infer<typeof quoteFormSchema>) => {
+  const debouncedAutoSave = useDebouncedCallback((data: QuoteFormData) => {
     if (quote?.id) {
       autoSaveMutation.mutate(data);
     }
@@ -499,7 +461,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   useEffect(() => {
     const subscription = form.watch((value) => {
       if (quote?.id && Object.keys(form.formState.dirtyFields).length > 0) {
-        debouncedAutoSave(value as z.infer<typeof quoteFormSchema>);
+        debouncedAutoSave(value as QuoteFormData);
       }
     });
     return () => subscription.unsubscribe();
@@ -996,7 +958,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span>Subtotal:</span>
-                <span>${calculateSubtotal().toFixed(2)}</span>
+                <span>${calculateSubtotal(selectedProducts).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Discount:</span>
