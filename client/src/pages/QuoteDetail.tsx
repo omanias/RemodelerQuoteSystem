@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation, useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { QuoteForm } from "@/components/QuoteForm";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileEdit } from "lucide-react";
 import { type Quote, type User, type Contact } from "@db/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,10 +64,10 @@ export function QuoteDetail() {
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center">
-          <Link href="/quotes">
+          <Link href={contactId ? `/contacts/${contactId}` : "/quotes"}>
             <Button variant="ghost" className="mr-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Quotes
+              {contactId ? "Back to Contact" : "Back to Quotes"}
             </Button>
           </Link>
           <div>
@@ -83,7 +83,12 @@ export function QuoteDetail() {
           variant={isEditing ? "ghost" : "default"}
           onClick={() => setIsEditing(!isEditing)}
         >
-          {isEditing ? "Cancel Edit" : "Edit Quote"}
+          {isEditing ? "Cancel Edit" : (
+            <>
+              <FileEdit className="h-4 w-4 mr-2" />
+              Edit Quote
+            </>
+          )}
         </Button>
       </div>
 
