@@ -2,8 +2,8 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { QuoteForm } from "./QuoteForm";
-import { QuoteStatus, PaymentMethod } from "@db/schema";
+import { QuoteForm } from "@/components/QuoteForm";
+import { QuoteStatus } from "@/components/QuoteForm";
 
 interface Quote {
   id: number;
@@ -12,7 +12,7 @@ interface Quote {
   clientEmail: string | null;
   clientPhone: string | null;
   clientAddress: string | null;
-  status: keyof typeof QuoteStatus;
+  status: QuoteStatus;
   total: number;
   subtotal: number;
   downPaymentValue: number | null;
@@ -23,22 +23,34 @@ interface Quote {
   templateId: number;
   content: {
     products: Array<{
-      productId: number;
+      id: number;
+      name: string;
+      unit: string;
+      basePrice: number;
+      price: number;
       quantity: number;
       variation?: string;
-      unitPrice: number;
+      variations?: Array<{
+        name: string;
+        price: number;
+      }>;
     }>;
+    calculations?: {
+      tax: number;
+      total: number;
+      discount: number;
+      subtotal: number;
+      downPayment: number;
+      remainingBalance: number;
+    };
   };
-  paymentMethod: keyof typeof PaymentMethod | null;
+  paymentMethod: string | null;
   discountType: "PERCENTAGE" | "FIXED" | null;
   discountValue: number | null;
   discountCode: string | null;
   downPaymentType: "PERCENTAGE" | "FIXED" | null;
   taxRate: number | null;
   notes: string | null;
-  updatedAt: string;
-  userId: number;
-  companyId: number;
 }
 
 export function QuoteDetail() {
@@ -101,7 +113,7 @@ export function QuoteDetail() {
     );
   }
 
-  // If we have an ID, show the quote form in edit mode
+  // If we have an ID, directly show the quote form in edit mode
   return (
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center mb-6">

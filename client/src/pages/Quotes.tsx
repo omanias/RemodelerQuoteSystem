@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation as useLocationWouter } from "wouter";
 import { QuoteForm } from "./QuoteForm";
-import { QuoteStatus, PaymentMethod } from "@db/schema";
 import {
   Table,
   TableBody,
@@ -36,7 +35,7 @@ interface Quote {
   id: number;
   number: string;
   clientName: string;
-  status: keyof typeof QuoteStatus;
+  status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "REVISED";
   total: string | number;
   downPaymentValue: string | number | null;
   remainingBalance: string | number | null;
@@ -56,7 +55,7 @@ interface Quote {
   clientPhone: string | null;
   clientAddress: string | null;
   notes: string | null;
-  paymentMethod: keyof typeof PaymentMethod | null;
+  paymentMethod: string | null;
   discountType: "PERCENTAGE" | "FIXED" | null;
   discountValue: number | null;
   discountCode: string | null;

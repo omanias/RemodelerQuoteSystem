@@ -65,9 +65,6 @@ interface Quote {
   downPaymentType: "PERCENTAGE" | "FIXED" | null;
   taxRate: number | null;
   subtotal: number;
-  userId: number;
-  companyId: number;
-  updatedAt: string;
 }
 
 const quoteFormSchema = z.object({
@@ -75,29 +72,29 @@ const quoteFormSchema = z.object({
   templateId: z.string().optional(),
   categoryId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").optional().nullable(),
-  clientPhone: z.string().optional().nullable(),
-  clientAddress: z.string().optional().nullable(),
-  status: z.enum(Object.keys(QuoteStatus) as [keyof typeof QuoteStatus, ...Array<keyof typeof QuoteStatus>]),
+  clientEmail: z.string().email("Invalid email address").optional(),
+  clientPhone: z.string().optional(),
+  clientAddress: z.string().optional(),
+  status: z.enum(Object.keys(QuoteStatus) as [string, ...string[]]),
   content: z.object({
     products: z.array(z.object({
       productId: z.number(),
-      quantity: z.number().min(1),
+      quantity: z.number(),
       variation: z.string().optional(),
-      unitPrice: z.number().min(0)
+      unitPrice: z.number()
     }))
-  }),
-  subtotal: z.number().min(0),
-  total: z.number().min(0),
-  notes: z.string().optional().nullable(),
-  paymentMethod: z.enum(Object.keys(PaymentMethod) as [keyof typeof PaymentMethod, ...Array<keyof typeof PaymentMethod>]).optional().nullable(),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional().nullable(),
-  discountValue: z.number().min(0).optional().nullable(),
-  discountCode: z.string().optional().nullable(),
-  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional().nullable(),
-  downPaymentValue: z.number().min(0).optional().nullable(),
-  taxRate: z.number().min(0).optional().nullable(),
-  remainingBalance: z.number().min(0).optional().nullable()
+  }).optional(),
+  subtotal: z.number().min(0).optional(),
+  total: z.number().min(0).optional(),
+  notes: z.string().optional(),
+  paymentMethod: z.enum(Object.keys(PaymentMethod) as [string, ...string[]]).optional(),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  discountValue: z.number().min(0).optional(),
+  discountCode: z.string().optional(),
+  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  downPaymentValue: z.number().min(0).optional(),
+  taxRate: z.number().min(0).optional(),
+  remainingBalance: z.number().min(0).optional()
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
@@ -149,16 +146,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       clientPhone: quote?.clientPhone || contact?.primaryPhone || undefined,
       clientAddress: quote?.clientAddress || contact?.primaryAddress || undefined,
       status: quote?.status || "DRAFT",
-      content: {
-        products: quote?.content?.products?.map(p => ({
-          productId: p.productId,
-          quantity: p.quantity,
-          variation: p.variation,
-          unitPrice: Number(p.unitPrice)
-        })) || []
-      },
-      subtotal: Number(quote?.subtotal) || 0,
-      total: Number(quote?.total) || 0,
+      content: quote?.content,
+      subtotal: quote ? Number(quote.subtotal) || 0 : 0,
+      total: quote ? Number(quote.total) || 0 : 0,
       notes: quote?.notes || undefined,
       paymentMethod: quote?.paymentMethod || undefined,
       discountType: quote?.discountType || undefined,
