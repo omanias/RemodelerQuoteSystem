@@ -93,6 +93,16 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Get current user
+  const { data: user } = useQuery({
+    queryKey: ["/api/auth/user"],
+  });
+
+  // Get current company
+  const { data: company } = useQuery({
+    queryKey: ["/api/companies/current"],
+  });
+
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: defaultValues || {
@@ -139,12 +149,19 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   // Create quote mutation
   const { mutate: createQuote, isLoading: isCreating } = useMutation({
     mutationFn: async (data: QuoteFormValues) => {
+      if (!user?.id || !company?.id) {
+        throw new Error("User or company information is missing");
+      }
+
       const response = await fetch("/api/quotes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          userId: user.id,
+          companyId: company.id,
+          status: "DRAFT",
           clientName: data.contactInfo.clientName,
           clientEmail: data.contactInfo.clientEmail,
           clientPhone: data.contactInfo.clientPhone,
@@ -152,20 +169,25 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
           categoryId: data.categoryAndTemplate.categoryId,
           templateId: data.categoryAndTemplate.templateId,
           content: {
-            products: data.products,
+            products: data.products.map(product => ({
+              ...product,
+              quantity: Number(product.quantity),
+              unitPrice: Number(product.unitPrice),
+            })),
           },
-          subtotal: data.calculations.subtotal,
-          total: data.calculations.total,
+          subtotal: Number(data.calculations.subtotal),
+          total: Number(data.calculations.total),
           discountType: data.calculations.discountType,
-          discountValue: data.calculations.discountValue,
+          discountValue: data.calculations.discountValue ? Number(data.calculations.discountValue) : null,
           downPaymentType: data.calculations.downPaymentType,
-          downPaymentValue: data.calculations.downPaymentValue,
-          taxRate: data.calculations.taxRate,
+          downPaymentValue: data.calculations.downPaymentValue ? Number(data.calculations.downPaymentValue) : null,
+          taxRate: data.calculations.taxRate ? Number(data.calculations.taxRate) : null,
         }),
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create quote");
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create quote");
       }
 
       return response.json();
@@ -178,10 +200,10 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       });
       onSuccess();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to create quote. Please try again.",
+        description: error.message || "Failed to create quote. Please try again.",
         variant: "destructive",
       });
     },
@@ -533,6 +555,24 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   };
 
   const onSubmit = (data: QuoteFormValues) => {
+    if (!user?.id) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to create quotes",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!company?.id) {
+      toast({
+        title: "Error",
+        description: "Company information is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createQuote(data);
   };
 
