@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Minus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Contact {
   id: number;
@@ -89,6 +90,8 @@ interface Props {
 export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showNewContactForm, setShowNewContactForm] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
@@ -131,6 +134,57 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products", form.watch("categoryAndTemplate.categoryId")],
     enabled: !!form.watch("categoryAndTemplate.categoryId"),
+  });
+
+  // Create quote mutation
+  const { mutate: createQuote, isLoading: isCreating } = useMutation({
+    mutationFn: async (data: QuoteFormValues) => {
+      const response = await fetch("/api/quotes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clientName: data.contactInfo.clientName,
+          clientEmail: data.contactInfo.clientEmail,
+          clientPhone: data.contactInfo.clientPhone,
+          clientAddress: data.contactInfo.clientAddress,
+          categoryId: data.categoryAndTemplate.categoryId,
+          templateId: data.categoryAndTemplate.templateId,
+          content: {
+            products: data.products,
+          },
+          subtotal: data.calculations.subtotal,
+          total: data.calculations.total,
+          discountType: data.calculations.discountType,
+          discountValue: data.calculations.discountValue,
+          downPaymentType: data.calculations.downPaymentType,
+          downPaymentValue: data.calculations.downPaymentValue,
+          taxRate: data.calculations.taxRate,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create quote");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+      toast({
+        title: "Success",
+        description: "Quote created successfully",
+      });
+      onSuccess();
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: "Failed to create quote. Please try again.",
+        variant: "destructive",
+      });
+    },
   });
 
   const calculateTotals = () => {
@@ -479,8 +533,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   };
 
   const onSubmit = (data: QuoteFormValues) => {
-    console.log(data);
-    onSuccess();
+    createQuote(data);
   };
 
   return (
@@ -509,8 +562,8 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
               Previous
             </Button>
             {currentStep === steps.length - 1 ? (
-              <Button type="submit">
-                Create Quote
+              <Button type="submit" disabled={isCreating}>
+                {isCreating ? "Creating..." : "Create Quote"}
               </Button>
             ) : (
               <Button
