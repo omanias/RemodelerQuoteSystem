@@ -25,11 +25,21 @@ export interface Quote {
   templateId: number;
   content: {
     products: Array<{
-      productId: number;
+      id: number;
+      name: string;
+      unit: string;
+      price: number;
       quantity: number;
       variation?: string;
-      unitPrice: number;
     }>;
+    calculations?: {
+      tax: number;
+      total: number;
+      discount: number;
+      subtotal: number;
+      downPayment: number;
+      remainingBalance: number;
+    };
   };
   paymentMethod?: string | null;
   discountType?: "PERCENTAGE" | "FIXED" | null;

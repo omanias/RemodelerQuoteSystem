@@ -12,7 +12,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -20,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
@@ -49,67 +49,62 @@ const quoteFormSchema = z.object({
   clientPhone: z.string().optional().or(z.literal("")),
   clientAddress: z.string().optional().or(z.literal("")),
   status: z.nativeEnum(QuoteStatus),
-  content: z.object({
-    products: z.array(z.object({
-      productId: z.number(),
-      quantity: z.number(),
-      variation: z.string().optional(),
-      unitPrice: z.number()
-    }))
-  }).optional(),
-  subtotal: z.number().min(0).optional(),
-  total: z.number().min(0).optional(),
-  notes: z.string().optional().or(z.literal("")),
   paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   discountValue: z.string().optional().or(z.literal("")),
   discountCode: z.string().optional().or(z.literal("")),
+  taxRate: z.string().optional().or(z.literal("")),
   downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   downPaymentValue: z.string().optional().or(z.literal("")),
-  taxRate: z.string().optional().or(z.literal(""))
+  notes: z.string().optional().or(z.literal(""))
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
-interface SelectedProduct {
-  productId: number;
+interface Product {
+  id: number;
+  name: string;
+  unit: string;
+  price: number;
   quantity: number;
   variation?: string;
-  unitPrice: number;
 }
 
 interface QuoteFormProps {
   quote?: {
     id: number;
     number: string;
-    contactId: number | null;
-    categoryId: number;
-    templateId: number;
     clientName: string;
     clientEmail: string | null;
     clientPhone: string | null;
     clientAddress: string | null;
     status: QuoteStatus;
-    content: {
-      products: Array<{
-        productId: number;
-        quantity: number;
-        variation?: string;
-        unitPrice: number;
-      }>;
-    };
     total: number;
     subtotal: number;
-    paymentMethod: PaymentMethod | null;
-    discountType: "PERCENTAGE" | "FIXED" | null;
-    discountValue: number | null;
-    discountCode: string | null;
-    downPaymentType: "PERCENTAGE" | "FIXED" | null;
     downPaymentValue: number | null;
-    taxRate: number | null;
     remainingBalance: number | null;
-    notes: string | null;
     createdAt: string;
+    contactId: number | null;
+    categoryId: number;
+    templateId: number;
+    content: {
+      products: Product[];
+      calculations?: {
+        tax: number;
+        total: number;
+        discount: number;
+        subtotal: number;
+        downPayment: number;
+        remainingBalance: number;
+      };
+    };
+    paymentMethod?: string | null;
+    discountType?: "PERCENTAGE" | "FIXED" | null;
+    discountValue?: number | null;
+    discountCode?: string | null;
+    downPaymentType?: "PERCENTAGE" | "FIXED" | null;
+    taxRate?: number | null;
+    notes?: string | null;
   };
   onSuccess?: () => void;
   user?: {
@@ -117,7 +112,7 @@ interface QuoteFormProps {
     name: string;
     email: string;
     role: string;
-  };
+  } | null;
   defaultContactId?: string | null;
   contact?: {
     firstName: string;
@@ -131,14 +126,14 @@ interface QuoteFormProps {
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
+
+  console.log('Initial quote data:', quote);
+
+  // Initialize selected products from quote data if available
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>(() => {
     if (quote?.content?.products) {
-      return quote.content.products.map(p => ({
-        productId: p.productId,
-        quantity: p.quantity || 1,
-        variation: p.variation,
-        unitPrice: p.unitPrice
-      }));
+      console.log('Initializing selected products from quote:', quote.content.products);
+      return quote.content.products;
     }
     return [];
   });
@@ -164,39 +159,35 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     enabled: !!selectedCategoryId,
   });
 
-  const handleKeyDown: KeyboardEventHandler<HTMLFormElement> = (e) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      form.handleSubmit(onSubmit)(e);
-    }
+  const defaultValues = {
+    contactId: quote?.contactId?.toString() || defaultContactId || undefined,
+    templateId: quote?.templateId?.toString(),
+    categoryId: quote?.categoryId?.toString(),
+    clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
+    clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
+    clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
+    clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
+    status: quote?.status || QuoteStatus.DRAFT,
+    paymentMethod: quote?.paymentMethod as PaymentMethod || undefined,
+    discountType: quote?.discountType || undefined,
+    discountValue: quote?.discountValue?.toString() || "",
+    discountCode: quote?.discountCode || "",
+    taxRate: quote?.taxRate?.toString() || "",
+    downPaymentType: quote?.downPaymentType || undefined,
+    downPaymentValue: quote?.downPaymentValue?.toString() || "",
+    notes: quote?.notes || ""
   };
+
+  console.log('Form default values:', defaultValues);
 
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
-    defaultValues: {
-      contactId: quote?.contactId?.toString() || defaultContactId || undefined,
-      templateId: quote?.templateId?.toString(),
-      categoryId: quote?.categoryId?.toString(),
-      clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
-      clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
-      clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
-      clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
-      status: quote?.status || QuoteStatus.DRAFT,
-      content: quote?.content,
-      subtotal: quote?.subtotal || 0,
-      total: quote?.total || 0,
-      notes: quote?.notes || "",
-      paymentMethod: quote?.paymentMethod || undefined,
-      discountType: quote?.discountType || undefined,
-      discountValue: quote?.discountValue?.toString() || "",
-      discountCode: quote?.discountCode || "",
-      taxRate: quote?.taxRate?.toString() || "",
-      downPaymentType: quote?.downPaymentType || undefined,
-      downPaymentValue: quote?.downPaymentValue?.toString() || ""
-    }
+    defaultValues
   });
 
   useEffect(() => {
     if (contact) {
+      console.log('Updating form with contact details:', contact);
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
       form.setValue("clientEmail", contact.primaryEmail || "");
       form.setValue("clientPhone", contact.primaryPhone || "");
@@ -207,37 +198,86 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   useEffect(() => {
     const categoryId = form.watch("categoryId");
     if (categoryId) {
+      console.log('Category changed:', categoryId);
       setSelectedCategoryId(categoryId);
     }
   }, [form.watch("categoryId")]);
 
+  const calculateTotals = (products: Product[]) => {
+    const subtotal = products.reduce((sum, item) => {
+      return sum + (item.quantity * item.price);
+    }, 0);
+
+    const discountType = form.watch("discountType");
+    const discountValue = parseFloat(form.watch("discountValue") || "0");
+    const taxRate = parseFloat(form.watch("taxRate") || "0");
+    const downPaymentType = form.watch("downPaymentType");
+    const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
+
+    const discount = discountType === "PERCENTAGE"
+      ? (subtotal * discountValue / 100)
+      : discountValue;
+
+    const taxAmount = ((subtotal - discount) * taxRate) / 100;
+    const total = subtotal - discount + taxAmount;
+
+    const downPayment = downPaymentType === "PERCENTAGE"
+      ? (total * downPaymentValue / 100)
+      : downPaymentValue;
+
+    const remainingBalance = total - downPayment;
+
+    return {
+      tax: taxAmount,
+      total,
+      discount,
+      subtotal,
+      downPayment,
+      remainingBalance
+    };
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: QuoteFormValues) => {
+      const calculations = calculateTotals(selectedProducts);
+
+      const payload = {
+        ...data,
+        contactId: data.contactId ? parseInt(data.contactId) : null,
+        categoryId: data.categoryId ? parseInt(data.categoryId) : null,
+        templateId: data.templateId ? parseInt(data.templateId) : null,
+        content: {
+          products: selectedProducts,
+          calculations
+        },
+        subtotal: calculations.subtotal,
+        total: calculations.total,
+        discountValue: data.discountValue ? parseFloat(data.discountValue) : null,
+        taxRate: data.taxRate ? parseFloat(data.taxRate) : null,
+        downPaymentValue: data.downPaymentValue ? parseFloat(data.downPaymentValue) : null,
+        remainingBalance: calculations.remainingBalance
+      };
+
+      console.log('Mutation payload:', payload);
+
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         credentials: "include",
-        body: JSON.stringify({
-          ...data,
-          contactId: data.contactId ? parseInt(data.contactId) : null,
-          templateId: data.templateId ? parseInt(data.templateId) : null,
-          categoryId: data.categoryId ? parseInt(data.categoryId) : null,
-          content: {
-            products: selectedProducts,
-          },
-          discountValue: data.discountValue ? parseFloat(data.discountValue) : null,
-          taxRate: data.taxRate ? parseFloat(data.taxRate) : null,
-          downPaymentValue: data.downPaymentValue ? parseFloat(data.downPaymentValue) : null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        console.error('API error:', errorText);
+        throw new Error(errorText);
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('API response:', result);
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
@@ -251,6 +291,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
+      console.error('Mutation error:', error);
       toast({
         title: "Error",
         description: error.message,
@@ -259,8 +300,15 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     },
   });
 
+  const handleKeyDown: KeyboardEventHandler<HTMLFormElement> = (e) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      form.handleSubmit(onSubmit)(e);
+    }
+  };
+
   const onSubmit = async (data: QuoteFormValues) => {
     try {
+      console.log('Form submission data:', data);
       await mutation.mutateAsync(data);
     } catch (error) {
       console.error("Form submission error:", error);
@@ -268,17 +316,22 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const addProduct = (product: any) => {
+    console.log('Adding product:', product);
     setSelectedProducts(prev => [
       ...prev,
       {
-        productId: product.id,
+        id: product.id,
+        name: product.name,
+        unit: product.unit,
+        price: product.price, // Corrected: Use product.price instead of product.basePrice
         quantity: 1,
-        unitPrice: product.basePrice,
+        variation: product.variations?.[0]?.name
       }
     ]);
   };
 
   const updateQuantity = (index: number, value: number) => {
+    console.log('Updating quantity:', { index, value });
     setSelectedProducts(prev =>
       prev.map((item, i) =>
         i === index ? { ...item, quantity: Math.max(1, value) } : item
@@ -287,13 +340,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const removeProduct = (index: number) => {
+    console.log('Removing product at index:', index);
     setSelectedProducts(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
     <Form {...form}>
       <form onKeyDown={handleKeyDown} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {user && (
+        {user ? (
           <Card>
             <CardContent className="pt-6">
               <h3 className="font-semibold mb-2">Sales Representative</h3>
@@ -303,9 +357,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
-        {/* Contact Information */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -403,7 +456,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Quote Details */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Details</h3>
@@ -488,7 +540,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Products */}
         {selectedCategoryId && (
           <Card>
             <CardContent className="pt-6">
@@ -530,51 +581,48 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <div className="space-y-4">
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
-                      {selectedProducts.map((item, index) => {
-                        const product = products.find((p: any) => p.id === item.productId);
-                        return (
-                          <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
-                            <div className="flex-1">
-                              <p className="font-medium">{product?.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                ${item.unitPrice}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => updateQuantity(index, item.quantity - 1)}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <Input
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
-                                className="w-20 text-center"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => updateQuantity(index, item.quantity + 1)}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => removeProduct(index)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
+                      {selectedProducts.map((item, index) => (
+                        <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
+                          <div className="flex-1">
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              ${item.price}
+                            </p>
                           </div>
-                        );
-                      })}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => updateQuantity(index, item.quantity - 1)}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <Input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
+                              className="w-20 text-center"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              onClick={() => updateQuantity(index, item.quantity + 1)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeProduct(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -583,7 +631,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Quote Settings */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Settings</h3>
