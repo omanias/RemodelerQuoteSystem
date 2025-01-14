@@ -1,10 +1,7 @@
-import { useState } from "react";
-import { useLocation, useParams, Link } from "wouter";
+import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FileEdit } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { ArrowLeft } from "lucide-react";
 import { QuoteForm } from "@/components/QuoteForm";
 import { QuoteStatus } from "@/components/QuoteForm";
 
@@ -57,12 +54,10 @@ interface Quote {
 }
 
 export function QuoteDetail() {
-  const [, setLocation] = useLocation();
   const params = useParams();
   const searchParams = new URLSearchParams(window.location.search);
   const contactId = searchParams.get("contactId");
   const id = params.id;
-  const [isEditing, setIsEditing] = useState(false);
 
   const { data: quote, isLoading: isLoadingQuote } = useQuery<Quote>({
     queryKey: [`/api/quotes/${id}`],
@@ -112,141 +107,34 @@ export function QuoteDetail() {
           user={user}
           defaultContactId={contactId}
           contact={contact}
-          onSuccess={() => setLocation("/quotes")}
+          onSuccess={() => window.location.href = "/quotes"}
         />
       </div>
     );
   }
 
-  // If we have an ID, show the quote details view with edit option
+  // If we have an ID, directly show the quote form in edit mode
   return (
     <div className="container mx-auto py-6 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center">
-          <Link href={contactId ? `/contacts/${contactId}` : "/quotes"}>
-            <Button variant="ghost" className="mr-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              {contactId ? "Back to Contact" : "Back to Quotes"}
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">Quote {quote?.number}</h1>
-            {quote?.status && (
-              <Badge variant={quote.status === QuoteStatus.ACCEPTED ? 'default' : 'secondary'}>
-                {quote.status}
-              </Badge>
-            )}
-          </div>
+      <div className="flex items-center mb-6">
+        <Link href={contactId ? `/contacts/${contactId}` : "/quotes"}>
+          <Button variant="ghost" className="mr-4">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {contactId ? "Back to Contact" : "Back to Quotes"}
+          </Button>
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold">Edit Quote {quote?.number}</h1>
         </div>
-        <Button 
-          variant={isEditing ? "ghost" : "default"}
-          onClick={() => setIsEditing(!isEditing)}
-        >
-          {isEditing ? "Cancel Edit" : (
-            <>
-              <FileEdit className="h-4 w-4 mr-2" />
-              Edit Quote
-            </>
-          )}
-        </Button>
       </div>
 
-      {isEditing ? (
-        <QuoteForm
-          quote={quote}
-          user={user}
-          defaultContactId={contactId}
-          contact={contact}
-          onSuccess={() => {
-            setIsEditing(false);
-            setLocation(`/quotes/${id}`);
-          }}
-        />
-      ) : (
-        <div className="space-y-6">
-          {quote && (
-            <>
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="font-semibold mb-4">Client Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Name</p>
-                      <p className="font-medium">{quote.clientName}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-medium">{quote.clientEmail || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Phone</p>
-                      <p className="font-medium">{quote.clientPhone || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Address</p>
-                      <p className="font-medium">{quote.clientAddress || 'N/A'}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="font-semibold mb-4">Quote Details</h3>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Total</p>
-                        <p className="font-medium">
-                          ${Number(quote.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Created</p>
-                        <p className="font-medium">{new Date(quote.createdAt).toLocaleDateString()}</p>
-                      </div>
-                      {quote.downPaymentValue !== null && (
-                        <div>
-                          <p className="text-sm text-muted-foreground">Down Payment</p>
-                          <p className="font-medium">
-                            ${Number(quote.downPaymentValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                      {quote.remainingBalance !== null && (
-                        <div>
-                          <p className="text-sm text-muted-foreground">Remaining Balance</p>
-                          <p className="font-medium">
-                            ${Number(quote.remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {quote.content.products.length > 0 && (
-                      <div>
-                        <h4 className="font-medium mb-2">Products</h4>
-                        <div className="space-y-2">
-                          {quote.content.products.map((product, index) => (
-                            <div key={index} className="p-2 border rounded-md">
-                              <p className="font-medium">{product.name}</p>
-                              <div className="text-sm text-muted-foreground">
-                                <p>Price: ${product.price.toFixed(2)}</p>
-                                <p>Quantity: {product.quantity}</p>
-                                {product.variation && <p>Variation: {product.variation}</p>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-      )}
+      <QuoteForm
+        quote={quote}
+        user={user}
+        defaultContactId={contactId}
+        contact={contact}
+        onSuccess={() => window.location.href = "/quotes"}
+      />
     </div>
   );
 }

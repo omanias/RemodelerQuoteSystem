@@ -146,6 +146,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Initialize selectedProducts with quote data if available
   const [selectedProducts, setSelectedProducts] = useState<Array<Product>>(() => {
     if (quote?.content?.products) {
       return quote.content.products.map(product => ({
@@ -174,6 +175,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     queryKey: ["/api/templates"],
   });
 
+  // Set initial category ID from quote if available
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(
     quote?.categoryId?.toString() || undefined
   );
