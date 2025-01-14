@@ -166,18 +166,19 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         clientAddress: data.contactInfo.clientAddress,
         content: {
           products: data.products.map(product => ({
-            productId: product.productId,
+            id: product.productId,
+            name: products.find(p => p.id === product.productId)?.name || '',
             quantity: Number(product.quantity),
-            unitPrice: Number(product.unitPrice),
+            price: Number(product.unitPrice),
           })),
         },
-        subtotal: data.calculations.subtotal.toString(),
-        total: data.calculations.total.toString(),
+        subtotal: data.calculations.subtotal.toFixed(2),
+        total: data.calculations.total.toFixed(2),
         discountType: data.calculations.discountType || null,
-        discountValue: data.calculations.discountValue ? data.calculations.discountValue.toString() : null,
+        discountValue: data.calculations.discountValue ? data.calculations.discountValue.toFixed(2) : null,
         downPaymentType: data.calculations.downPaymentType || null,
-        downPaymentValue: data.calculations.downPaymentValue ? data.calculations.downPaymentValue.toString() : null,
-        taxRate: data.calculations.taxRate ? data.calculations.taxRate.toString() : null,
+        downPaymentValue: data.calculations.downPaymentValue ? data.calculations.downPaymentValue.toFixed(2) : null,
+        taxRate: data.calculations.taxRate ? data.calculations.taxRate.toFixed(2) : null,
       };
 
       console.log("Creating quote with payload:", payload);
@@ -192,14 +193,12 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error("Failed to create quote:", error);
-        throw new Error(error.message || "Failed to create quote");
+        const errorData = await response.json();
+        console.error("Failed to create quote:", errorData);
+        throw new Error(errorData.message || "Failed to create quote");
       }
 
-      const result = await response.json();
-      console.log("Quote created successfully:", result);
-      return result;
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
