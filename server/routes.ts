@@ -59,15 +59,14 @@ export function registerRoutes(app: Express): Server {
         clientAddress,
         status,
         paymentMethod,
-        subtotal,
-        total,
-        downPaymentValue,
+        subtotal = 0,
+        total = 0,
+        downPaymentValue = 0,
         downPaymentType,
-        remainingBalance,
+        remainingBalance = 0,
         discountType,
-        discountValue,
-        discountCode,
-        taxRate,
+        discountValue = 0,
+        taxRate = 0,
         content,
         signature,
       } = req.body;
@@ -75,39 +74,27 @@ export function registerRoutes(app: Express): Server {
       // Generate quote number
       const quoteNumber = await generateQuoteNumber(req.user!.companyId);
 
-      // Ensure numeric values have proper defaults and are converted to strings
-      const safeParseFloat = (value: unknown): string => {
-        const parsed = parseFloat(value as string);
-        return isNaN(parsed) ? "0" : parsed.toString();
-      };
-
-      const safeParseInt = (value: unknown): number | null => {
-        if (!value) return null;
-        const parsed = parseInt(value as string);
-        return isNaN(parsed) ? null : parsed;
-      };
-
       // Create new quote with proper type checking and defaults
-      const quoteData: QuoteInsert = {
+      const quoteData = {
         number: quoteNumber,
-        contactId: safeParseInt(contactId),
-        categoryId: safeParseInt(categoryId) ?? 0,
-        templateId: safeParseInt(templateId) ?? 0,
+        contactId: contactId || null,
+        categoryId: categoryId || 1, // Default to first category
+        templateId: templateId || 1, // Default to first template
         clientName,
         clientEmail,
         clientPhone,
         clientAddress,
         status,
         paymentMethod,
-        subtotal: safeParseFloat(subtotal),
-        total: safeParseFloat(total),
+        subtotal: subtotal.toString(),
+        total: total.toString(),
         downPaymentType,
-        downPaymentValue: safeParseFloat(downPaymentValue),
-        remainingBalance: safeParseFloat(remainingBalance),
+        downPaymentValue: downPaymentValue.toString(),
+        remainingBalance: remainingBalance.toString(),
         discountType,
-        discountValue: safeParseFloat(discountValue),
+        discountValue: discountValue.toString(),
         content,
-        taxRate: safeParseFloat(taxRate),
+        taxRate: taxRate.toString(),
         signature,
         companyId: req.user!.companyId,
         userId: req.user!.id,
