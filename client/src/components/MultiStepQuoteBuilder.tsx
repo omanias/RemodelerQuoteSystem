@@ -148,7 +148,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   });
 
   // Create quote mutation
-  const { mutate: createQuote, isLoading: isCreating } = useMutation({
+  const { mutate: createQuote, isPending } = useMutation({
     mutationFn: async (data: QuoteFormValues) => {
       if (!user?.id || !company?.id) {
         throw new Error("User or company information is missing");
@@ -158,26 +158,26 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         userId: user.id,
         companyId: company.id,
         status: "DRAFT",
+        categoryId: data.categoryAndTemplate.categoryId,
+        templateId: data.categoryAndTemplate.templateId,
         clientName: data.contactInfo.clientName,
         clientEmail: data.contactInfo.clientEmail,
         clientPhone: data.contactInfo.clientPhone,
         clientAddress: data.contactInfo.clientAddress,
-        categoryId: data.categoryAndTemplate.categoryId,
-        templateId: data.categoryAndTemplate.templateId,
         content: {
           products: data.products.map(product => ({
-            ...product,
+            productId: product.productId,
             quantity: Number(product.quantity),
             unitPrice: Number(product.unitPrice),
           })),
         },
-        subtotal: Number(data.calculations.subtotal),
-        total: Number(data.calculations.total),
-        discountType: data.calculations.discountType,
-        discountValue: data.calculations.discountValue ? Number(data.calculations.discountValue) : null,
-        downPaymentType: data.calculations.downPaymentType,
-        downPaymentValue: data.calculations.downPaymentValue ? Number(data.calculations.downPaymentValue) : null,
-        taxRate: data.calculations.taxRate ? Number(data.calculations.taxRate) : null,
+        subtotal: data.calculations.subtotal.toString(),
+        total: data.calculations.total.toString(),
+        discountType: data.calculations.discountType || null,
+        discountValue: data.calculations.discountValue ? data.calculations.discountValue.toString() : null,
+        downPaymentType: data.calculations.downPaymentType || null,
+        downPaymentValue: data.calculations.downPaymentValue ? data.calculations.downPaymentValue.toString() : null,
+        taxRate: data.calculations.taxRate ? data.calculations.taxRate.toString() : null,
       };
 
       console.log("Creating quote with payload:", payload);
@@ -188,6 +188,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -206,7 +207,11 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         title: "Success",
         description: "Quote created successfully",
       });
-      window.location.href = "/quotes";
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        window.location.href = "/quotes";
+      }
     },
     onError: (error: Error) => {
       console.error("Quote creation error:", error);
@@ -655,8 +660,8 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
               Previous
             </Button>
             {currentStep === steps.length - 1 ? (
-              <Button type="submit" disabled={isCreating}>
-                {isCreating ? "Creating..." : "Create Quote"}
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Creating..." : "Create Quote"}
               </Button>
             ) : (
               <Button
