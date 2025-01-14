@@ -154,7 +154,6 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         throw new Error("User or company information is missing");
       }
 
-      // Log the payload for debugging
       console.log("Creating quote with data:", {
         ...data,
         userId: user.id,
@@ -209,7 +208,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         title: "Success",
         description: "Quote created successfully",
       });
-      onSuccess();
+      window.location.href = "/quotes";
     },
     onError: (error: Error) => {
       console.error("Quote creation error:", error);
@@ -626,7 +625,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     }
 
     try {
-      await createQuote(data);
+      createQuote(data);
     } catch (error) {
       console.error("Error submitting form:", error);
     }
