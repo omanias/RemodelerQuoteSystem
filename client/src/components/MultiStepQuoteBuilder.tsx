@@ -193,12 +193,19 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Failed to create quote:", errorData);
-        throw new Error(errorData.message || "Failed to create quote");
+        const errorText = await response.text();
+        console.error("Server response error:", errorText);
+        try {
+          const errorData = JSON.parse(errorText);
+          throw new Error(errorData.message || "Failed to create quote");
+        } catch (e) {
+          throw new Error(`Server error: ${errorText}`);
+        }
       }
 
-      return response.json();
+      const responseData = await response.json();
+      console.log("Quote created successfully:", responseData);
+      return responseData;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
@@ -627,9 +634,28 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     }
 
     try {
+      // Log validation state before submission
+      console.log("Form validation state:", form.formState);
+
+      // Check if form is valid
+      if (!form.formState.isValid) {
+        console.error("Form validation errors:", form.formState.errors);
+        toast({
+          title: "Validation Error",
+          description: "Please check all required fields",
+          variant: "destructive",
+        });
+        return;
+      }
+
       createQuote(data);
     } catch (error) {
       console.error("Error submitting form:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create quote. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
