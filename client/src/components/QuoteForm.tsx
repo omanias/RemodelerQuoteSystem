@@ -154,8 +154,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         name: product.name,
         unit: product.unit,
         basePrice: product.basePrice,
-        price: product.price,
-        quantity: product.quantity,
+        price: product.price || product.basePrice,
+        quantity: product.quantity || 1,
         variation: product.variation,
         variations: product.variations
       }));
@@ -222,6 +222,31 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       setSelectedCategoryId(categoryId);
     }
   }, [form.watch("categoryId")]);
+
+  useEffect(() => {
+    if (quote) {
+      form.reset({
+        contactId: quote.contactId?.toString(),
+        templateId: quote.templateId?.toString(),
+        categoryId: quote.categoryId?.toString(),
+        clientName: quote.clientName,
+        clientEmail: quote.clientEmail || "",
+        clientPhone: quote.clientPhone || "",
+        clientAddress: quote.clientAddress || "",
+        status: quote.status,
+        paymentMethod: quote.paymentMethod as PaymentMethod || undefined,
+        discountType: quote.discountType || undefined,
+        discountValue: quote.discountValue?.toString() || "",
+        discountCode: quote.discountCode || "",
+        taxRate: quote.taxRate?.toString() || "",
+        downPaymentType: quote.downPaymentType || undefined,
+        downPaymentValue: quote.downPaymentValue?.toString() || "",
+        notes: quote.notes || ""
+      });
+      setSelectedCategoryId(quote.categoryId?.toString());
+    }
+  }, [quote, form]);
+
 
   const calculateTotals = (products: Product[]) => {
     try {
