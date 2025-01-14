@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
+import { Plus, Minus } from "lucide-react";
 
 interface Contact {
   id: number;
@@ -133,6 +133,31 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     enabled: !!form.watch("categoryAndTemplate.categoryId"),
   });
 
+  const calculateTotals = () => {
+    const products = form.watch("products");
+    const subtotal = products.reduce((acc, product) => acc + (product.quantity * product.unitPrice), 0);
+
+    let total = subtotal;
+    const calculations = form.watch("calculations");
+
+    // Apply discount
+    if (calculations.discountValue && calculations.discountType) {
+      if (calculations.discountType === "PERCENTAGE") {
+        total -= (total * (calculations.discountValue / 100));
+      } else {
+        total -= calculations.discountValue;
+      }
+    }
+
+    // Apply tax
+    if (calculations.taxRate) {
+      total += (total * (calculations.taxRate / 100));
+    }
+
+    form.setValue("calculations.subtotal", subtotal);
+    form.setValue("calculations.total", total);
+  };
+
   const steps = [
     {
       title: "Contact Info",
@@ -192,33 +217,253 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                   Cancel
                 </Button>
               </div>
-              <Form {...form}>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Client Name"
-                    {...form.register("contactInfo.clientName")}
-                  />
-                  <Input
-                    type="email"
-                    placeholder="Email"
-                    {...form.register("contactInfo.clientEmail")}
-                  />
-                  <Input
-                    placeholder="Phone"
-                    {...form.register("contactInfo.clientPhone")}
-                  />
-                  <Input
-                    placeholder="Address"
-                    {...form.register("contactInfo.clientAddress")}
-                  />
-                </div>
-              </Form>
+              <div className="space-y-4">
+                <Input
+                  placeholder="Client Name"
+                  {...form.register("contactInfo.clientName")}
+                />
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  {...form.register("contactInfo.clientEmail")}
+                />
+                <Input
+                  placeholder="Phone"
+                  {...form.register("contactInfo.clientPhone")}
+                />
+                <Input
+                  placeholder="Address"
+                  {...form.register("contactInfo.clientAddress")}
+                />
+              </div>
             </div>
           )}
         </div>
       ),
     },
-    // Additional steps will be implemented in the next iteration
+    {
+      title: "Category & Template",
+      description: "Select quote category and template",
+      content: (
+        <div className="space-y-4">
+          <div>
+            <Label>Category</Label>
+            <Select
+              onValueChange={(value) => {
+                form.setValue("categoryAndTemplate.categoryId", parseInt(value));
+                form.setValue("categoryAndTemplate.templateId", 0);
+                form.setValue("products", []);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id.toString()}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.watch("categoryAndTemplate.categoryId") > 0 && (
+            <div>
+              <Label>Template</Label>
+              <Select
+                onValueChange={(value) => {
+                  form.setValue("categoryAndTemplate.templateId", parseInt(value));
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id.toString()}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: "Products",
+      description: "Add products to quote",
+      content: (
+        <div className="space-y-4">
+          {products.map((product) => (
+            <Card key={product.id} className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium">{product.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    ${product.basePrice} per {product.unit}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const products = form.watch("products");
+                      const existingProduct = products.find(p => p.productId === product.id);
+                      if (existingProduct) {
+                        form.setValue(
+                          "products",
+                          products.map(p =>
+                            p.productId === product.id
+                              ? { ...p, quantity: p.quantity - 1 }
+                              : p
+                          ).filter(p => p.quantity > 0)
+                        );
+                      }
+                      calculateTotals();
+                    }}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <span className="w-8 text-center">
+                    {form.watch("products").find(p => p.productId === product.id)?.quantity || 0}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const products = form.watch("products");
+                      const existingProduct = products.find(p => p.productId === product.id);
+                      if (existingProduct) {
+                        form.setValue(
+                          "products",
+                          products.map(p =>
+                            p.productId === product.id
+                              ? { ...p, quantity: p.quantity + 1 }
+                              : p
+                          )
+                        );
+                      } else {
+                        form.setValue("products", [
+                          ...products,
+                          {
+                            productId: product.id,
+                            quantity: 1,
+                            unitPrice: product.basePrice,
+                          },
+                        ]);
+                      }
+                      calculateTotals();
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title: "Calculations",
+      description: "Add discounts and payments",
+      content: (
+        <div className="space-y-4">
+          <div>
+            <Label>Discount Type</Label>
+            <Select
+              onValueChange={(value) => {
+                form.setValue("calculations.discountType", value as any);
+                calculateTotals();
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select discount type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                <SelectItem value="FIXED">Fixed Amount</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.watch("calculations.discountType") && (
+            <div>
+              <Label>Discount Value</Label>
+              <Input
+                type="number"
+                placeholder={form.watch("calculations.discountType") === "PERCENTAGE" ? "%" : "$"}
+                onChange={(e) => {
+                  form.setValue("calculations.discountValue", Number(e.target.value));
+                  calculateTotals();
+                }}
+              />
+            </div>
+          )}
+
+          <div>
+            <Label>Down Payment Type</Label>
+            <Select
+              onValueChange={(value) => {
+                form.setValue("calculations.downPaymentType", value as any);
+                calculateTotals();
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select down payment type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                <SelectItem value="FIXED">Fixed Amount</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {form.watch("calculations.downPaymentType") && (
+            <div>
+              <Label>Down Payment Value</Label>
+              <Input
+                type="number"
+                placeholder={form.watch("calculations.downPaymentType") === "PERCENTAGE" ? "%" : "$"}
+                onChange={(e) => {
+                  form.setValue("calculations.downPaymentValue", Number(e.target.value));
+                  calculateTotals();
+                }}
+              />
+            </div>
+          )}
+
+          <div>
+            <Label>Tax Rate (%)</Label>
+            <Input
+              type="number"
+              placeholder="%"
+              onChange={(e) => {
+                form.setValue("calculations.taxRate", Number(e.target.value));
+                calculateTotals();
+              }}
+            />
+          </div>
+
+          <div className="pt-4 border-t">
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span>${form.watch("calculations.subtotal").toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between font-bold">
+              <span>Total:</span>
+              <span>${form.watch("calculations.total").toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
   ];
 
   const nextStep = () => {
@@ -233,37 +478,51 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     }
   };
 
+  const onSubmit = (data: QuoteFormValues) => {
+    console.log(data);
+    onSuccess();
+  };
+
   return (
-    <Card className="p-6">
-      <Steps
-        steps={steps.map((step) => ({
-          title: step.title,
-          description: step.description,
-        }))}
-        currentStep={currentStep}
-      />
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Card className="p-6">
+          <Steps
+            steps={steps.map((step) => ({
+              title: step.title,
+              description: step.description,
+            }))}
+            currentStep={currentStep}
+          />
 
-      <div className="mt-8">
-        {steps[currentStep].content}
-      </div>
+          <div className="mt-8">
+            {steps[currentStep].content}
+          </div>
 
-      <div className="mt-6 flex justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={previousStep}
-          disabled={currentStep === 0}
-        >
-          Previous
-        </Button>
-        <Button
-          type="button"
-          onClick={nextStep}
-          disabled={currentStep === steps.length - 1}
-        >
-          Next
-        </Button>
-      </div>
-    </Card>
+          <div className="mt-6 flex justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={previousStep}
+              disabled={currentStep === 0}
+            >
+              Previous
+            </Button>
+            {currentStep === steps.length - 1 ? (
+              <Button type="submit">
+                Create Quote
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={nextStep}
+              >
+                Next
+              </Button>
+            )}
+          </div>
+        </Card>
+      </form>
+    </Form>
   );
 }
