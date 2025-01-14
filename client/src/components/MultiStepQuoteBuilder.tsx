@@ -79,7 +79,7 @@ const quoteFormSchema = z.object({
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
 interface Props {
-  onSuccess: () => void;
+  onSuccess?: () => void;
   defaultValues?: Partial<QuoteFormValues>;
 }
 
@@ -154,42 +154,40 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         throw new Error("User or company information is missing");
       }
 
-      console.log("Creating quote with data:", {
-        ...data,
+      const payload = {
         userId: user.id,
         companyId: company.id,
-      });
+        status: "DRAFT",
+        clientName: data.contactInfo.clientName,
+        clientEmail: data.contactInfo.clientEmail,
+        clientPhone: data.contactInfo.clientPhone,
+        clientAddress: data.contactInfo.clientAddress,
+        categoryId: data.categoryAndTemplate.categoryId,
+        templateId: data.categoryAndTemplate.templateId,
+        content: {
+          products: data.products.map(product => ({
+            ...product,
+            quantity: Number(product.quantity),
+            unitPrice: Number(product.unitPrice),
+          })),
+        },
+        subtotal: Number(data.calculations.subtotal),
+        total: Number(data.calculations.total),
+        discountType: data.calculations.discountType,
+        discountValue: data.calculations.discountValue ? Number(data.calculations.discountValue) : null,
+        downPaymentType: data.calculations.downPaymentType,
+        downPaymentValue: data.calculations.downPaymentValue ? Number(data.calculations.downPaymentValue) : null,
+        taxRate: data.calculations.taxRate ? Number(data.calculations.taxRate) : null,
+      };
+
+      console.log("Creating quote with payload:", payload);
 
       const response = await fetch("/api/quotes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          userId: user.id,
-          companyId: company.id,
-          status: "DRAFT",
-          clientName: data.contactInfo.clientName,
-          clientEmail: data.contactInfo.clientEmail,
-          clientPhone: data.contactInfo.clientPhone,
-          clientAddress: data.contactInfo.clientAddress,
-          categoryId: data.categoryAndTemplate.categoryId,
-          templateId: data.categoryAndTemplate.templateId,
-          content: {
-            products: data.products.map(product => ({
-              ...product,
-              quantity: Number(product.quantity),
-              unitPrice: Number(product.unitPrice),
-            })),
-          },
-          subtotal: Number(data.calculations.subtotal),
-          total: Number(data.calculations.total),
-          discountType: data.calculations.discountType,
-          discountValue: data.calculations.discountValue ? Number(data.calculations.discountValue) : null,
-          downPaymentType: data.calculations.downPaymentType,
-          downPaymentValue: data.calculations.downPaymentValue ? Number(data.calculations.downPaymentValue) : null,
-          taxRate: data.calculations.taxRate ? Number(data.calculations.taxRate) : null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
