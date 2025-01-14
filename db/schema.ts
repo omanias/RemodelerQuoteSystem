@@ -76,10 +76,10 @@ export const ContactFieldType = {
 } as const;
 
 export const PaymentMethod = {
-  CASH: 'Cash',
-  CREDIT_CARD: 'Credit Card',
-  BANK_TRANSFER: 'Bank Transfer',
-  PAYMENT_PLAN: 'Payment Plan'
+  CASH: 'CASH',
+  CREDIT_CARD: 'CREDIT_CARD',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  PAYMENT_PLAN: 'PAYMENT_PLAN'
 } as const;
 
 export const ProductUnit = {

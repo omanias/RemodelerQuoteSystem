@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, KeyboardEventHandler } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { PaymentMethod, QuoteStatus } from "@db/schema";
 import {
   Form,
   FormControl,
@@ -25,21 +26,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus, Save, Users } from "lucide-react";
 import { Link } from "wouter";
 
-export enum QuoteStatus {
-  DRAFT = "DRAFT",
-  SENT = "SENT",
-  ACCEPTED = "ACCEPTED",
-  REJECTED = "REJECTED",
-  REVISED = "REVISED"
-}
-
-export enum PaymentMethod {
-  CASH = "Cash",
-  CREDIT_CARD = "Credit Card",
-  BANK_TRANSFER = "Bank Transfer",
-  PAYMENT_PLAN = "Payment Plan"
-}
-
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
@@ -48,7 +34,7 @@ const quoteFormSchema = z.object({
   clientEmail: z.string().email("Invalid email address").optional(),
   clientPhone: z.string().optional(),
   clientAddress: z.string().optional(),
-  status: z.nativeEnum(QuoteStatus),
+  status: z.enum(Object.keys(QuoteStatus) as [string, ...string[]]),
   content: z.object({
     products: z.array(z.object({
       productId: z.number(),
@@ -60,7 +46,7 @@ const quoteFormSchema = z.object({
   subtotal: z.number().min(0).optional(),
   total: z.number().min(0).optional(),
   notes: z.string().optional(),
-  paymentMethod: z.nativeEnum(PaymentMethod).optional(),
+  paymentMethod: z.enum(Object.keys(PaymentMethod) as [string, ...string[]]).optional(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   discountValue: z.number().min(0).optional(),
   discountCode: z.string().optional(),
@@ -220,7 +206,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       clientEmail: quote?.clientEmail || contact?.primaryEmail || undefined,
       clientPhone: quote?.clientPhone || contact?.primaryPhone || undefined,
       clientAddress: quote?.clientAddress || contact?.primaryAddress || undefined,
-      status: quote?.status || QuoteStatus.DRAFT,
+      status: quote?.status || "DRAFT",
       content: quote?.content,
       subtotal: quote ? Number(quote.subtotal) || 0 : 0,
       total: quote ? Number(quote.total) || 0 : 0,
@@ -236,9 +222,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     }
   });
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && e.ctrlKey) {
-      form.handleSubmit(onSubmit)(e);
+  const handleKeyDown: KeyboardEventHandler<HTMLFormElement> = (event) => {
+    if (event.key === "Enter" && event.ctrlKey) {
+      void form.handleSubmit(onSubmit)(event);
     }
   };
 
@@ -456,7 +442,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         <SelectContent>
                           {Object.values(PaymentMethod).map((method) => (
                             <SelectItem key={method} value={method}>
-                              {method}
+                              {method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                             </SelectItem>
                           ))}
                         </SelectContent>
