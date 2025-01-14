@@ -335,9 +335,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         id: product.id,
         name: product.name,
         unit: product.unit,
-        price: product.price,
+        // If no variations, use the base price, otherwise use the variation price that was passed
+        price: product.variation ? product.price : (product.price || 0),
         quantity: 1,
-        variation: product.variations?.[0]?.name
+        variation: product.variation
       }
     ]);
   };
@@ -580,18 +581,54 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                             <div>
                               <h4 className="font-medium">{product.name}</h4>
                               <p className="text-sm text-muted-foreground">
-                                Base Price: ${product.basePrice}
+                                {product.variations?.length > 0 ? (
+                                  <>
+                                    Price Range: ${Math.min(...product.variations.map((v: any) => v.price)).toFixed(2)} - 
+                                    ${Math.max(...product.variations.map((v: any) => v.price)).toFixed(2)}
+                                  </>
+                                ) : (
+                                  `Unit Price: $${product.price.toFixed(2)}`
+                                )}
                               </p>
+                              {product.variations?.length > 0 && (
+                                <div className="mt-2">
+                                  <Select
+                                    onValueChange={(variationId) => {
+                                      const selectedVariation = product.variations.find((v: any) => v.id.toString() === variationId);
+                                      if (selectedVariation) {
+                                        addProduct({
+                                          ...product,
+                                          price: selectedVariation.price,
+                                          variation: selectedVariation.name
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Select variation" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {product.variations.map((variation: any) => (
+                                        <SelectItem key={variation.id} value={variation.id.toString()}>
+                                          {variation.name} - ${variation.price.toFixed(2)}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => addProduct(product)}
-                              className="h-8 w-8"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
+                            {!product.variations?.length > 0 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => addProduct(product)}
+                                className="h-8 w-8"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -600,16 +637,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 )}
 
                 {selectedProducts.length > 0 && (
-                  <div className="space-y-4">
+                  <div className="space-y-4 mt-6">
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => (
-                        <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
+                        <div key={index} className="flex items-center gap-4 p-4 border rounded-md">
                           <div className="flex-1">
                             <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              ${item.price}
-                            </p>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>Unit Price: ${item.price.toFixed(2)}</span>
+                              <span>•</span>
+                              <span>Total: ${(item.quantity * item.price).toFixed(2)}</span>
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
@@ -625,6 +664,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               value={item.quantity}
                               onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
                               className="w-20 text-center"
+                              min="1"
                             />
                             <Button
                               type="button"
