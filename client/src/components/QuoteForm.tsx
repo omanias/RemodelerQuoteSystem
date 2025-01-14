@@ -53,7 +53,11 @@ interface Product {
   price: number;
   quantity: number;
   variation?: string;
-  variations?: ProductVariation[];
+  variations?: Array<{
+    id: number;
+    name: string;
+    price: number;
+  }>;
 }
 
 const quoteFormSchema = z.object({
@@ -332,10 +336,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         id: product.id,
         name: product.name,
         unit: product.unit,
-        price: product.variation ? product.price : (product.price || 0),
+        price: product.variations?.length 
+          ? 0  // Will be set when variation is selected
+          : Number(product.price) || 0,
         quantity: 1,
-        variation: product.variation,
-        variations: product.variations
+        variations: product.variations,
+        variation: undefined
       }
     ]);
   };
