@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, KeyboardEventHandler, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -68,13 +68,13 @@ interface Quote {
 }
 
 const quoteFormSchema = z.object({
-  contactId: z.string().nullable(),
-  templateId: z.string().nullable(),
-  categoryId: z.string().nullable(),
+  contactId: z.string().optional(),
+  templateId: z.string().optional(),
+  categoryId: z.string().optional(),
   clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").nullable(),
-  clientPhone: z.string().nullable(),
-  clientAddress: z.string().nullable(),
+  clientEmail: z.string().email("Invalid email address").optional(),
+  clientPhone: z.string().optional(),
+  clientAddress: z.string().optional(),
   status: z.enum(Object.keys(QuoteStatus) as [string, ...string[]]),
   content: z.object({
     products: z.array(z.object({
@@ -83,18 +83,18 @@ const quoteFormSchema = z.object({
       variation: z.string().optional(),
       unitPrice: z.number()
     }))
-  }),
-  subtotal: z.number().min(0),
-  total: z.number().min(0),
-  notes: z.string().nullable(),
-  paymentMethod: z.enum(Object.keys(PaymentMethod) as [string, ...string[]]).nullable(),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  discountValue: z.number().min(0).nullable(),
-  discountCode: z.string().nullable(),
-  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).nullable(),
-  downPaymentValue: z.number().min(0).nullable(),
-  taxRate: z.number().min(0).nullable(),
-  remainingBalance: z.number().min(0).nullable()
+  }).optional(),
+  subtotal: z.number().min(0).optional(),
+  total: z.number().min(0).optional(),
+  notes: z.string().optional(),
+  paymentMethod: z.enum(Object.keys(PaymentMethod) as [string, ...string[]]).optional(),
+  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  discountValue: z.number().min(0).optional(),
+  discountCode: z.string().optional(),
+  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  downPaymentValue: z.number().min(0).optional(),
+  taxRate: z.number().min(0).optional(),
+  remainingBalance: z.number().min(0).optional()
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
@@ -128,8 +128,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         productId: p.productId,
         quantity: p.quantity || 1,
         variation: p.variation,
-        unitPrice: typeof p.unitPrice === 'string' ? parseFloat(p.unitPrice) : p.unitPrice || 0,
-        basePrice: typeof p.unitPrice === 'string' ? parseFloat(p.unitPrice) : p.unitPrice || 0,
+        unitPrice: Number(p.unitPrice) || 0,
+        basePrice: Number(p.unitPrice) || 0,
       }));
     }
     return [];
@@ -138,33 +138,26 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues: {
-      contactId: quote?.contactId?.toString() || defaultContactId || null,
-      templateId: quote?.templateId?.toString() || null,
-      categoryId: quote?.categoryId?.toString() || null,
+      contactId: quote?.contactId?.toString() || defaultContactId || undefined,
+      templateId: quote?.templateId?.toString(),
+      categoryId: quote?.categoryId?.toString(),
       clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
-      clientEmail: quote?.clientEmail || contact?.primaryEmail || null,
-      clientPhone: quote?.clientPhone || contact?.primaryPhone || null,
-      clientAddress: quote?.clientAddress || contact?.primaryAddress || null,
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || undefined,
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || undefined,
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || undefined,
       status: quote?.status || "DRAFT",
-      content: {
-        products: quote?.content?.products?.map(p => ({
-          productId: p.productId,
-          quantity: p.quantity,
-          variation: p.variation,
-          unitPrice: typeof p.unitPrice === 'string' ? parseFloat(p.unitPrice) : p.unitPrice
-        })) || []
-      },
-      subtotal: quote ? (typeof quote.subtotal === 'string' ? parseFloat(quote.subtotal) : quote.subtotal) || 0 : 0,
-      total: quote ? (typeof quote.total === 'string' ? parseFloat(quote.total) : Number(quote.total)) || 0 : 0,
-      notes: quote?.notes || null,
-      paymentMethod: quote?.paymentMethod || null,
-      discountType: quote?.discountType || null,
-      discountValue: quote?.discountValue ? Number(quote.discountValue) : null,
-      discountCode: quote?.discountCode || null,
-      downPaymentType: quote?.downPaymentType || null,
-      downPaymentValue: quote?.downPaymentValue ? Number(quote.downPaymentValue) : null,
-      taxRate: quote?.taxRate ? Number(quote.taxRate) : null,
-      remainingBalance: quote?.remainingBalance ? Number(quote.remainingBalance) : null,
+      content: quote?.content,
+      subtotal: quote ? Number(quote.subtotal) || 0 : 0,
+      total: quote ? Number(quote.total) || 0 : 0,
+      notes: quote?.notes || undefined,
+      paymentMethod: quote?.paymentMethod || undefined,
+      discountType: quote?.discountType || undefined,
+      discountValue: quote?.discountValue ? Number(quote.discountValue) : undefined,
+      discountCode: quote?.discountCode || undefined,
+      downPaymentType: quote?.downPaymentType || undefined,
+      downPaymentValue: quote?.downPaymentValue ? Number(quote.downPaymentValue) : undefined,
+      taxRate: quote?.taxRate ? Number(quote.taxRate) : undefined,
+      remainingBalance: quote?.remainingBalance ? Number(quote.remainingBalance) : undefined,
     }
   });
 
@@ -264,7 +257,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     setSelectedProducts((prev) => prev.filter((_, index) => index !== productIndex));
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+  const handleKeyDown: KeyboardEventHandler<HTMLFormElement> = (event) => {
     if (event.key === "Enter" && event.ctrlKey) {
       void form.handleSubmit(onSubmit)(event);
     }
@@ -338,7 +331,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" onKeyDown={handleKeyDown}>
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -385,7 +378,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Email</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value || ''} type="email" />
+                      <Input {...field} type="email" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -399,7 +392,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Phone</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value || ''} type="tel" />
+                      <Input {...field} type="tel" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -413,7 +406,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <FormItem>
                     <FormLabel>Client Address</FormLabel>
                     <FormControl>
-                      <Input {...field} value={field.value || ''} />
+                      <Input {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -430,14 +423,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Category</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a category" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {categories?.map((category: any) => (
+                    {categories.map((category: any) => (
                       <SelectItem key={category.id} value={category.id.toString()}>
                         {category.name}
                       </SelectItem>
@@ -455,7 +448,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Template</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a template" />
@@ -463,7 +456,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </FormControl>
                   <SelectContent>
                     {templates
-                      ?.filter((t: any) => t.categoryId.toString() === selectedCategoryId)
+                      .filter((t: any) => t.categoryId.toString() === selectedCategoryId)
                       .map((template: any) => (
                         <SelectItem key={template.id} value={template.id.toString()}>
                           {template.name} {template.isDefault && "(Default)"}
@@ -485,11 +478,11 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select status" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {Object.keys(QuoteStatus).map((status) => (
+                    {Object.values(QuoteStatus).map((status) => (
                       <SelectItem key={status} value={status}>
                         {status}
                       </SelectItem>
@@ -581,7 +574,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                     </SelectTrigger>
                     <SelectContent>
                       {products
-                        ?.filter((p: any) => p.categoryId.toString() === selectedCategoryId)
+                        .filter((p: any) => p.categoryId.toString() === selectedCategoryId)
                         .map((product: any) => (
                           <SelectItem key={product.id} value={product.id.toString()}>
                             {product.name} - ${Number(product.basePrice).toFixed(2)}

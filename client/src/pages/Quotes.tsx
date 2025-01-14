@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation as useLocationWouter } from "wouter";
 import { QuoteForm } from "./QuoteForm";
 import {
   Table,
@@ -28,15 +28,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, MoreVertical, ArrowLeft, FileEdit } from "lucide-react";
+import { Plus, MoreVertical, FileText, Download, ArrowLeft, FileEdit } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { QuoteStatus, PaymentMethod } from "@db/schema";
 
 interface Quote {
   id: number;
   number: string;
   clientName: string;
-  status: keyof typeof QuoteStatus;
+  status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "REVISED";
   total: string | number;
   downPaymentValue: string | number | null;
   remainingBalance: string | number | null;
@@ -56,13 +55,15 @@ interface Quote {
   clientPhone: string | null;
   clientAddress: string | null;
   notes: string | null;
-  paymentMethod: keyof typeof PaymentMethod | null;
+  paymentMethod: string | null;
   discountType: "PERCENTAGE" | "FIXED" | null;
   discountValue: number | null;
   discountCode: string | null;
   downPaymentType: "PERCENTAGE" | "FIXED" | null;
   taxRate: number | null;
   subtotal: number;
+  userId: number;
+  companyId: number;
   updatedAt: string;
 }
 
@@ -82,6 +83,7 @@ interface User {
   role: string;
 }
 
+// Helper function to safely format monetary values
 function formatMoney(value: string | number | null): string {
   if (value === null) return '-';
   const numericValue = typeof value === 'string' ? parseFloat(value) : value;
@@ -94,7 +96,7 @@ function formatMoney(value: string | number | null): string {
 }
 
 export function Quotes() {
-  const [location, setLocation] = useLocation();
+  const [location, setLocation] = useLocationWouter();
   const [deleteQuote, setDeleteQuote] = useState<Quote | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -104,11 +106,11 @@ export function Quotes() {
   const contactId = urlParams.get('contactId');
   const quoteId = location.match(/\/quotes\/(\d+)/)?.[1];
 
-  const { data: quotes = [], isLoading: isLoadingQuotes } = useQuery<Quote[]>({
+  const { data: quotes = [] } = useQuery<Quote[]>({
     queryKey: ["/api/quotes"],
   });
 
-  const { data: quote, isLoading: isLoadingQuote } = useQuery<Quote>({
+  const { data: quote } = useQuery<Quote>({
     queryKey: [`/api/quotes/${quoteId}`],
     enabled: !!quoteId,
   });
@@ -151,6 +153,68 @@ export function Quotes() {
     }
   };
 
+  const handleExportPDF = async (quote: Quote) => {
+    try {
+      const response = await fetch(`/api/quotes/${quote.id}/export/pdf`);
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `quote-${quote.number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Success",
+        description: "Quote exported to PDF successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportCSV = async () => {
+    try {
+      const response = await fetch('/api/quotes/export/csv');
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'quotes.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast({
+        title: "Success",
+        description: "Quotes exported to CSV successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   // If we're editing a quote or creating a new one
   if (quoteId || location === '/quotes/new' || location.startsWith('/quotes/new?')) {
     return (
@@ -170,23 +234,15 @@ export function Quotes() {
             )}
           </div>
         </div>
-        {isLoadingQuote && quoteId ? (
-          <div>Loading quote...</div>
-        ) : (
-          <QuoteForm
-            quote={quote}
-            onSuccess={() => setLocation('/quotes')}
-            user={user}
-            defaultContactId={contactId}
-            contact={contact}
-          />
-        )}
+        <QuoteForm
+          quote={quote}
+          onSuccess={() => setLocation('/quotes')}
+          user={user}
+          defaultContactId={contactId}
+          contact={contact}
+        />
       </div>
     );
-  }
-
-  if (isLoadingQuotes) {
-    return <div>Loading quotes...</div>;
   }
 
   return (
@@ -200,6 +256,11 @@ export function Quotes() {
         </div>
 
         <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" />
+            Export All (CSV)
+          </Button>
+
           <Button variant="outline" onClick={() => setLocation('/templates')}>
             <FileEdit className="mr-2 h-4 w-4" />
             Templates
@@ -242,27 +303,37 @@ export function Quotes() {
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>
                 <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => setLocation(`/quotes/${quote.id}`)}
-                        className="cursor-pointer"
-                      >
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        className="text-destructive cursor-pointer"
-                        onClick={() => setDeleteQuote(quote)}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleExportPDF(quote)}
+                      title="Export as PDF"
+                    >
+                      <FileText className="h-4 w-4" />
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => setLocation(`/quotes/${quote.id}`)}
+                          className="cursor-pointer"
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive cursor-pointer"
+                          onClick={() => setDeleteQuote(quote)}
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
