@@ -67,25 +67,6 @@ interface Quote {
   subtotal: number;
 }
 
-interface QuoteFormProps {
-  quote?: Quote;
-  onSuccess?: () => void;
-  user?: {
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  };
-  defaultContactId?: string | null;
-  contact?: {
-    firstName: string;
-    lastName: string;
-    primaryEmail: string;
-    primaryPhone: string;
-    primaryAddress: string;
-  };
-}
-
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
@@ -118,23 +99,38 @@ const quoteFormSchema = z.object({
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
+interface QuoteFormProps {
+  quote?: Quote;
+  onSuccess?: () => void;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  defaultContactId?: string | null;
+  contact?: {
+    firstName: string;
+    lastName: string;
+    primaryEmail: string;
+    primaryPhone: string;
+    primaryAddress: string;
+  };
+}
+
 export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }: QuoteFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Initialize selected products with correct price handling
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
     if (quote?.content?.products) {
-      return quote.content.products.map((p) => {
-        const productPrice = Number(p.unitPrice) || 0;
-        return {
-          productId: p.productId,
-          quantity: p.quantity || 1,
-          variation: p.variation,
-          unitPrice: productPrice,
-          basePrice: productPrice,
-        };
-      });
+      return quote.content.products.map((p) => ({
+        productId: p.productId,
+        quantity: p.quantity || 1,
+        variation: p.variation,
+        unitPrice: Number(p.unitPrice) || 0,
+        basePrice: Number(p.unitPrice) || 0,
+      }));
     }
     return [];
   });
@@ -182,54 +178,65 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     enabled: !!selectedCategoryId,
   });
 
-  // Calculate totals considering variations
   const calculateTotals = useCallback(() => {
     const subtotal = selectedProducts.reduce((acc, product) => {
-      return acc + (product.unitPrice * product.quantity);
+      const lineTotal = product.unitPrice * product.quantity;
+      return acc + lineTotal;
     }, 0);
 
-    const total = subtotal; // Add tax and discount calculations here if needed
+    // For now, total is same as subtotal since we haven't implemented 
+    // tax and discount calculations yet
+    const total = subtotal;
     return { subtotal, total };
   }, [selectedProducts]);
 
-  // Update form values when products change
   useEffect(() => {
     const { subtotal, total } = calculateTotals();
     form.setValue('subtotal', subtotal);
     form.setValue('total', total);
   }, [selectedProducts, form, calculateTotals]);
 
-  // Add product with proper price initialization
   const handleAddProduct = (productId: number) => {
     const product = products.find((p: any) => p.id === productId);
     if (!product) return;
 
     const basePrice = Number(product.basePrice) || 0;
-    const newProduct: SelectedProduct = {
-      productId,
-      quantity: 1,
-      variation: undefined,
-      unitPrice: basePrice,
-      basePrice: basePrice,
-    };
+    const hasVariations = product.variations && product.variations.length > 0;
 
-    setSelectedProducts((prev) => [...prev, newProduct]);
+    // For products with variations, always use the variation price instead of base price
+    const initialVariation = hasVariations ? product.variations[0] : null;
+    const initialPrice = hasVariations 
+      ? Number(initialVariation?.price) || 0
+      : basePrice;
+
+    setSelectedProducts((prev) => [
+      ...prev,
+      {
+        productId,
+        quantity: 1,
+        variation: hasVariations ? initialVariation?.name : undefined,
+        unitPrice: initialPrice,
+        basePrice
+      }
+    ]);
   };
 
-  // Update variation with correct price handling
   const handleVariationChange = (productIndex: number, variation: string) => {
     setSelectedProducts((prev) => {
       const updated = [...prev];
       const product = products.find((p: any) => p.id === updated[productIndex].productId);
-      if (!product) return prev;
+      if (!product || !product.variations) return prev;
 
-      const selectedVariation = product.variations?.find((v: any) => v.name === variation);
-      const variationPrice = selectedVariation ? Number(selectedVariation.price) : updated[productIndex].basePrice;
+      const selectedVariation = product.variations.find((v: any) => v.name === variation);
+      if (!selectedVariation) return prev;
+
+      // Always use variation price when available
+      const variationPrice = Number(selectedVariation.price) || 0;
 
       updated[productIndex] = {
         ...updated[productIndex],
         variation,
-        unitPrice: variationPrice,
+        unitPrice: variationPrice
       };
       return updated;
     });
@@ -240,7 +247,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       const updated = [...prev];
       updated[productIndex] = {
         ...updated[productIndex],
-        quantity: newQuantity,
+        quantity: Math.max(1, newQuantity),
       };
       return updated;
     });
@@ -325,7 +332,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" onKeyDown={handleKeyDown}>
-        {/* User Info Card */}
         {user && (
           <Card>
             <CardContent className="pt-6">
@@ -338,7 +344,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Contact Information */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -411,7 +416,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Category and Template Selection */}
         <div className="space-y-4">
           <FormField
             control={form.control}
@@ -491,7 +495,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           />
         </div>
 
-        {/* Products Selection */}
         {selectedCategoryId && (
           <Card>
             <CardContent className="pt-6">
@@ -504,10 +507,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                       <div key={index} className="flex items-center gap-4 p-4 border rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium">{productDetails?.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Price: ${product.unitPrice.toFixed(2)} {product.variation ? `(${product.variation})` : ''}
-                          </p>
-                          {productDetails?.variations && (
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p>Base Price: ${product.basePrice.toFixed(2)}</p>
+                            {product.variation && (
+                              <p>
+                                Variation: {product.variation} - ${product.unitPrice.toFixed(2)}
+                              </p>
+                            )}
+                            <p className="font-medium text-primary">
+                              Line Total: ${(product.unitPrice * product.quantity).toFixed(2)}
+                            </p>
+                          </div>
+                          {productDetails?.variations && productDetails.variations.length > 0 && (
                             <Select
                               value={product.variation}
                               onValueChange={(value) => handleVariationChange(index, value)}
@@ -518,7 +529,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               <SelectContent>
                                 {productDetails.variations.map((variation: any) => (
                                   <SelectItem key={variation.name} value={variation.name}>
-                                    {variation.name} (${Number(variation.price).toFixed(2)})
+                                    {variation.name} - ${Number(variation.price).toFixed(2)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -529,7 +540,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleQuantityChange(index, Math.max(1, product.quantity - 1))}
+                            onClick={() => handleQuantityChange(index, product.quantity - 1)}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
@@ -566,19 +577,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         .filter((p: any) => p.categoryId.toString() === selectedCategoryId)
                         .map((product: any) => (
                           <SelectItem key={product.id} value={product.id.toString()}>
-                            {product.name} (${Number(product.basePrice).toFixed(2)})
+                            {product.name} - ${Number(product.basePrice).toFixed(2)}
                           </SelectItem>
                         ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Summary section */}
-                <div className="mt-6 space-y-2">
-                  <div className="flex justify-between">
+                <div className="mt-6 space-y-2 text-right">
+                  <div className="flex justify-between font-medium">
                     <span>Subtotal:</span>
                     <span>${form.watch('subtotal')?.toFixed(2) || '0.00'}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between font-medium text-lg">
                     <span>Total:</span>
                     <span>${form.watch('total')?.toFixed(2) || '0.00'}</span>
                   </div>
