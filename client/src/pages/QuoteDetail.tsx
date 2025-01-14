@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileEdit } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { QuoteForm, QuoteStatus } from "@/components/QuoteForm";
+import { QuoteForm, QuoteStatus, PaymentMethod } from "@/components/QuoteForm";
 
 export interface Quote {
   id: number;
@@ -41,13 +41,13 @@ export interface Quote {
       remainingBalance: number;
     };
   };
-  paymentMethod?: string | null;
-  discountType?: "PERCENTAGE" | "FIXED" | null;
-  discountValue?: number | null;
-  discountCode?: string | null;
-  downPaymentType?: "PERCENTAGE" | "FIXED" | null;
-  taxRate?: number | null;
-  notes?: string | null;
+  paymentMethod: PaymentMethod | null;
+  discountType: "PERCENTAGE" | "FIXED" | null;
+  discountValue: number | null;
+  discountCode: string | null;
+  downPaymentType: "PERCENTAGE" | "FIXED" | null;
+  taxRate: number | null;
+  notes: string | null;
 }
 
 export function QuoteDetail() {
