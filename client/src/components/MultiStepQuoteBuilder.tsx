@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import debounce from "lodash/debounce";
 
 interface Contact {
   id: number;
@@ -44,6 +45,16 @@ interface Product {
   basePrice: number;
   unit: string;
   variations?: { name: string; price: number }[];
+}
+
+interface User {
+  id: number;
+  // Add other user fields as needed
+}
+
+interface Company {
+  id: number;
+  // Add other company fields as needed
 }
 
 // Schema for the form
@@ -86,16 +97,18 @@ interface Props {
 export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showNewContactForm, setShowNewContactForm] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [quoteId, setQuoteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Get current user
-  const { data: user } = useQuery({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/auth/user"],
   });
 
   // Get current company
-  const { data: company } = useQuery({
+  const { data: company } = useQuery<Company>({
     queryKey: ["/api/companies/current"],
   });
 
@@ -147,8 +160,8 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     enabled: !!form.watch("categoryAndTemplate.categoryId"),
   });
 
-  // Create quote mutation
-  const { mutate: createQuote, isPending } = useMutation({
+  // Create or update quote mutation
+  const { mutate: createOrUpdateQuote, isPending } = useMutation({
     mutationFn: async (data: QuoteFormValues) => {
       if (!user?.id || !company?.id) {
         throw new Error("User or company information is missing");
@@ -170,6 +183,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
             name: products.find(p => p.id === product.productId)?.name || '',
             quantity: Number(product.quantity),
             price: Number(product.unitPrice),
+            variation: product.variation
           })),
         },
         subtotal: data.calculations.subtotal.toFixed(2),
@@ -181,10 +195,13 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         taxRate: data.calculations.taxRate ? data.calculations.taxRate.toFixed(2) : null,
       };
 
-      console.log("Creating quote with payload:", payload);
+      const endpoint = quoteId ? `/api/quotes/${quoteId}` : "/api/quotes";
+      const method = quoteId ? "PUT" : "POST";
 
-      const response = await fetch("/api/quotes", {
-        method: "POST",
+      console.log(`${method}ing quote with payload:`, payload);
+
+      const response = await fetch(endpoint, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -197,37 +214,62 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         console.error("Server response error:", errorText);
         try {
           const errorData = JSON.parse(errorText);
-          throw new Error(errorData.message || "Failed to create quote");
+          throw new Error(errorData.message || "Failed to save quote");
         } catch (e) {
           throw new Error(`Server error: ${errorText}`);
         }
       }
 
       const responseData = await response.json();
-      console.log("Quote created successfully:", responseData);
+      console.log("Quote saved successfully:", responseData);
       return responseData;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
-      toast({
-        title: "Success",
-        description: "Quote created successfully",
-      });
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        window.location.href = "/quotes";
+    onSuccess: (data) => {
+      if (!quoteId) {
+        setQuoteId(data.id);
       }
+      setLastSavedAt(new Date());
+      queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
+
+      toast({
+        title: "Changes Saved",
+        description: `Quote saved as draft at ${new Date().toLocaleTimeString()}`,
+      });
     },
     onError: (error: Error) => {
-      console.error("Quote creation error:", error);
+      console.error("Quote save error:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create quote. Please try again.",
+        description: error.message || "Failed to save quote. Please try again.",
         variant: "destructive",
       });
     },
   });
+
+  // Debounced autosave function
+  const debouncedSave = useCallback(
+    debounce((data: QuoteFormValues) => {
+      if (data.contactInfo.clientName && // Only save if we have at least a client name
+          !isPending) {
+        createOrUpdateQuote(data);
+      }
+    }, 2000),
+    [createOrUpdateQuote, isPending]
+  );
+
+  // Watch for form changes and trigger autosave
+  useEffect(() => {
+    const subscription = form.watch((formData) => {
+      if (formData) {
+        debouncedSave(form.getValues());
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      debouncedSave.cancel();
+    };
+  }, [form, debouncedSave]);
 
   const calculateTotals = () => {
     const products = form.watch("products");
@@ -477,10 +519,10 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                             "products",
                             products.map(p =>
                               p.productId === product.id
-                                ? { 
-                                    ...p, 
+                                ? {
+                                    ...p,
                                     variation: value,
-                                    unitPrice: selectedVariation.price || product.basePrice 
+                                    unitPrice: selectedVariation.price || product.basePrice
                                   }
                                 : p
                             )
@@ -622,7 +664,6 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       case 2: // Products
         isValid = fields.products.length > 0;
         break;
-      // Case 3 doesn't need validation as it's the final step
     }
 
     if (!isValid) {
@@ -633,6 +674,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       });
       return;
     }
+
+    // Save current progress
+    createOrUpdateQuote(fields);
 
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
@@ -691,7 +735,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         return;
       }
 
-      createQuote(data);
+      createOrUpdateQuote(data);
     } catch (error) {
       console.error("Error submitting form:", error);
       toast({
@@ -706,13 +750,21 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Card className="p-6">
-          <Steps
-            steps={steps.map((step) => ({
-              title: step.title,
-              description: step.description,
-            }))}
-            currentStep={currentStep}
-          />
+          <div className="flex justify-between items-center mb-6">
+            <Steps
+              steps={steps.map((step) => ({
+                title: step.title,
+                description: step.description,
+              }))}
+              currentStep={currentStep}
+            />
+            {lastSavedAt && (
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Save className="h-4 w-4" />
+                Last saved: {lastSavedAt.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
 
           <div className="mt-8">
             {steps[currentStep].content}
