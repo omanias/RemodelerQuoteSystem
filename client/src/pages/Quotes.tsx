@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation as useLocationWouter } from "wouter";
-import { QuoteForm } from "./QuoteForm";
+import { QuoteForm, QuoteStatus, PaymentMethod } from "@/components/QuoteForm";
 import {
   Table,
   TableBody,
@@ -35,7 +35,7 @@ interface Quote {
   id: number;
   number: string;
   clientName: string;
-  status: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "REVISED";
+  status: QuoteStatus;
   total: string | number;
   downPaymentValue: string | number | null;
   remainingBalance: string | number | null;
@@ -55,7 +55,7 @@ interface Quote {
   clientPhone: string | null;
   clientAddress: string | null;
   notes: string | null;
-  paymentMethod: string | null;
+  paymentMethod: PaymentMethod | null;
   discountType: "PERCENTAGE" | "FIXED" | null;
   discountValue: number | null;
   discountCode: string | null;
@@ -367,7 +367,7 @@ export function Quotes() {
   );
 }
 
-function getStatusVariant(status: string): "default" | "destructive" | "secondary" | "outline" {
+function getStatusVariant(status: QuoteStatus): "default" | "destructive" | "secondary" | "outline" {
   switch (status) {
     case "ACCEPTED":
       return "default";
