@@ -98,13 +98,13 @@ interface QuoteFormProps {
         remainingBalance: number;
       };
     };
-    paymentMethod?: string | null;
-    discountType?: "PERCENTAGE" | "FIXED" | null;
-    discountValue?: number | null;
-    discountCode?: string | null;
-    downPaymentType?: "PERCENTAGE" | "FIXED" | null;
-    taxRate?: number | null;
-    notes?: string | null;
+    paymentMethod: PaymentMethod | null;
+    discountType: "PERCENTAGE" | "FIXED" | null;
+    discountValue: number | null;
+    discountCode: string | null;
+    downPaymentType: "PERCENTAGE" | "FIXED" | null;
+    taxRate: number | null;
+    notes: string | null;
   };
   onSuccess?: () => void;
   user?: {
@@ -196,46 +196,59 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   }, [form.watch("categoryId")]);
 
   const calculateTotals = (products: Product[]) => {
-    // Ensure we're working with valid numbers
-    const subtotal = products.reduce((sum, item) => {
-      const quantity = Math.max(1, parseInt(item.quantity?.toString() || "1"));
-      const price = parseFloat(item.price?.toString() || "0");
-      return sum + (quantity * price);
-    }, 0);
+    try {
+      // Calculate subtotal from products
+      const subtotal = products.reduce((sum, item) => {
+        const quantity = Math.max(1, parseInt(item.quantity?.toString() || "1"));
+        const price = parseFloat(item.price?.toString() || "0");
+        return sum + (quantity * price);
+      }, 0);
 
-    const discountType = form.watch("discountType");
-    const discountValue = parseFloat(form.watch("discountValue") || "0");
-    const taxRate = parseFloat(form.watch("taxRate") || "0");
-    const downPaymentType = form.watch("downPaymentType");
-    const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
+      // Get form values
+      const discountType = form.watch("discountType");
+      const discountValue = parseFloat(form.watch("discountValue") || "0");
+      const taxRate = parseFloat(form.watch("taxRate") || "0");
+      const downPaymentType = form.watch("downPaymentType");
+      const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
 
-    // Calculate discount
-    const discount = discountType === "PERCENTAGE"
-      ? (subtotal * (isNaN(discountValue) ? 0 : discountValue) / 100)
-      : (isNaN(discountValue) ? 0 : discountValue);
+      // Calculate discount
+      const discount = discountType === "PERCENTAGE"
+        ? (subtotal * (isNaN(discountValue) ? 0 : discountValue) / 100)
+        : (isNaN(discountValue) ? 0 : discountValue);
 
-    // Calculate tax
-    const taxAmount = ((subtotal - discount) * (isNaN(taxRate) ? 0 : taxRate)) / 100;
+      // Calculate tax on discounted amount
+      const taxAmount = ((subtotal - discount) * (isNaN(taxRate) ? 0 : taxRate)) / 100;
 
-    // Calculate total
-    const total = Math.max(0, subtotal - discount + taxAmount);
+      // Calculate total
+      const total = Math.max(0, subtotal - discount + taxAmount);
 
-    // Calculate down payment
-    const downPayment = downPaymentType === "PERCENTAGE"
-      ? (total * (isNaN(downPaymentValue) ? 0 : downPaymentValue) / 100)
-      : (isNaN(downPaymentValue) ? 0 : downPaymentValue);
+      // Calculate down payment
+      const downPayment = downPaymentType === "PERCENTAGE"
+        ? (total * (isNaN(downPaymentValue) ? 0 : downPaymentValue) / 100)
+        : (isNaN(downPaymentValue) ? 0 : downPaymentValue);
 
-    // Calculate remaining balance
-    const remainingBalance = Math.max(0, total - (isNaN(downPayment) ? 0 : downPayment));
+      // Calculate remaining balance
+      const remainingBalance = Math.max(0, total - (isNaN(downPayment) ? 0 : downPayment));
 
-    return {
-      tax: taxAmount,
-      total,
-      discount,
-      subtotal,
-      downPayment,
-      remainingBalance
-    };
+      return {
+        tax: taxAmount,
+        total,
+        discount,
+        subtotal,
+        downPayment,
+        remainingBalance
+      };
+    } catch (error) {
+      console.error("Error calculating totals:", error);
+      return {
+        tax: 0,
+        total: 0,
+        discount: 0,
+        subtotal: 0,
+        downPayment: 0,
+        remainingBalance: 0
+      };
+    }
   };
 
   const mutation = useMutation({
@@ -782,6 +795,66 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </FormItem>
                 )}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="font-semibold mb-4">Quote Summary</h3>
+            <div className="space-y-4 divide-y">
+              <div className="grid grid-cols-2 gap-4 py-2">
+                <div>
+                  <p className="text-sm text-muted-foreground">Subtotal</p>
+                  <p className="text-lg font-medium">
+                    ${calculateTotals(selectedProducts).subtotal.toFixed(2)}
+                  </p>
+                </div>
+                {form.watch("discountValue") && parseFloat(form.watch("discountValue") || "0") > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Discount ({form.watch("discountType") === "PERCENTAGE" ? `${form.watch("discountValue")}%` : "Fixed"})
+                    </p>
+                    <p className="text-lg font-medium text-destructive">
+                      -${calculateTotals(selectedProducts).discount.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                {form.watch("taxRate") && parseFloat(form.watch("taxRate") || "0") > 0 && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Tax ({form.watch("taxRate")}%)</p>
+                    <p className="text-lg font-medium">
+                      ${calculateTotals(selectedProducts).tax.toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4 py-2">
+                <div>
+                  <p className="text-sm text-muted-foreground">Total</p>
+                  <p className="text-xl font-semibold">
+                    ${calculateTotals(selectedProducts).total.toFixed(2)}
+                  </p>
+                </div>
+                {form.watch("downPaymentValue") && parseFloat(form.watch("downPaymentValue") || "0") > 0 && (
+                  <>
+                    <div>
+                      <p className="text-sm text-muted-foreground">
+                        Down Payment ({form.watch("downPaymentType") === "PERCENTAGE" ? `${form.watch("downPaymentValue")}%` : "Fixed"})
+                      </p>
+                      <p className="text-lg font-medium">
+                        ${calculateTotals(selectedProducts).downPayment.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="col-start-2">
+                      <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                      <p className="text-lg font-medium">
+                        ${calculateTotals(selectedProducts).remainingBalance.toFixed(2)}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
