@@ -2,7 +2,7 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { QuoteForm } from "./QuoteForm";
+import { MultiStepQuoteBuilder } from "@/components/MultiStepQuoteBuilder";
 import { Quote } from "@/types/quote";
 
 interface Contact {
@@ -59,17 +59,27 @@ export function QuoteDetail() {
           <h1 className="text-2xl font-bold">New Quote</h1>
         </div>
 
-        <QuoteForm
-          user={user}
-          defaultContactId={contactId}
-          contact={contact}
+        <MultiStepQuoteBuilder
           onSuccess={() => window.location.href = "/quotes"}
+          defaultValues={
+            contact
+              ? {
+                  contactInfo: {
+                    contactId: contact.id.toString(),
+                    clientName: `${contact.firstName} ${contact.lastName}`,
+                    clientEmail: contact.primaryEmail,
+                    clientPhone: contact.primaryPhone,
+                    clientAddress: contact.primaryAddress,
+                  },
+                }
+              : undefined
+          }
         />
       </div>
     );
   }
 
-  // If we have an ID, directly show the quote form in edit mode
+  // If we have an ID, show the quote in edit mode
   return (
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center mb-6">
@@ -84,12 +94,30 @@ export function QuoteDetail() {
         </div>
       </div>
 
-      <QuoteForm
-        quote={quote}
-        user={user}
-        defaultContactId={contactId}
-        contact={contact}
+      <MultiStepQuoteBuilder
         onSuccess={() => window.location.href = "/quotes"}
+        defaultValues={quote ? {
+          contactInfo: {
+            clientName: quote.clientName,
+            clientEmail: quote.clientEmail || null,
+            clientPhone: quote.clientPhone || null,
+            clientAddress: quote.clientAddress || null,
+          },
+          categoryAndTemplate: {
+            categoryId: quote.categoryId,
+            templateId: quote.templateId,
+          },
+          products: quote.content.products,
+          calculations: {
+            subtotal: Number(quote.subtotal),
+            total: Number(quote.total),
+            discountType: quote.discountType as any,
+            discountValue: quote.discountValue ? Number(quote.discountValue) : null,
+            downPaymentType: quote.downPaymentType as any,
+            downPaymentValue: quote.downPaymentValue ? Number(quote.downPaymentValue) : null,
+            taxRate: quote.taxRate ? Number(quote.taxRate) : null,
+          },
+        } : undefined}
       />
     </div>
   );
