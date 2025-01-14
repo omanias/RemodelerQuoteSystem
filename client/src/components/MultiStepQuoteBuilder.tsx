@@ -48,7 +48,6 @@ interface Product {
 
 // Schema for the form
 const quoteFormSchema = z.object({
-  // Step 1: Contact Information
   contactInfo: z.object({
     contactId: z.string().optional(),
     clientName: z.string().min(1, "Client name is required"),
@@ -56,19 +55,16 @@ const quoteFormSchema = z.object({
     clientPhone: z.string().optional().nullable(),
     clientAddress: z.string().optional().nullable(),
   }),
-  // Step 2: Category and Template
   categoryAndTemplate: z.object({
     categoryId: z.number().min(1, "Category is required"),
     templateId: z.number().min(1, "Template is required"),
   }),
-  // Step 3: Products
   products: z.array(z.object({
     productId: z.number(),
     quantity: z.number().min(1),
     variation: z.string().optional(),
     unitPrice: z.number(),
-  })),
-  // Step 4: Calculations
+  })).min(1, "At least one product is required"),
   calculations: z.object({
     subtotal: z.number(),
     discountType: z.enum(["PERCENTAGE", "FIXED"]).optional().nullable(),
@@ -120,6 +116,11 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       calculations: {
         subtotal: 0,
         total: 0,
+        discountType: null,
+        discountValue: null,
+        downPaymentType: null,
+        downPaymentValue: null,
+        taxRate: null,
       },
     },
   });
@@ -152,6 +153,13 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       if (!user?.id || !company?.id) {
         throw new Error("User or company information is missing");
       }
+
+      // Log the payload for debugging
+      console.log("Creating quote with data:", {
+        ...data,
+        userId: user.id,
+        companyId: company.id,
+      });
 
       const response = await fetch("/api/quotes", {
         method: "POST",
@@ -187,10 +195,13 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
 
       if (!response.ok) {
         const error = await response.json();
+        console.error("Failed to create quote:", error);
         throw new Error(error.message || "Failed to create quote");
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log("Quote created successfully:", result);
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
@@ -201,6 +212,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       onSuccess();
     },
     onError: (error: Error) => {
+      console.error("Quote creation error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create quote. Please try again.",
@@ -543,6 +555,34 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   ];
 
   const nextStep = () => {
+    const fields = form.getValues();
+    console.log("Current form values:", fields);
+
+    // Validate current step before proceeding
+    let isValid = true;
+
+    switch (currentStep) {
+      case 0: // Contact Info
+        isValid = !!fields.contactInfo.clientName;
+        break;
+      case 1: // Category & Template
+        isValid = fields.categoryAndTemplate.categoryId > 0 && fields.categoryAndTemplate.templateId > 0;
+        break;
+      case 2: // Products
+        isValid = fields.products.length > 0;
+        break;
+      // Case 3 doesn't need validation as it's the final step
+    }
+
+    if (!isValid) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -554,7 +594,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     }
   };
 
-  const onSubmit = (data: QuoteFormValues) => {
+  const onSubmit = async (data: QuoteFormValues) => {
+    console.log("Form submitted with values:", data);
+
     if (!user?.id) {
       toast({
         title: "Error",
@@ -573,7 +615,21 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       return;
     }
 
-    createQuote(data);
+    // Validate that at least one product is added
+    if (data.products.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one product to the quote",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await createQuote(data);
+    } catch (error) {
+      console.error("Error submitting form:", error);
+    }
   };
 
   return (
