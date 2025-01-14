@@ -886,7 +886,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                         ${calculateTotals(selectedProducts).downPayment.toFixed(2)}
                       </p>
                     </div>
-                    <div className="col-start-2">
+                    <div>
                       <p className="text-sm text-muted-foreground">Remaining Balance</p>
                       <p className="text-lg font-medium">
                         ${calculateTotals(selectedProducts).remainingBalance.toFixed(2)}
