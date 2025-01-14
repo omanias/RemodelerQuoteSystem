@@ -34,10 +34,10 @@ export enum QuoteStatus {
 }
 
 export enum PaymentMethod {
-  CASH = "Cash",
-  CREDIT_CARD = "Credit Card",
-  BANK_TRANSFER = "Bank Transfer",
-  PAYMENT_PLAN = "Payment Plan"
+  CASH = "CASH",
+  CREDIT_CARD = "CREDIT_CARD",
+  BANK_TRANSFER = "BANK_TRANSFER",
+  PAYMENT_PLAN = "PAYMENT_PLAN"
 }
 
 const quoteFormSchema = z.object({
@@ -127,12 +127,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  console.log('Initial quote data:', quote);
-
-  // Initialize selected products from quote data if available
   const [selectedProducts, setSelectedProducts] = useState<Product[]>(() => {
     if (quote?.content?.products) {
-      console.log('Initializing selected products from quote:', quote.content.products);
       return quote.content.products;
     }
     return [];
@@ -178,8 +174,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     notes: quote?.notes || ""
   };
 
-  console.log('Form default values:', defaultValues);
-
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
     defaultValues
@@ -187,7 +181,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   useEffect(() => {
     if (contact) {
-      console.log('Updating form with contact details:', contact);
       form.setValue("clientName", `${contact.firstName} ${contact.lastName}`);
       form.setValue("clientEmail", contact.primaryEmail || "");
       form.setValue("clientPhone", contact.primaryPhone || "");
@@ -198,14 +191,16 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   useEffect(() => {
     const categoryId = form.watch("categoryId");
     if (categoryId) {
-      console.log('Category changed:', categoryId);
       setSelectedCategoryId(categoryId);
     }
   }, [form.watch("categoryId")]);
 
   const calculateTotals = (products: Product[]) => {
+    // Ensure we're working with valid numbers
     const subtotal = products.reduce((sum, item) => {
-      return sum + (item.quantity * item.price);
+      const quantity = Math.max(1, parseInt(item.quantity?.toString() || "1"));
+      const price = parseFloat(item.price?.toString() || "0");
+      return sum + (quantity * price);
     }, 0);
 
     const discountType = form.watch("discountType");
@@ -214,18 +209,24 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     const downPaymentType = form.watch("downPaymentType");
     const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
 
+    // Calculate discount
     const discount = discountType === "PERCENTAGE"
-      ? (subtotal * discountValue / 100)
-      : discountValue;
+      ? (subtotal * (isNaN(discountValue) ? 0 : discountValue) / 100)
+      : (isNaN(discountValue) ? 0 : discountValue);
 
-    const taxAmount = ((subtotal - discount) * taxRate) / 100;
-    const total = subtotal - discount + taxAmount;
+    // Calculate tax
+    const taxAmount = ((subtotal - discount) * (isNaN(taxRate) ? 0 : taxRate)) / 100;
 
+    // Calculate total
+    const total = Math.max(0, subtotal - discount + taxAmount);
+
+    // Calculate down payment
     const downPayment = downPaymentType === "PERCENTAGE"
-      ? (total * downPaymentValue / 100)
-      : downPaymentValue;
+      ? (total * (isNaN(downPaymentValue) ? 0 : downPaymentValue) / 100)
+      : (isNaN(downPaymentValue) ? 0 : downPaymentValue);
 
-    const remainingBalance = total - downPayment;
+    // Calculate remaining balance
+    const remainingBalance = Math.max(0, total - (isNaN(downPayment) ? 0 : downPayment));
 
     return {
       tax: taxAmount,
@@ -247,18 +248,22 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         categoryId: data.categoryId ? parseInt(data.categoryId) : null,
         templateId: data.templateId ? parseInt(data.templateId) : null,
         content: {
-          products: selectedProducts,
+          products: selectedProducts.map(product => ({
+            ...product,
+            quantity: Math.max(1, parseInt(product.quantity?.toString() || "1")),
+            price: parseFloat(product.price?.toString() || "0")
+          })),
           calculations
         },
         subtotal: calculations.subtotal,
         total: calculations.total,
-        discountValue: data.discountValue ? parseFloat(data.discountValue) : null,
-        taxRate: data.taxRate ? parseFloat(data.taxRate) : null,
-        downPaymentValue: data.downPaymentValue ? parseFloat(data.downPaymentValue) : null,
-        remainingBalance: calculations.remainingBalance
+        discountValue: parseFloat(data.discountValue || "0") || null,
+        taxRate: parseFloat(data.taxRate || "0") || null,
+        downPaymentValue: parseFloat(data.downPaymentValue || "0") || null,
+        remainingBalance: calculations.remainingBalance,
+        // Convert payment method to the correct format
+        paymentMethod: data.paymentMethod || null
       };
-
-      console.log('Mutation payload:', payload);
 
       const response = await fetch(quote ? `/api/quotes/${quote.id}` : "/api/quotes", {
         method: quote ? "PUT" : "POST",
@@ -271,13 +276,10 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API error:', errorText);
         throw new Error(errorText);
       }
 
-      const result = await response.json();
-      console.log('API response:', result);
-      return result;
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
@@ -291,7 +293,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       onSuccess?.();
     },
     onError: (error: Error) => {
-      console.error('Mutation error:', error);
       toast({
         title: "Error",
         description: error.message,
@@ -308,7 +309,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const onSubmit = async (data: QuoteFormValues) => {
     try {
-      console.log('Form submission data:', data);
       await mutation.mutateAsync(data);
     } catch (error) {
       console.error("Form submission error:", error);
@@ -316,14 +316,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const addProduct = (product: any) => {
-    console.log('Adding product:', product);
     setSelectedProducts(prev => [
       ...prev,
       {
         id: product.id,
         name: product.name,
         unit: product.unit,
-        price: product.price, // Corrected: Use product.price instead of product.basePrice
+        price: product.price,
         quantity: 1,
         variation: product.variations?.[0]?.name
       }
@@ -331,7 +330,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const updateQuantity = (index: number, value: number) => {
-    console.log('Updating quantity:', { index, value });
     setSelectedProducts(prev =>
       prev.map((item, i) =>
         i === index ? { ...item, quantity: Math.max(1, value) } : item
@@ -340,7 +338,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   };
 
   const removeProduct = (index: number) => {
-    console.log('Removing product at index:', index);
     setSelectedProducts(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -377,7 +374,19 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Select Contact</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      const selectedContact = contacts.find(c => c.id.toString() === value);
+                      if (selectedContact) {
+                        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+                        form.setValue("clientEmail", selectedContact.primaryEmail || "");
+                        form.setValue("clientPhone", selectedContact.primaryPhone || "");
+                        form.setValue("clientAddress", selectedContact.primaryAddress || "");
+                      }
+                    }}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a contact" />
