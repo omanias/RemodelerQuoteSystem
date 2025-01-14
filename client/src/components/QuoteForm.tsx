@@ -40,26 +40,6 @@ export enum PaymentMethod {
   PAYMENT_PLAN = "PAYMENT_PLAN"
 }
 
-interface ProductVariation {
-  id: number;
-  name: string;
-  price: number;
-}
-
-interface Product {
-  id: number;
-  name: string;
-  unit: string;
-  price: number;
-  quantity: number;
-  variation?: string;
-  variations?: Array<{
-    id: number;
-    name: string;
-    price: number;
-  }>;
-}
-
 const quoteFormSchema = z.object({
   contactId: z.string().optional(),
   templateId: z.string().optional(),
@@ -80,6 +60,15 @@ const quoteFormSchema = z.object({
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
+
+interface Product {
+  id: number;
+  name: string;
+  unit: string;
+  price: number;
+  quantity: number;
+  variation?: string;
+}
 
 interface QuoteFormProps {
   quote?: {
@@ -175,7 +164,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
     clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
     status: quote?.status || QuoteStatus.DRAFT,
-    paymentMethod: quote?.paymentMethod || undefined,
+    paymentMethod: quote?.paymentMethod as PaymentMethod || undefined,
     discountType: quote?.discountType || undefined,
     discountValue: quote?.discountValue?.toString() || "",
     discountCode: quote?.discountCode || "",
@@ -208,30 +197,38 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const calculateTotals = (products: Product[]) => {
     try {
+      // Calculate subtotal from products
       const subtotal = products.reduce((sum, item) => {
-        const quantity = Math.max(1, Number(item.quantity) || 1);
-        const price = Number(item.price) || 0;
+        const quantity = Math.max(1, parseInt(item.quantity?.toString() || "1"));
+        const price = parseFloat(item.price?.toString() || "0");
         return sum + (quantity * price);
       }, 0);
 
+      // Get form values
       const discountType = form.watch("discountType");
-      const discountValue = Number(form.watch("discountValue")) || 0;
-      const taxRate = Number(form.watch("taxRate")) || 0;
+      const discountValue = parseFloat(form.watch("discountValue") || "0");
+      const taxRate = parseFloat(form.watch("taxRate") || "0");
       const downPaymentType = form.watch("downPaymentType");
-      const downPaymentValue = Number(form.watch("downPaymentValue")) || 0;
+      const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
 
+      // Calculate discount
       const discount = discountType === "PERCENTAGE"
-        ? (subtotal * discountValue / 100)
-        : discountValue;
+        ? (subtotal * (isNaN(discountValue) ? 0 : discountValue) / 100)
+        : (isNaN(discountValue) ? 0 : discountValue);
 
-      const taxAmount = ((subtotal - discount) * taxRate) / 100;
+      // Calculate tax on discounted amount
+      const taxAmount = ((subtotal - discount) * (isNaN(taxRate) ? 0 : taxRate)) / 100;
+
+      // Calculate total
       const total = Math.max(0, subtotal - discount + taxAmount);
 
+      // Calculate down payment
       const downPayment = downPaymentType === "PERCENTAGE"
-        ? (total * downPaymentValue / 100)
-        : downPaymentValue;
+        ? (total * (isNaN(downPaymentValue) ? 0 : downPaymentValue) / 100)
+        : (isNaN(downPaymentValue) ? 0 : downPaymentValue);
 
-      const remainingBalance = Math.max(0, total - downPayment);
+      // Calculate remaining balance
+      const remainingBalance = Math.max(0, total - (isNaN(downPayment) ? 0 : downPayment));
 
       return {
         tax: taxAmount,
@@ -266,17 +263,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         content: {
           products: selectedProducts.map(product => ({
             ...product,
-            quantity: Math.max(1, Number(product.quantity) || 1),
-            price: Number(product.price) || 0
+            quantity: Math.max(1, parseInt(product.quantity?.toString() || "1")),
+            price: parseFloat(product.price?.toString() || "0")
           })),
           calculations
         },
         subtotal: calculations.subtotal,
         total: calculations.total,
-        discountValue: Number(data.discountValue) || null,
-        taxRate: Number(data.taxRate) || null,
-        downPaymentValue: Number(data.downPaymentValue) || null,
+        discountValue: parseFloat(data.discountValue || "0") || null,
+        taxRate: parseFloat(data.taxRate || "0") || null,
+        downPaymentValue: parseFloat(data.downPaymentValue || "0") || null,
         remainingBalance: calculations.remainingBalance,
+        // Convert payment method to the correct format
         paymentMethod: data.paymentMethod || null
       };
 
@@ -290,10 +288,11 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       });
 
       if (!response.ok) {
-        throw new Error(await response.text());
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
-      return response.json();
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
@@ -336,12 +335,9 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         id: product.id,
         name: product.name,
         unit: product.unit,
-        price: product.variations?.length 
-          ? 0  // Will be set when variation is selected
-          : Number(product.price) || 0,
+        price: product.price,
         quantity: 1,
-        variations: product.variations,
-        variation: undefined
+        variation: product.variations?.[0]?.name
       }
     ]);
   };
@@ -358,12 +354,21 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     setSelectedProducts(prev => prev.filter((_, i) => i !== index));
   };
 
-  const calculations = calculateTotals(selectedProducts);
-
   return (
     <Form {...form}>
       <form onKeyDown={handleKeyDown} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Client Information Card */}
+        {user ? (
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-semibold mb-2">Sales Representative</h3>
+              <div className="text-sm text-muted-foreground">
+                <p>Name: {user.name}</p>
+                <p>Email: {user.email}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card>
           <CardContent className="pt-6">
             <div className="flex justify-between items-center mb-4">
@@ -376,7 +381,44 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="contactId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Select Contact</FormLabel>
+                  <Select
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      const selectedContact = contacts.find(c => c.id.toString() === value);
+                      if (selectedContact) {
+                        form.setValue("clientName", `${selectedContact.firstName} ${selectedContact.lastName}`);
+                        form.setValue("clientEmail", selectedContact.primaryEmail || "");
+                        form.setValue("clientPhone", selectedContact.primaryPhone || "");
+                        form.setValue("clientAddress", selectedContact.primaryAddress || "");
+                      }
+                    }}
+                    value={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a contact" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {contacts.map((contact) => (
+                        <SelectItem key={contact.id} value={contact.id.toString()}>
+                          {contact.firstName} {contact.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4 mt-4">
               <FormField
                 control={form.control}
                 name="clientName"
@@ -436,7 +478,90 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </CardContent>
         </Card>
 
-        {/* Products Card */}
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="font-semibold mb-4">Quote Details</h3>
+            <div className="space-y-4">
+              <FormField
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories.map((category: any) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="templateId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Template</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a template" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {templates
+                          .filter((t: any) => t.categoryId.toString() === selectedCategoryId)
+                          .map((template: any) => (
+                            <SelectItem key={template.id} value={template.id.toString()}>
+                              {template.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {Object.values(QuoteStatus).map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {selectedCategoryId && (
           <Card>
             <CardContent className="pt-6">
@@ -455,54 +580,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                             <div>
                               <h4 className="font-medium">{product.name}</h4>
                               <p className="text-sm text-muted-foreground">
-                                {product.variations?.length > 0 ? (
-                                  <>
-                                    Price Range: ${Math.min(...product.variations.map((v: any) => v.price)).toFixed(2)} -
-                                    ${Math.max(...product.variations.map((v: any) => v.price)).toFixed(2)}
-                                  </>
-                                ) : (
-                                  `Unit Price: $${product.price.toFixed(2)}`
-                                )}
+                                Base Price: ${product.basePrice}
                               </p>
-                              {product.variations?.length > 0 && (
-                                <div className="mt-2">
-                                  <Select
-                                    onValueChange={(variationId) => {
-                                      const selectedVariation = product.variations.find((v: any) => v.id.toString() === variationId);
-                                      if (selectedVariation) {
-                                        addProduct({
-                                          ...product,
-                                          price: selectedVariation.price,
-                                          variation: selectedVariation.name
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Select variation" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {product.variations.map((variation: any) => (
-                                        <SelectItem key={variation.id} value={variation.id.toString()}>
-                                          {variation.name} - ${variation.price.toFixed(2)}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
                             </div>
-                            {(!product.variations || product.variations.length === 0) && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => addProduct(product)}
-                                className="h-8 w-8"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => addProduct(product)}
+                              className="h-8 w-8"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
                           </div>
                         </CardContent>
                       </Card>
@@ -511,28 +600,23 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                 )}
 
                 {selectedProducts.length > 0 && (
-                  <div className="space-y-4 mt-6">
+                  <div className="space-y-4">
                     <h4 className="font-medium">Selected Products</h4>
                     <div className="space-y-2">
                       {selectedProducts.map((item, index) => (
-                        <div key={index} className="flex items-center gap-4 p-4 border rounded-md">
+                        <div key={index} className="flex items-center gap-4 p-2 border rounded-md">
                           <div className="flex-1">
-                            <p className="font-medium">
-                              {item.name}
-                              {item.variation ? ` - ${item.variation}` : ""}
+                            <p className="font-medium">{item.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              ${item.price}
                             </p>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>Unit Price: ${Number(item.price).toFixed(2)}</span>
-                              <span>•</span>
-                              <span>Total: ${(Number(item.quantity) * Number(item.price)).toFixed(2)}</span>
-                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
-                              onClick={() => updateQuantity(index, Number(item.quantity) - 1)}
+                              onClick={() => updateQuantity(index, item.quantity - 1)}
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
@@ -541,13 +625,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               value={item.quantity}
                               onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
                               className="w-20 text-center"
-                              min="1"
                             />
                             <Button
                               type="button"
                               variant="outline"
                               size="icon"
-                              onClick={() => updateQuantity(index, Number(item.quantity) + 1)}
+                              onClick={() => updateQuantity(index, item.quantity + 1)}
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
@@ -570,7 +653,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           </Card>
         )}
 
-        {/* Quote Settings Card */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Settings</h3>
@@ -699,65 +781,75 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
           </CardContent>
         </Card>
 
-        {/* Quote Summary Card */}
         <Card>
           <CardContent className="pt-6">
             <h3 className="font-semibold mb-4">Quote Summary</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 divide-y">
+              <div className="grid grid-cols-2 gap-4 py-2">
                 <div>
                   <p className="text-sm text-muted-foreground">Subtotal</p>
                   <p className="text-lg font-medium">
-                    ${calculations.subtotal.toFixed(2)}
+                    ${calculateTotals(selectedProducts).subtotal.toFixed(2)}
                   </p>
                 </div>
-
-                {calculations.discount > 0 && (
+                {form.watch("discountValue") && parseFloat(form.watch("discountValue") || "0") > 0 && (
                   <div>
                     <p className="text-sm text-muted-foreground">
-                      Discount {form.watch("discountType") === "PERCENTAGE" ? `(${form.watch("discountValue")}%)` : "(Fixed)"}
+                      Discount ({form.watch("discountType") === "PERCENTAGE" ? `${form.watch("discountValue")}%` : "Fixed"})
                     </p>
                     <p className="text-lg font-medium text-destructive">
-                      -${calculations.discount.toFixed(2)}
+                      -${calculateTotals(selectedProducts).discount.toFixed(2)}
                     </p>
                   </div>
                 )}
-
-                {calculations.tax > 0 && (
+                {form.watch("taxRate") && parseFloat(form.watch("taxRate") || "0") > 0 && (
                   <div>
                     <p className="text-sm text-muted-foreground">Tax ({form.watch("taxRate")}%)</p>
                     <p className="text-lg font-medium">
-                      ${calculations.tax.toFixed(2)}
+                      ${calculateTotals(selectedProducts).tax.toFixed(2)}
                     </p>
                   </div>
                 )}
-
+              </div>
+              <div className="grid grid-cols-2 gap-4 py-2">
                 <div>
                   <p className="text-sm text-muted-foreground">Total</p>
                   <p className="text-xl font-semibold">
-                    ${calculations.total.toFixed(2)}
+                    ${calculateTotals(selectedProducts).total.toFixed(2)}
                   </p>
                 </div>
-
-                {calculations.downPayment > 0 && (
+                {form.watch("downPaymentValue") && parseFloat(form.watch("downPaymentValue") || "0") > 0 && (
                   <>
                     <div>
                       <p className="text-sm text-muted-foreground">
-                        Down Payment {form.watch("downPaymentType") === "PERCENTAGE" ? `(${form.watch("downPaymentValue")}%)` : "(Fixed)"}
+                        Down Payment ({form.watch("downPaymentType") === "PERCENTAGE" ? `${form.watch("downPaymentValue")}%` : "Fixed"})
                       </p>
                       <p className="text-lg font-medium">
-                        ${calculations.downPayment.toFixed(2)}
+                        ${calculateTotals(selectedProducts).downPayment.toFixed(2)}
                       </p>
                     </div>
-
-                    <div>
+                    <div className="col-start-2">
                       <p className="text-sm text-muted-foreground">Remaining Balance</p>
                       <p className="text-lg font-medium">
-                        ${calculations.remainingBalance.toFixed(2)}
+                        ${calculateTotals(selectedProducts).remainingBalance.toFixed(2)}
                       </p>
                     </div>
                   </>
@@ -769,7 +861,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
         <div className="flex justify-end">
           <Button type="submit" disabled={mutation.isPending}>
-            {mutation.isPending ? (quote ? "Updating..." : "Creating...") : (quote ? "Update Quote" : "Create Quote")}
+            {mutation.isPending
+              ? quote
+                ? "Updating..."
+                : "Creating..."
+              : quote
+                ? "Update Quote"
+                : "Create Quote"}
           </Button>
         </div>
       </form>

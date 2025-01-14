@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileEdit } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { QuoteForm, QuoteStatus, PaymentMethod } from "@/components/QuoteForm";
+import { QuoteForm, QuoteStatus } from "@/components/QuoteForm";
 
 export interface Quote {
   id: number;
@@ -41,13 +41,13 @@ export interface Quote {
       remainingBalance: number;
     };
   };
-  paymentMethod: PaymentMethod | null;
-  discountType: "PERCENTAGE" | "FIXED" | null;
-  discountValue: number | null;
-  discountCode: string | null;
-  downPaymentType: "PERCENTAGE" | "FIXED" | null;
-  taxRate: number | null;
-  notes: string | null;
+  paymentMethod?: string | null;
+  discountType?: "PERCENTAGE" | "FIXED" | null;
+  discountValue?: number | null;
+  discountCode?: string | null;
+  downPaymentType?: "PERCENTAGE" | "FIXED" | null;
+  taxRate?: number | null;
+  notes?: string | null;
 }
 
 export function QuoteDetail() {
@@ -88,6 +88,31 @@ export function QuoteDetail() {
     return <div>Loading quote...</div>;
   }
 
+  // If no ID is provided, show the quote creation form
+  if (!id) {
+    return (
+      <div className="container mx-auto py-6 max-w-5xl">
+        <div className="flex items-center mb-6">
+          <Link href="/quotes">
+            <Button variant="ghost" className="mr-4">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Quotes
+            </Button>
+          </Link>
+          <h1 className="text-2xl font-bold">New Quote</h1>
+        </div>
+
+        <QuoteForm
+          user={user}
+          defaultContactId={contactId}
+          contact={contact}
+          onSuccess={() => setLocation("/quotes")}
+        />
+      </div>
+    );
+  }
+
+  // If we have an ID, show the quote details view with edit option
   return (
     <div className="container mx-auto py-6 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
@@ -99,32 +124,28 @@ export function QuoteDetail() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">
-              {id ? `Quote ${quote?.number}` : "New Quote"}
-            </h1>
+            <h1 className="text-2xl font-bold">Quote {quote?.number}</h1>
             {quote?.status && (
-              <Badge variant={quote.status === QuoteStatus.ACCEPTED ? "default" : "secondary"}>
+              <Badge variant={quote.status === QuoteStatus.ACCEPTED ? 'default' : 'secondary'}>
                 {quote.status}
               </Badge>
             )}
           </div>
         </div>
-        {id && (
-          <Button
-            variant={isEditing ? "ghost" : "default"}
-            onClick={() => setIsEditing(!isEditing)}
-          >
-            {isEditing ? "Cancel Edit" : (
-              <>
-                <FileEdit className="h-4 w-4 mr-2" />
-                Edit Quote
-              </>
-            )}
-          </Button>
-        )}
+        <Button 
+          variant={isEditing ? "ghost" : "default"}
+          onClick={() => setIsEditing(!isEditing)}
+        >
+          {isEditing ? "Cancel Edit" : (
+            <>
+              <FileEdit className="h-4 w-4 mr-2" />
+              Edit Quote
+            </>
+          )}
+        </Button>
       </div>
 
-      {id && isEditing ? (
+      {isEditing ? (
         <QuoteForm
           quote={quote}
           user={user}
@@ -134,13 +155,6 @@ export function QuoteDetail() {
             setIsEditing(false);
             setLocation(`/quotes/${id}`);
           }}
-        />
-      ) : !id ? (
-        <QuoteForm
-          user={user}
-          defaultContactId={contactId}
-          contact={contact}
-          onSuccess={() => setLocation("/quotes")}
         />
       ) : (
         <div className="space-y-6">
