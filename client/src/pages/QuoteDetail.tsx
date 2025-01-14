@@ -85,8 +85,8 @@ export function QuoteDetail() {
     queryKey: ["/api/auth/user"],
   });
 
-  if (id && (isLoadingQuote || !quote)) {
-    return <div className="container mx-auto py-6">Loading quote...</div>;
+  if (id && isLoadingQuote) {
+    return <div>Loading quote...</div>;
   }
 
   // If no ID is provided, show the quote creation form

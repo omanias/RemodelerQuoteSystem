@@ -152,32 +152,16 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       return quote.content.products.map(product => ({
         id: product.id,
         name: product.name,
-        unit: product.unit || '',
-        basePrice: Number(product.basePrice) || 0,
-        price: Number(product.price) || Number(product.basePrice) || 0,
-        quantity: Number(product.quantity) || 1,
+        unit: product.unit,
+        basePrice: product.basePrice,
+        price: product.price || product.basePrice,
+        quantity: product.quantity || 1,
         variation: product.variation,
         variations: product.variations
       }));
     }
     return [];
   });
-
-  // Update selected products when quote changes
-  useEffect(() => {
-    if (quote?.content?.products) {
-      setSelectedProducts(quote.content.products.map(product => ({
-        id: product.id,
-        name: product.name,
-        unit: product.unit || '',
-        basePrice: Number(product.basePrice) || 0,
-        price: Number(product.price) || Number(product.basePrice) || 0,
-        quantity: Number(product.quantity) || 1,
-        variation: product.variation,
-        variations: product.variations
-      })));
-    }
-  }, [quote]);
 
   const { data: contacts = [] } = useQuery<any[]>({
     queryKey: ["/api/contacts"],
