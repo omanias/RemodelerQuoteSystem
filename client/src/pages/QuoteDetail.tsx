@@ -2,55 +2,23 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { QuoteForm } from "@/components/QuoteForm";
-import { QuoteStatus } from "@/components/QuoteForm";
+import { QuoteForm } from "./QuoteForm";
+import { Quote } from "@/types/quote";
 
-interface Quote {
+interface Contact {
   id: number;
-  number: string;
-  clientName: string;
-  clientEmail: string | null;
-  clientPhone: string | null;
-  clientAddress: string | null;
-  status: QuoteStatus;
-  total: number;
-  subtotal: number;
-  downPaymentValue: number | null;
-  remainingBalance: number | null;
-  createdAt: string;
-  contactId: number | null;
-  categoryId: number;
-  templateId: number;
-  content: {
-    products: Array<{
-      id: number;
-      name: string;
-      unit: string;
-      basePrice: number;
-      price: number;
-      quantity: number;
-      variation?: string;
-      variations?: Array<{
-        name: string;
-        price: number;
-      }>;
-    }>;
-    calculations?: {
-      tax: number;
-      total: number;
-      discount: number;
-      subtotal: number;
-      downPayment: number;
-      remainingBalance: number;
-    };
-  };
-  paymentMethod: string | null;
-  discountType: "PERCENTAGE" | "FIXED" | null;
-  discountValue: number | null;
-  discountCode: string | null;
-  downPaymentType: "PERCENTAGE" | "FIXED" | null;
-  taxRate: number | null;
-  notes: string | null;
+  firstName: string;
+  lastName: string;
+  primaryEmail: string;
+  primaryPhone: string;
+  primaryAddress: string;
+}
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
 }
 
 export function QuoteDetail() {
@@ -64,24 +32,12 @@ export function QuoteDetail() {
     enabled: !!id,
   });
 
-  const { data: contact } = useQuery<{
-    id: number;
-    firstName: string;
-    lastName: string;
-    primaryEmail: string;
-    primaryPhone: string;
-    primaryAddress: string;
-  }>({
+  const { data: contact } = useQuery<Contact>({
     queryKey: [`/api/contacts/${contactId}`],
     enabled: !!contactId,
   });
 
-  const { data: user } = useQuery<{
-    id: number;
-    name: string;
-    email: string;
-    role: string;
-  }>({
+  const { data: user } = useQuery<User>({
     queryKey: ["/api/auth/user"],
   });
 

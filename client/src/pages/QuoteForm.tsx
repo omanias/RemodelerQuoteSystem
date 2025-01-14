@@ -2,8 +2,14 @@ import { useState, useEffect, KeyboardEventHandler, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { PaymentMethod, QuoteStatus } from "@db/schema";
+import {
+  Quote,
+  QuoteFormValues,
+  quoteFormSchema,
+  SelectedProduct,
+  QuoteStatus,
+  PaymentMethod
+} from "@/types/quote";
 import {
   Form,
   FormControl,
@@ -25,79 +31,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Minus, X, UserPlus } from "lucide-react";
 import { Link } from "wouter";
-
-interface SelectedProduct {
-  productId: number;
-  quantity: number;
-  variation?: string;
-  unitPrice: number;
-  basePrice: number;
-}
-
-interface Quote {
-  id: number;
-  number: string;
-  clientName: string;
-  status: keyof typeof QuoteStatus;
-  total: string | number;
-  downPaymentValue: string | number | null;
-  remainingBalance: string | number | null;
-  createdAt: string;
-  content: {
-    products: Array<{
-      productId: number;
-      quantity: number;
-      variation?: string;
-      unitPrice: number;
-    }>;
-  };
-  templateId: number;
-  categoryId: number;
-  contactId: number | null;
-  clientEmail: string | null;
-  clientPhone: string | null;
-  clientAddress: string | null;
-  notes: string | null;
-  paymentMethod: keyof typeof PaymentMethod | null;
-  discountType: "PERCENTAGE" | "FIXED" | null;
-  discountValue: number | null;
-  discountCode: string | null;
-  downPaymentType: "PERCENTAGE" | "FIXED" | null;
-  taxRate: number | null;
-  subtotal: number;
-}
-
-const quoteFormSchema = z.object({
-  contactId: z.string().optional(),
-  templateId: z.string().optional(),
-  categoryId: z.string().optional(),
-  clientName: z.string().min(1, "Client name is required"),
-  clientEmail: z.string().email("Invalid email address").optional(),
-  clientPhone: z.string().optional(),
-  clientAddress: z.string().optional(),
-  status: z.enum(Object.keys(QuoteStatus) as [string, ...string[]]),
-  content: z.object({
-    products: z.array(z.object({
-      productId: z.number(),
-      quantity: z.number(),
-      variation: z.string().optional(),
-      unitPrice: z.number()
-    }))
-  }).optional(),
-  subtotal: z.number().min(0).optional(),
-  total: z.number().min(0).optional(),
-  notes: z.string().optional(),
-  paymentMethod: z.enum(Object.keys(PaymentMethod) as [string, ...string[]]).optional(),
-  discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
-  discountValue: z.number().min(0).optional(),
-  discountCode: z.string().optional(),
-  downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
-  downPaymentValue: z.number().min(0).optional(),
-  taxRate: z.number().min(0).optional(),
-  remainingBalance: z.number().min(0).optional()
-});
-
-type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
 interface QuoteFormProps {
   quote?: Quote;
@@ -122,11 +55,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Initialize selected products from quote data with proper type conversion
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>(() => {
     if (quote?.content?.products) {
       return quote.content.products.map((p) => ({
         productId: p.productId,
-        quantity: p.quantity || 1,
+        quantity: Number(p.quantity) || 1,
         variation: p.variation,
         unitPrice: Number(p.unitPrice) || 0,
         basePrice: Number(p.unitPrice) || 0,
@@ -142,18 +76,20 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
       templateId: quote?.templateId?.toString(),
       categoryId: quote?.categoryId?.toString(),
       clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
-      clientEmail: quote?.clientEmail || contact?.primaryEmail || undefined,
-      clientPhone: quote?.clientPhone || contact?.primaryPhone || undefined,
-      clientAddress: quote?.clientAddress || contact?.primaryAddress || undefined,
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
       status: quote?.status || "DRAFT",
-      content: quote?.content,
-      subtotal: quote ? Number(quote.subtotal) || 0 : 0,
-      total: quote ? Number(quote.total) || 0 : 0,
-      notes: quote?.notes || undefined,
+      content: {
+        products: quote?.content?.products || []
+      },
+      subtotal: Number(quote?.subtotal) || 0,
+      total: Number(quote?.total) || 0,
+      notes: quote?.notes || "",
       paymentMethod: quote?.paymentMethod || undefined,
       discountType: quote?.discountType || undefined,
       discountValue: quote?.discountValue ? Number(quote.discountValue) : undefined,
-      discountCode: quote?.discountCode || undefined,
+      discountCode: quote?.discountCode || "",
       downPaymentType: quote?.downPaymentType || undefined,
       downPaymentValue: quote?.downPaymentValue ? Number(quote.downPaymentValue) : undefined,
       taxRate: quote?.taxRate ? Number(quote.taxRate) : undefined,
@@ -180,20 +116,54 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const calculateTotals = useCallback(() => {
     const subtotal = selectedProducts.reduce((acc, product) => {
-      const lineTotal = product.unitPrice * product.quantity;
+      const lineTotal = Number(product.unitPrice) * Number(product.quantity);
       return acc + lineTotal;
     }, 0);
 
-    // For now, total is same as subtotal since we haven't implemented 
-    // tax and discount calculations yet
-    const total = subtotal;
-    return { subtotal, total };
-  }, [selectedProducts]);
+    // Apply discount if available
+    const discountType = form.watch('discountType');
+    const discountValue = Number(form.watch('discountValue')) || 0;
+    let discountAmount = 0;
+
+    if (discountType === 'PERCENTAGE') {
+      discountAmount = (subtotal * discountValue) / 100;
+    } else if (discountType === 'FIXED') {
+      discountAmount = discountValue;
+    }
+
+    // Apply tax if available
+    const taxRate = Number(form.watch('taxRate')) || 0;
+    const taxAmount = ((subtotal - discountAmount) * taxRate) / 100;
+
+    const total = subtotal - discountAmount + taxAmount;
+
+    // Calculate down payment and remaining balance
+    const downPaymentType = form.watch('downPaymentType');
+    const downPaymentValue = Number(form.watch('downPaymentValue')) || 0;
+    let downPaymentAmount = 0;
+
+    if (downPaymentType === 'PERCENTAGE') {
+      downPaymentAmount = (total * downPaymentValue) / 100;
+    } else if (downPaymentType === 'FIXED') {
+      downPaymentAmount = downPaymentValue;
+    }
+
+    const remainingBalance = total - downPaymentAmount;
+
+    return {
+      subtotal,
+      total,
+      downPaymentValue: downPaymentAmount,
+      remainingBalance
+    };
+  }, [selectedProducts, form]);
 
   useEffect(() => {
-    const { subtotal, total } = calculateTotals();
-    form.setValue('subtotal', subtotal);
-    form.setValue('total', total);
+    const totals = calculateTotals();
+    form.setValue('subtotal', totals.subtotal);
+    form.setValue('total', totals.total);
+    form.setValue('downPaymentValue', totals.downPaymentValue);
+    form.setValue('remainingBalance', totals.remainingBalance);
   }, [selectedProducts, form, calculateTotals]);
 
   const handleAddProduct = (productId: number) => {
@@ -205,7 +175,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
     // For products with variations, always use the variation price instead of base price
     const initialVariation = hasVariations ? product.variations[0] : null;
-    const initialPrice = hasVariations 
+    const initialPrice = hasVariations
       ? Number(initialVariation?.price) || 0
       : basePrice;
 
@@ -591,6 +561,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <div className="flex justify-between font-medium text-lg">
                     <span>Total:</span>
                     <span>${form.watch('total')?.toFixed(2) || '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Down Payment:</span>
+                    <span>${form.watch('downPaymentValue')?.toFixed(2) || '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span>Remaining Balance:</span>
+                    <span>${form.watch('remainingBalance')?.toFixed(2) || '0.00'}</span>
                   </div>
                 </div>
               </div>
