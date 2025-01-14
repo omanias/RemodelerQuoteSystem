@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileEdit } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { QuoteForm, QuoteStatus } from "@/components/QuoteForm";
+import { QuoteForm } from "@/components/QuoteForm";
+import { QuoteStatus } from "@/components/QuoteForm";
 
-export interface Quote {
+interface Quote {
   id: number;
   number: string;
   clientName: string;
@@ -28,9 +29,14 @@ export interface Quote {
       id: number;
       name: string;
       unit: string;
+      basePrice: number;
       price: number;
       quantity: number;
       variation?: string;
+      variations?: Array<{
+        name: string;
+        price: number;
+      }>;
     }>;
     calculations?: {
       tax: number;
@@ -41,13 +47,13 @@ export interface Quote {
       remainingBalance: number;
     };
   };
-  paymentMethod?: string | null;
-  discountType?: "PERCENTAGE" | "FIXED" | null;
-  discountValue?: number | null;
-  discountCode?: string | null;
-  downPaymentType?: "PERCENTAGE" | "FIXED" | null;
-  taxRate?: number | null;
-  notes?: string | null;
+  paymentMethod: string | null;
+  discountType: "PERCENTAGE" | "FIXED" | null;
+  discountValue: number | null;
+  discountCode: string | null;
+  downPaymentType: "PERCENTAGE" | "FIXED" | null;
+  taxRate: number | null;
+  notes: string | null;
 }
 
 export function QuoteDetail() {
@@ -187,31 +193,51 @@ export function QuoteDetail() {
               <Card>
                 <CardContent className="pt-6">
                   <h3 className="font-semibold mb-4">Quote Details</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="font-medium">
-                        ${Number(quote.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Created</p>
-                      <p className="font-medium">{new Date(quote.createdAt).toLocaleDateString()}</p>
-                    </div>
-                    {quote.downPaymentValue !== null && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Down Payment</p>
+                        <p className="text-sm text-muted-foreground">Total</p>
                         <p className="font-medium">
-                          ${Number(quote.downPaymentValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ${Number(quote.total).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                       </div>
-                    )}
-                    {quote.remainingBalance !== null && (
                       <div>
-                        <p className="text-sm text-muted-foreground">Remaining Balance</p>
-                        <p className="font-medium">
-                          ${Number(quote.remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
+                        <p className="text-sm text-muted-foreground">Created</p>
+                        <p className="font-medium">{new Date(quote.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      {quote.downPaymentValue !== null && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Down Payment</p>
+                          <p className="font-medium">
+                            ${Number(quote.downPaymentValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                      {quote.remainingBalance !== null && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                          <p className="font-medium">
+                            ${Number(quote.remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {quote.content.products.length > 0 && (
+                      <div>
+                        <h4 className="font-medium mb-2">Products</h4>
+                        <div className="space-y-2">
+                          {quote.content.products.map((product, index) => (
+                            <div key={index} className="p-2 border rounded-md">
+                              <p className="font-medium">{product.name}</p>
+                              <div className="text-sm text-muted-foreground">
+                                <p>Price: ${product.price.toFixed(2)}</p>
+                                <p>Quantity: {product.quantity}</p>
+                                {product.variation && <p>Variation: {product.variation}</p>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>

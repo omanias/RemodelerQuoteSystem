@@ -1,4 +1,4 @@
-import { useState, useEffect, type KeyboardEventHandler } from "react";
+import { useState, useEffect, KeyboardEventHandler } from "react";
 import { useForm } from "react-hook-form";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -95,7 +95,19 @@ interface QuoteFormProps {
     categoryId: number;
     templateId: number;
     content: {
-      products: Product[];
+      products: Array<{
+        id: number;
+        name: string;
+        unit: string;
+        basePrice: number;
+        price: number;
+        quantity: number;
+        variation?: string;
+        variations?: Array<{
+          name: string;
+          price: number;
+        }>;
+      }>;
       calculations?: {
         tax: number;
         total: number;
@@ -105,7 +117,7 @@ interface QuoteFormProps {
         remainingBalance: number;
       };
     };
-    paymentMethod: PaymentMethod | null;
+    paymentMethod: string | null;
     discountType: "PERCENTAGE" | "FIXED" | null;
     discountValue: number | null;
     discountCode: string | null;
@@ -137,8 +149,14 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const [selectedProducts, setSelectedProducts] = useState<Array<Product>>(() => {
     if (quote?.content?.products) {
       return quote.content.products.map(product => ({
-        ...product,
-        quantity: product.quantity || 1
+        id: product.id,
+        name: product.name,
+        unit: product.unit,
+        basePrice: product.basePrice,
+        price: product.price,
+        quantity: product.quantity,
+        variation: product.variation,
+        variations: product.variations
       }));
     }
     return [];
