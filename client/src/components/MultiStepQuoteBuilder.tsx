@@ -43,7 +43,7 @@ interface Product {
   name: string;
   basePrice: number;
   unit: string;
-  variations?: Record<string, any>[];
+  variations?: { name: string; price: number }[];
 }
 
 // Schema for the form
@@ -395,71 +395,114 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         <div className="space-y-4">
           {products.map((product) => (
             <Card key={product.id} className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium">{product.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    ${product.basePrice} per {product.unit}
-                  </p>
+              <div className="flex flex-col space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium">{product.name}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      ${product.basePrice} per {product.unit}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const products = form.watch("products");
+                        const existingProduct = products.find(p => p.productId === product.id);
+                        if (existingProduct) {
+                          form.setValue(
+                            "products",
+                            products.map(p =>
+                              p.productId === product.id
+                                ? { ...p, quantity: p.quantity - 1 }
+                                : p
+                            ).filter(p => p.quantity > 0)
+                          );
+                        }
+                        calculateTotals();
+                      }}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-8 text-center">
+                      {form.watch("products").find(p => p.productId === product.id)?.quantity || 0}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const products = form.watch("products");
+                        const existingProduct = products.find(p => p.productId === product.id);
+                        if (existingProduct) {
+                          form.setValue(
+                            "products",
+                            products.map(p =>
+                              p.productId === product.id
+                                ? { ...p, quantity: p.quantity + 1 }
+                                : p
+                            )
+                          );
+                        } else {
+                          form.setValue("products", [
+                            ...products,
+                            {
+                              productId: product.id,
+                              quantity: 1,
+                              unitPrice: product.basePrice,
+                            },
+                          ]);
+                        }
+                        calculateTotals();
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const products = form.watch("products");
-                      const existingProduct = products.find(p => p.productId === product.id);
-                      if (existingProduct) {
-                        form.setValue(
-                          "products",
-                          products.map(p =>
-                            p.productId === product.id
-                              ? { ...p, quantity: p.quantity - 1 }
-                              : p
-                          ).filter(p => p.quantity > 0)
-                        );
-                      }
-                      calculateTotals();
-                    }}
-                  >
-                    <Minus className="h-4 w-4" />
-                  </Button>
-                  <span className="w-8 text-center">
-                    {form.watch("products").find(p => p.productId === product.id)?.quantity || 0}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const products = form.watch("products");
-                      const existingProduct = products.find(p => p.productId === product.id);
-                      if (existingProduct) {
-                        form.setValue(
-                          "products",
-                          products.map(p =>
-                            p.productId === product.id
-                              ? { ...p, quantity: p.quantity + 1 }
-                              : p
-                          )
-                        );
-                      } else {
-                        form.setValue("products", [
-                          ...products,
-                          {
-                            productId: product.id,
-                            quantity: 1,
-                            unitPrice: product.basePrice,
-                          },
-                        ]);
-                      }
-                      calculateTotals();
-                    }}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
+
+                {/* Add variation selector if product has variations */}
+                {product.variations && product.variations.length > 0 && (
+                  <div className="mt-2">
+                    <Select
+                      onValueChange={(value) => {
+                        const products = form.watch("products");
+                        const selectedVariation = product.variations?.find(v => v.name === value);
+                        const existingProduct = products.find(p => p.productId === product.id);
+
+                        if (existingProduct && selectedVariation) {
+                          form.setValue(
+                            "products",
+                            products.map(p =>
+                              p.productId === product.id
+                                ? { 
+                                    ...p, 
+                                    variation: value,
+                                    unitPrice: selectedVariation.price || product.basePrice 
+                                  }
+                                : p
+                            )
+                          );
+                          calculateTotals();
+                        }
+                      }}
+                      value={form.watch("products").find(p => p.productId === product.id)?.variation}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select variation" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {product.variations.map((variation, index) => (
+                          <SelectItem key={index} value={variation.name}>
+                            {variation.name} - ${variation.price}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </Card>
           ))}
