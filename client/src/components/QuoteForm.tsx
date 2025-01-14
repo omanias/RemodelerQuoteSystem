@@ -61,13 +61,20 @@ const quoteFormSchema = z.object({
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
 
+interface ProductVariation {
+  name: string;
+  price: number;
+}
+
 interface Product {
   id: number;
   name: string;
   unit: string;
-  price: number;
-  quantity: number;
+  basePrice: number;
+  price?: number;
+  quantity?: number;
   variation?: string;
+  variations?: ProductVariation[];
 }
 
 interface QuoteFormProps {
@@ -127,9 +134,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>(() => {
+  const [selectedProducts, setSelectedProducts] = useState<Array<Product>>(() => {
     if (quote?.content?.products) {
-      return quote.content.products;
+      return quote.content.products.map(product => ({
+        ...product,
+        quantity: product.quantity || 1
+      }));
     }
     return [];
   });
@@ -150,33 +160,31 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     quote?.categoryId?.toString() || undefined
   );
 
-  const { data: products = [], isLoading: isLoadingProducts } = useQuery<any[]>({
+  const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["/api/products", selectedCategoryId],
     enabled: !!selectedCategoryId,
   });
 
-  const defaultValues = {
-    contactId: quote?.contactId?.toString() || defaultContactId || undefined,
-    templateId: quote?.templateId?.toString(),
-    categoryId: quote?.categoryId?.toString(),
-    clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
-    clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
-    clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
-    clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
-    status: quote?.status || QuoteStatus.DRAFT,
-    paymentMethod: quote?.paymentMethod as PaymentMethod || undefined,
-    discountType: quote?.discountType || undefined,
-    discountValue: quote?.discountValue?.toString() || "",
-    discountCode: quote?.discountCode || "",
-    taxRate: quote?.taxRate?.toString() || "",
-    downPaymentType: quote?.downPaymentType || undefined,
-    downPaymentValue: quote?.downPaymentValue?.toString() || "",
-    notes: quote?.notes || ""
-  };
-
   const form = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteFormSchema),
-    defaultValues
+    defaultValues: {
+      contactId: quote?.contactId?.toString() || defaultContactId || undefined,
+      templateId: quote?.templateId?.toString(),
+      categoryId: quote?.categoryId?.toString(),
+      clientName: quote?.clientName || (contact ? `${contact.firstName} ${contact.lastName}` : ""),
+      clientEmail: quote?.clientEmail || contact?.primaryEmail || "",
+      clientPhone: quote?.clientPhone || contact?.primaryPhone || "",
+      clientAddress: quote?.clientAddress || contact?.primaryAddress || "",
+      status: quote?.status || QuoteStatus.DRAFT,
+      paymentMethod: quote?.paymentMethod as PaymentMethod || undefined,
+      discountType: quote?.discountType || undefined,
+      discountValue: quote?.discountValue?.toString() || "",
+      discountCode: quote?.discountCode || "",
+      taxRate: quote?.taxRate?.toString() || "",
+      downPaymentType: quote?.downPaymentType || undefined,
+      downPaymentValue: quote?.downPaymentValue?.toString() || "",
+      notes: quote?.notes || ""
+    }
   });
 
   useEffect(() => {
@@ -197,37 +205,29 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
 
   const calculateTotals = (products: Product[]) => {
     try {
-      // Calculate subtotal from products
       const subtotal = products.reduce((sum, item) => {
-        const quantity = Math.max(1, parseInt(item.quantity?.toString() || "1"));
-        const price = parseFloat(item.price?.toString() || "0");
+        const quantity = Math.max(1, item.quantity || 1);
+        const price = item.price || item.basePrice;
         return sum + (quantity * price);
       }, 0);
 
-      // Get form values
       const discountType = form.watch("discountType");
       const discountValue = parseFloat(form.watch("discountValue") || "0");
       const taxRate = parseFloat(form.watch("taxRate") || "0");
       const downPaymentType = form.watch("downPaymentType");
       const downPaymentValue = parseFloat(form.watch("downPaymentValue") || "0");
 
-      // Calculate discount
       const discount = discountType === "PERCENTAGE"
         ? (subtotal * (isNaN(discountValue) ? 0 : discountValue) / 100)
         : (isNaN(discountValue) ? 0 : discountValue);
 
-      // Calculate tax on discounted amount
       const taxAmount = ((subtotal - discount) * (isNaN(taxRate) ? 0 : taxRate)) / 100;
-
-      // Calculate total
       const total = Math.max(0, subtotal - discount + taxAmount);
 
-      // Calculate down payment
       const downPayment = downPaymentType === "PERCENTAGE"
         ? (total * (isNaN(downPaymentValue) ? 0 : downPaymentValue) / 100)
         : (isNaN(downPaymentValue) ? 0 : downPaymentValue);
 
-      // Calculate remaining balance
       const remainingBalance = Math.max(0, total - (isNaN(downPayment) ? 0 : downPayment));
 
       return {
@@ -263,8 +263,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         content: {
           products: selectedProducts.map(product => ({
             ...product,
-            quantity: Math.max(1, parseInt(product.quantity?.toString() || "1")),
-            price: parseFloat(product.price?.toString() || "0")
+            quantity: Math.max(1, product.quantity || 1),
+            price: product.price || product.basePrice
           })),
           calculations
         },
@@ -274,7 +274,6 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
         taxRate: parseFloat(data.taxRate || "0") || null,
         downPaymentValue: parseFloat(data.downPaymentValue || "0") || null,
         remainingBalance: calculations.remainingBalance,
-        // Convert payment method to the correct format
         paymentMethod: data.paymentMethod || null
       };
 
@@ -328,18 +327,18 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     }
   };
 
-  const addProduct = (product: any) => {
-    setSelectedProducts(prev => [
-      ...prev,
-      {
-        id: product.id,
-        name: product.name,
-        unit: product.unit,
-        price: product.price,
-        quantity: 1,
-        variation: product.variations?.[0]?.name
-      }
-    ]);
+  const addProduct = (product: Product, variation?: ProductVariation) => {
+    const newProduct: Product = {
+      id: product.id,
+      name: product.name,
+      unit: product.unit,
+      basePrice: product.basePrice,
+      price: variation ? variation.price : product.basePrice,
+      quantity: 1,
+      variation: variation?.name,
+      variations: product.variations
+    };
+    setSelectedProducts(prev => [...prev, newProduct]);
   };
 
   const updateQuantity = (index: number, value: number) => {
@@ -573,7 +572,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                   <div className="text-center py-4">No products found in this category</div>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
-                    {products.map((product: any) => (
+                    {products.map((product) => (
                       <Card key={product.id}>
                         <CardContent className="pt-6">
                           <div className="flex justify-between items-start">
@@ -582,16 +581,43 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               <p className="text-sm text-muted-foreground">
                                 Base Price: ${product.basePrice}
                               </p>
+                              {product.variations && product.variations.length > 0 && (
+                                <div className="mt-2">
+                                  <Select
+                                    onValueChange={(value) => {
+                                      const selectedVariation = product.variations?.find(
+                                        v => v.name === value
+                                      );
+                                      if (selectedVariation) {
+                                        addProduct(product, selectedVariation);
+                                      }
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Select variation" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {product.variations.map((variation) => (
+                                        <SelectItem key={variation.name} value={variation.name}>
+                                          {variation.name} - ${variation.price}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => addProduct(product)}
-                              className="h-8 w-8"
-                            >
-                              <Plus className="h-4 w-4" />
-                            </Button>
+                            {(!product.variations || product.variations.length === 0) && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => addProduct(product)}
+                                className="h-8 w-8"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -608,7 +634,8 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                           <div className="flex-1">
                             <p className="font-medium">{item.name}</p>
                             <p className="text-sm text-muted-foreground">
-                              ${item.price}
+                              ${item.price?.toFixed(2)}
+                              {item.variation && ` - ${item.variation}`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -616,13 +643,13 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               type="button"
                               variant="outline"
                               size="icon"
-                              onClick={() => updateQuantity(index, item.quantity - 1)}
+                              onClick={() => updateQuantity(index, (item.quantity || 1) - 1)}
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
                             <Input
                               type="number"
-                              value={item.quantity}
+                              value={item.quantity || 1}
                               onChange={(e) => updateQuantity(index, parseInt(e.target.value) || 1)}
                               className="w-20 text-center"
                             />
@@ -630,7 +657,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
                               type="button"
                               variant="outline"
                               size="icon"
-                              onClick={() => updateQuantity(index, item.quantity + 1)}
+                              onClick={() => updateQuantity(index, (item.quantity || 1) + 1)}
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
