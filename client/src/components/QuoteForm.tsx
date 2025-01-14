@@ -51,11 +51,11 @@ const quoteFormSchema = z.object({
   status: z.nativeEnum(QuoteStatus),
   paymentMethod: z.nativeEnum(PaymentMethod).optional(),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
-  discountValue: z.string().optional().or(z.literal("")),
+  discountValue: z.string().transform((val) => (val === "" ? "0" : val)),
   discountCode: z.string().optional().or(z.literal("")),
-  taxRate: z.string().optional().or(z.literal("")),
+  taxRate: z.string().transform((val) => (val === "" ? "0" : val)),
   downPaymentType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
-  downPaymentValue: z.string().optional().or(z.literal("")),
+  downPaymentValue: z.string().transform((val) => (val === "" ? "0" : val)),
   notes: z.string().optional().or(z.literal(""))
 });
 
@@ -255,6 +255,7 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
     mutationFn: async (data: QuoteFormValues) => {
       const calculations = calculateTotals(selectedProducts);
 
+      // Ensure numeric values are properly converted
       const payload = {
         ...data,
         contactId: data.contactId ? parseInt(data.contactId) : null,
@@ -268,12 +269,12 @@ export function QuoteForm({ quote, onSuccess, user, defaultContactId, contact }:
           })),
           calculations
         },
-        subtotal: calculations.subtotal,
-        total: calculations.total,
-        discountValue: parseFloat(data.discountValue || "0") || null,
-        taxRate: parseFloat(data.taxRate || "0") || null,
-        downPaymentValue: parseFloat(data.downPaymentValue || "0") || null,
-        remainingBalance: calculations.remainingBalance,
+        subtotal: calculations.subtotal || 0,
+        total: calculations.total || 0,
+        discountValue: parseFloat(data.discountValue || "0") || 0,
+        taxRate: parseFloat(data.taxRate || "0") || 0,
+        downPaymentValue: parseFloat(data.downPaymentValue || "0") || 0,
+        remainingBalance: calculations.remainingBalance || 0,
         paymentMethod: data.paymentMethod || null
       };
 

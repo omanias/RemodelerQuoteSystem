@@ -12,6 +12,11 @@ import {
 } from "@db/schema";
 import { eq, and } from "drizzle-orm";
 import { generateQuotePDF } from "./services/pdfService";
+import type { InferModel } from 'drizzle-orm';
+
+// Define types for database models
+type QuoteInsert = InferModel<typeof quotes, 'insert'>;
+type QuoteSelect = InferModel<typeof quotes, 'select'>;
 
 // Helper function to generate quote number
 async function generateQuoteNumber(companyId: number): Promise<string> {
@@ -38,7 +43,7 @@ export function registerRoutes(app: Express): Server {
   // Set up authentication routes and middleware
   setupAuth(app);
 
-  // Apply company middleware to all routes after auth routes
+  // Apply company middleware to all routes
   app.use(companyMiddleware);
 
   // Quote creation route with proper typing
@@ -56,14 +61,13 @@ export function registerRoutes(app: Express): Server {
         paymentMethod,
         subtotal,
         total,
-        downPaymentType,
         downPaymentValue,
+        downPaymentType,
         remainingBalance,
         discountType,
         discountValue,
         discountCode,
         taxRate,
-        taxAmount,
         content,
         signature,
       } = req.body;
@@ -71,40 +75,57 @@ export function registerRoutes(app: Express): Server {
       // Generate quote number
       const quoteNumber = await generateQuoteNumber(req.user!.companyId);
 
-      // Create new quote with proper type checking
-      const newQuote = await db
+      // Ensure numeric values have proper defaults and are converted to strings
+      const safeParseFloat = (value: unknown): string => {
+        const parsed = parseFloat(value as string);
+        return isNaN(parsed) ? "0" : parsed.toString();
+      };
+
+      const safeParseInt = (value: unknown): number | null => {
+        if (!value) return null;
+        const parsed = parseInt(value as string);
+        return isNaN(parsed) ? null : parsed;
+      };
+
+      // Create new quote with proper type checking and defaults
+      const quoteData: QuoteInsert = {
+        number: quoteNumber,
+        contactId: safeParseInt(contactId),
+        categoryId: safeParseInt(categoryId) ?? 0,
+        templateId: safeParseInt(templateId) ?? 0,
+        clientName,
+        clientEmail,
+        clientPhone,
+        clientAddress,
+        status,
+        paymentMethod,
+        subtotal: safeParseFloat(subtotal),
+        total: safeParseFloat(total),
+        downPaymentType,
+        downPaymentValue: safeParseFloat(downPaymentValue),
+        remainingBalance: safeParseFloat(remainingBalance),
+        discountType,
+        discountValue: safeParseFloat(discountValue),
+        content,
+        taxRate: safeParseFloat(taxRate),
+        signature,
+        companyId: req.user!.companyId,
+        userId: req.user!.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Insert the quote and handle the result properly
+      const [newQuote] = await db
         .insert(quotes)
-        .values({
-          number: quoteNumber,
-          contactId: contactId ? parseInt(contactId) : null,
-          categoryId: parseInt(categoryId),
-          templateId: parseInt(templateId),
-          clientName,
-          clientEmail,
-          clientPhone,
-          clientAddress,
-          status,
-          paymentMethod,
-          subtotal: parseFloat(subtotal) || 0,
-          total: parseFloat(total) || 0,
-          downPaymentType,
-          downPaymentValue: parseFloat(downPaymentValue) || 0,
-          remainingBalance: parseFloat(remainingBalance) || 0,
-          discountType,
-          discountValue: parseFloat(discountValue) || 0,
-          discountCode,
-          taxRate: parseFloat(taxRate) || 0,
-          taxAmount: parseFloat(taxAmount) || 0,
-          content,
-          signature,
-          companyId: req.user!.companyId,
-          userId: req.user!.id,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
+        .values(quoteData)
         .returning();
 
-      res.status(201).json(newQuote[0]);
+      if (!newQuote) {
+        throw new Error("Failed to create quote");
+      }
+
+      res.status(201).json(newQuote);
     } catch (error) {
       console.error('Error creating quote:', error);
       res.status(500).json({ message: "Internal server error" });
