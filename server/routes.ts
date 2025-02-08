@@ -139,32 +139,35 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).json({ message: "Quote not found" });
       }
 
-      // Update quote with all possible fields
+      // Prepare update data with proper handling of contactId and signature
+      const updateData = {
+        categoryId: req.body.categoryId,
+        templateId: req.body.templateId,
+        contactId: req.body.contactId !== undefined ? req.body.contactId : existingQuote.contactId,
+        clientName: req.body.clientName,
+        clientEmail: req.body.clientEmail,
+        clientPhone: req.body.clientPhone,
+        clientAddress: req.body.clientAddress,
+        status: req.body.status,
+        content: req.body.content,
+        subtotal: req.body.subtotal?.toString(),
+        total: req.body.total?.toString(),
+        downPaymentValue: req.body.downPaymentValue?.toString(),
+        downPaymentType: req.body.downPaymentType,
+        discountType: req.body.discountType,
+        discountValue: req.body.discountValue?.toString(),
+        taxRate: req.body.taxRate?.toString(),
+        remainingBalance: req.body.remainingBalance?.toString(),
+        paymentMethod: req.body.paymentMethod,
+        notes: req.body.notes,
+        signature: req.body.signature || existingQuote.signature, // Mantener la firma existente si no se proporciona una nueva
+        updatedAt: new Date()
+      };
+
+      // Update quote with all fields
       await db
         .update(quotes)
-        .set({
-          categoryId: req.body.categoryId,
-          templateId: req.body.templateId,
-          contactId: req.body.contactId,
-          clientName: req.body.clientName,
-          clientEmail: req.body.clientEmail,
-          clientPhone: req.body.clientPhone,
-          clientAddress: req.body.clientAddress,
-          status: req.body.status,
-          content: req.body.content,
-          subtotal: req.body.subtotal?.toString(),
-          total: req.body.total?.toString(),
-          downPaymentValue: req.body.downPaymentValue?.toString(),
-          downPaymentType: req.body.downPaymentType,
-          discountType: req.body.discountType,
-          discountValue: req.body.discountValue?.toString(),
-          taxRate: req.body.taxRate?.toString(),
-          remainingBalance: req.body.remainingBalance?.toString(),
-          paymentMethod: req.body.paymentMethod,
-          notes: req.body.notes,
-          signature: req.body.signature,
-          updatedAt: new Date()
-        })
+        .set(updateData)
         .where(eq(quotes.id, quoteId));
 
       // Get the updated quote
