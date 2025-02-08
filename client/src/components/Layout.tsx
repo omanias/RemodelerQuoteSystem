@@ -5,10 +5,15 @@ import { Link, useLocation } from "wouter";
 import { CompanySwitcher } from "@/components/CompanySwitcher";
 import { NotificationsMenu } from "@/components/ui/notifications";
 import { useQuery } from "@tanstack/react-query";
-import { 
-  LayoutDashboard, FileText, Package,
-  Settings, Users, UserCircle2,
-  Building2, Share2
+import {
+  LayoutDashboard,
+  FileText,
+  Package,
+  Settings,
+  Users,
+  UserCircle2,
+  Building2,
+  Share2,
 } from "lucide-react";
 import { UserRole } from "@db/schema";
 import { LogoutDialog } from "@/components/LogoutDialog";
@@ -18,7 +23,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
   // Fetch current company data
-  const { data: currentCompany } = useQuery<{ id: number; name: string; subdomain: string; settings: any }>({
+  const { data: currentCompany } = useQuery<{
+    id: number;
+    name: string;
+    subdomain: string;
+    settings: any;
+  }>({
     queryKey: ["/api/companies/current"],
     enabled: !!user,
   });
@@ -39,7 +49,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }
 
   // Show additional menu items for admin roles
-  if (user.role === "SUPER_ADMIN" || user.role === "MULTI_ADMIN" || user.role === "ADMIN") {
+  if (
+    user.role === "SUPER_ADMIN" ||
+    user.role === "MULTI_ADMIN" ||
+    user.role === "ADMIN"
+  ) {
     navigation.push({ name: "Users", href: "/users", icon: Users });
     navigation.push({ name: "Settings", href: "/settings", icon: Settings });
   }
@@ -52,7 +66,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Building2 className="h-6 w-6 text-primary" />
-                <h1 className="text-2xl font-bold text-primary">QuoteBuilder</h1>
+                <h1 className="text-2xl font-bold text-primary">
+                  QuoteBuilder
+                </h1>
               </div>
 
               {currentCompany && (
@@ -101,11 +117,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </Sidebar>
 
-        <main className="flex-1 overflow-auto bg-background">
-          <div className="container mx-auto py-6 px-4">
-            {children}
-          </div>
-        </main>
+        {/*  <main className="flex-1 overflow-auto bg-background"> */}
+        <div className="container mx-auto py-6 px-4">{children}</div>
+        {/* </main> */}
       </div>
     </SidebarProvider>
   );
