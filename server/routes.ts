@@ -119,6 +119,71 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add PUT route for quotes after the quote creation route
+  app.put("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      // Verify quote exists and belongs to company
+      const existingQuote = await db.query.quotes.findFirst({
+        where: and(
+          eq(quotes.id, quoteId),
+          eq(quotes.companyId, req.user!.companyId)
+        )
+      });
+
+      if (!existingQuote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      // Update quote with all possible fields
+      await db
+        .update(quotes)
+        .set({
+          categoryId: req.body.categoryId,
+          templateId: req.body.templateId,
+          contactId: req.body.contactId,
+          clientName: req.body.clientName,
+          clientEmail: req.body.clientEmail,
+          clientPhone: req.body.clientPhone,
+          clientAddress: req.body.clientAddress,
+          status: req.body.status,
+          content: req.body.content,
+          subtotal: req.body.subtotal?.toString(),
+          total: req.body.total?.toString(),
+          downPaymentValue: req.body.downPaymentValue?.toString(),
+          downPaymentType: req.body.downPaymentType,
+          discountType: req.body.discountType,
+          discountValue: req.body.discountValue?.toString(),
+          taxRate: req.body.taxRate?.toString(),
+          remainingBalance: req.body.remainingBalance?.toString(),
+          paymentMethod: req.body.paymentMethod,
+          notes: req.body.notes,
+          signature: req.body.signature,
+          updatedAt: new Date()
+        })
+        .where(eq(quotes.id, quoteId));
+
+      // Get the updated quote
+      const updatedQuote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, quoteId),
+        with: {
+          contact: true,
+          template: true,
+          category: true
+        }
+      });
+
+      res.json(updatedQuote);
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Add DELETE route for quotes after the quote creation route
   app.delete("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
