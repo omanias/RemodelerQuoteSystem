@@ -232,9 +232,14 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       queryClient.invalidateQueries({ queryKey: ["/api/quotes"] });
 
       toast({
-        title: "Changes Saved",
-        description: `Quote saved as draft at ${new Date().toLocaleTimeString()}`,
+        title: "Success",
+        description: `Quote ${quoteId ? 'updated' : 'created'} successfully`,
       });
+
+      // Llamar a onSuccess después de la mutación exitosa
+      if (currentStep === steps.length - 1) {
+        onSuccess?.();
+      }
     },
     onError: (error: Error) => {
       console.error("Quote save error:", error);
@@ -250,7 +255,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const debouncedSave = useCallback(
     debounce((data: QuoteFormValues) => {
       if (data.contactInfo.clientName && // Only save if we have at least a client name
-          !isPending) {
+        !isPending) {
         createOrUpdateQuote(data);
       }
     }, 2000),
@@ -735,7 +740,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         return;
       }
 
-      createOrUpdateQuote(data);
+      await createOrUpdateQuote(data);
+      // Llamar a onSuccess después de crear exitosamente el quote
+      onSuccess?.();
     } catch (error) {
       console.error("Error submitting form:", error);
       toast({
