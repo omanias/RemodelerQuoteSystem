@@ -235,11 +235,6 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         title: "Success",
         description: `Quote ${quoteId ? 'updated' : 'created'} successfully`,
       });
-
-      // Llamar a onSuccess después de la mutación exitosa
-      if (currentStep === steps.length - 1) {
-        onSuccess?.();
-      }
     },
     onError: (error: Error) => {
       console.error("Quote save error:", error);
