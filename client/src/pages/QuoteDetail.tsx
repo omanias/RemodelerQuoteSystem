@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -23,6 +23,7 @@ interface User {
 
 export function QuoteDetail() {
   const params = useParams();
+  const [location, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const contactId = searchParams.get("contactId");
   const id = params.id;
@@ -60,7 +61,7 @@ export function QuoteDetail() {
         </div>
 
         <MultiStepQuoteBuilder
-          onSuccess={() => window.location.href = "/quotes"}
+          onSuccess={() => setLocation("/quotes")}
           defaultValues={
             contact
               ? {
@@ -95,7 +96,7 @@ export function QuoteDetail() {
       </div>
 
       <MultiStepQuoteBuilder
-        onSuccess={() => window.location.href = "/quotes"}
+        onSuccess={() => setLocation("/quotes")}
         defaultValues={quote ? {
           contactInfo: {
             clientName: quote.clientName,
