@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+process.loadEnvFile();
 
 // Set up session store with enhanced security
 const MemoryStoreSession = MemoryStore(session);
