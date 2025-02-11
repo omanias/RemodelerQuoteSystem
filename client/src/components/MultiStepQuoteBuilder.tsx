@@ -292,6 +292,15 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       total += (total * (calculations.taxRate / 100));
     }
 
+    //Apply down payment
+    if (calculations.downPaymentValue && calculations.downPaymentType) {
+      if (calculations.downPaymentType === "PERCENTAGE") {
+        total -= (total * (calculations.downPaymentValue / 100));
+      } else {
+        total -= calculations.downPaymentValue;
+      }
+    }
+
     form.setValue("calculations.subtotal", subtotal);
     form.setValue("calculations.total", total);
   };
@@ -520,10 +529,10 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                             products.map(p =>
                               p.productId === product.id
                                 ? {
-                                    ...p,
-                                    variation: value,
-                                    unitPrice: selectedVariation.price || product.basePrice
-                                  }
+                                  ...p,
+                                  variation: value,
+                                  unitPrice: selectedVariation.price || product.basePrice
+                                }
                                 : p
                             )
                           );
