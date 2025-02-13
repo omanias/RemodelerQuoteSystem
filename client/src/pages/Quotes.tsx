@@ -298,7 +298,9 @@ export function Quotes() {
                 </TableCell>
                 <TableCell>${formatMoney(quote.total)}</TableCell>
                 <TableCell>${formatMoney(quote.downPaymentValue)}</TableCell>
-                <TableCell>${formatMoney(quote.remainingBalance)}</TableCell>
+                <TableCell>
+                  ${formatMoney(Number(quote.total) - Number(quote.downPaymentValue))}
+                </TableCell>
                 <TableCell>
                   {new Date(quote.createdAt).toLocaleDateString()}
                 </TableCell>

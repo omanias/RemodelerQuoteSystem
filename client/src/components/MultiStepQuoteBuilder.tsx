@@ -84,6 +84,7 @@ const quoteFormSchema = z.object({
     downPaymentValue: z.number().optional().nullable(),
     taxRate: z.number().optional().nullable(),
     total: z.number(),
+    remaining: z.number().optional(),
   }),
 });
 
@@ -292,18 +293,26 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       total += (total * (calculations.taxRate / 100));
     }
 
-    //Apply down payment
+    // Apply down payment
     if (calculations.downPaymentValue && calculations.downPaymentType) {
+      let downPayment = 0;
       if (calculations.downPaymentType === "PERCENTAGE") {
-        total -= (total * (calculations.downPaymentValue / 100));
+        downPayment = total * (calculations.downPaymentValue / 100);
       } else {
-        total -= calculations.downPaymentValue;
+        downPayment = calculations.downPaymentValue;
       }
+      total -= downPayment;
     }
+
+    // Calculate remaining balance
+    const remaining = total - (calculations.downPaymentValue || 0);
 
     form.setValue("calculations.subtotal", subtotal);
     form.setValue("calculations.total", total);
+    form.setValue("calculations.remaining", remaining);
   };
+
+
 
   const steps = [
     {

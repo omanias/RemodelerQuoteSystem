@@ -65,14 +65,14 @@ export function QuoteDetail() {
           defaultValues={
             contact
               ? {
-                  contactInfo: {
-                    contactId: contact.id.toString(),
-                    clientName: `${contact.firstName} ${contact.lastName}`,
-                    clientEmail: contact.primaryEmail,
-                    clientPhone: contact.primaryPhone,
-                    clientAddress: contact.primaryAddress,
-                  },
-                }
+                contactInfo: {
+                  contactId: contact.id.toString(),
+                  clientName: `${contact.firstName} ${contact.lastName}`,
+                  clientEmail: contact.primaryEmail,
+                  clientPhone: contact.primaryPhone,
+                  clientAddress: contact.primaryAddress,
+                },
+              }
               : undefined
           }
         />
