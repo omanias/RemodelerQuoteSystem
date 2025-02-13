@@ -19,6 +19,9 @@ import { Label } from "@/components/ui/label";
 import { Plus, Minus, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import debounce from "lodash/debounce";
+import { useLocation } from 'wouter';
+
+
 
 interface Contact {
   id: number;
@@ -102,6 +105,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const [location, setLocation] = useLocation();
+
 
   // Get current user
   const { data: user } = useQuery<User>({
@@ -800,7 +806,15 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
               Previous
             </Button>
             {currentStep === steps.length - 1 ? (
-              <Button type="submit" disabled={isPending}>
+              <Button
+                type="submit"
+                disabled={isPending}
+                onClick={() => {
+                  if (!isPending) {
+                    setLocation('/quotes');
+                  }
+                }}
+              >
                 {isPending ? "Creating..." : "Create Quote"}
               </Button>
             ) : (

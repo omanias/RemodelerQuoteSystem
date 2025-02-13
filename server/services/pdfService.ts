@@ -1,9 +1,15 @@
 import PDFDocument from 'pdfkit';
-import { Quote, Company, Template } from '@db/schema';
+import { Quote as BaseQuote, Company, Template } from '@db/schema';
+
+interface Quote extends BaseQuote {
+  downPayment?: number;
+}
 import path from 'path';
 import fs from 'fs';
 
 interface Product {
+  price: any;
+  quantity: any;
   name: string;
 }
 
@@ -53,55 +59,55 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
           console.error('Error loading logo:', error);
         }
       }
-
+      console.log(quote)
       // Company Info
       doc.font('Helvetica-Bold')
-         .fontSize(16)
-         .text(company.name || '', 250, 45);
+        .fontSize(16)
+        .text(company.name || '', 250, 45);
 
       doc.font('Helvetica')
-         .fontSize(10)
-         .text([
-           company.phone && `Tel: ${company.phone}`,
-           company.email,
-           company.website
-         ].filter(Boolean).join('\n'), 250, 70);
+        .fontSize(10)
+        .text([
+          company.phone && `Tel: ${company.phone}`,
+          company.email,
+          company.website
+        ].filter(Boolean).join('\n'), 250, 70);
 
       // Quote Title
       doc.moveDown(4)
-         .font('Helvetica-Bold')
-         .fontSize(24)
-         .text('QUOTE', { align: 'center' })
-         .moveDown(0.5);
+        .font('Helvetica-Bold')
+        .fontSize(24)
+        .text('QUOTE', { align: 'center' })
+        .moveDown(0.5);
 
       // Quote Details
       const quoteDetailsY = doc.y;
 
       // Client Details
       doc.rect(50, quoteDetailsY, 250, 100)
-         .stroke()
-         .fontSize(10)
-         .font('Helvetica-Bold')
-         .text('QUOTE TO:', 60, quoteDetailsY + 10)
-         .font('Helvetica')
-         .text([
-           quote.clientName,
-           quote.clientEmail,
-           quote.clientPhone,
-           quote.clientAddress
-         ].filter(Boolean).join('\n'), 60, quoteDetailsY + 30);
+        .stroke()
+        .fontSize(10)
+        .font('Helvetica-Bold')
+        .text('QUOTE TO:', 60, quoteDetailsY + 10)
+        .font('Helvetica')
+        .text([
+          quote.clientName,
+          quote.clientEmail,
+          quote.clientPhone,
+          quote.clientAddress
+        ].filter(Boolean).join('\n'), 60, quoteDetailsY + 30);
 
       // Quote Info
       doc.rect(320, quoteDetailsY, 225, 100)
-         .stroke()
-         .font('Helvetica-Bold')
-         .text('QUOTE DETAILS:', 330, quoteDetailsY + 10)
-         .font('Helvetica')
-         .text([
-           `Quote #: ${quote.number}`,
-           `Date: ${new Date(quote.createdAt).toLocaleDateString()}`,
-           `Valid Until: ${new Date(new Date(quote.createdAt).setDate(new Date(quote.createdAt).getDate() + 30)).toLocaleDateString()}`
-         ].join('\n'), 330, quoteDetailsY + 30);
+        .stroke()
+        .font('Helvetica-Bold')
+        .text('QUOTE DETAILS:', 330, quoteDetailsY + 10)
+        .font('Helvetica')
+        .text([
+          `Quote #: ${quote.number}`,
+          `Date: ${new Date(quote.createdAt).toLocaleDateString()}`,
+          `Valid Until: ${new Date(new Date(quote.createdAt).setDate(new Date(quote.createdAt).getDate() + 30)).toLocaleDateString()}`
+        ].join('\n'), 330, quoteDetailsY + 30);
 
       // Products Table
       doc.moveDown(4);
@@ -126,18 +132,18 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
       // Draw table header
       const drawTableHeader = (y: number): number => {
         doc.rect(50, y, totalTableWidth, 20)
-           .fill('#f3f4f6')
-           .stroke('#e5e7eb');
+          .fill('#f3f4f6')
+          .stroke('#e5e7eb');
 
         let xPos = 60;
         tableHeaders.forEach((header, i) => {
           doc.font('Helvetica-Bold')
-             .fontSize(10)
-             .fillColor('#000000')
-             .text(header, xPos, y + 5, {
-               width: columnWidths[i],
-               align: i >= 1 ? 'right' : 'left'
-             });
+            .fontSize(10)
+            .fillColor('#000000')
+            .text(header, xPos, y + 5, {
+              width: columnWidths[i],
+              align: i >= 1 ? 'right' : 'left'
+            });
           xPos += columnWidths[i];
         });
         return y + 25;
@@ -160,13 +166,13 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
         // Row background
         if (index % 2 === 0) {
           doc.rect(50, currentY - 4, totalTableWidth, rowHeight)
-             .fill('#f8fafc');
+            .fill('#f8fafc');
         }
 
         let xPos = 60;
         doc.font('Helvetica')
-           .fontSize(10)
-           .fillColor('#000000');
+          .fontSize(10)
+          .fillColor('#000000');
 
         // Product name
         doc.text(product.name, xPos, currentY, { width: columnWidths[0] });
@@ -216,47 +222,83 @@ export async function generateQuotePDF({ quote, company, settings }: GenerateQuo
 
       // Subtotal
       doc.font('Helvetica')
-         .fontSize(10)
-         .text('Subtotal:', summaryX + 10, currentY + 10)
-         .text(`$${Number(quote.subtotal || 0).toFixed(2)}`, summaryX + summaryWidth - 60, currentY + 10, { align: 'right' });
+        .fontSize(10)
+        .text('Subtotal:', summaryX + 10, currentY + 10)
+        .text(`$${Number(quote.subtotal || 0).toFixed(2)}`, summaryX + summaryWidth - 60, currentY + 10, { align: 'right' });
 
       let summaryY = currentY + 30;
 
       // Discount
       if (quote.discountValue) {
-        const discountLabel = quote.discountType === 'PERCENTAGE' 
-          ? `Discount (${quote.discountValue}%):` 
+        const discountLabel = quote.discountType === 'PERCENTAGE'
+          ? `Discount (${quote.discountValue}%):`
           : 'Discount:';
         doc.text(discountLabel, summaryX + 10, summaryY)
-           .text(`-$${Number(quote.discountValue).toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+          .text(`-$${Number(quote.discountValue).toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
       // Tax
       if (quote.taxRate) {
-        doc.text(`Tax (${quote.taxRate}%):`, summaryX + 10, summaryY)
-           .text(`$${Number(quote.taxAmount || 0).toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+        const subtotal = Number(quote.subtotal) || 0;
+        const taxRate = Number(quote.taxRate) || 0;
+        const taxAmount = (subtotal * (taxRate / 100)).toFixed(2);
+
+        doc.text(`Taxes:`, summaryX + 10, summaryY)
+          .text(`$${taxAmount}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
         summaryY += 20;
       }
 
-      // Total
+      // DownPayment
+      if (quote.downPaymentValue) {
+        const downPayment = Number(quote.downPaymentValue);
+        doc.text(`Down Payment:`, summaryX + 10, summaryY)
+          .text(`$${downPayment.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+        summaryY += 20;
+      } else {
+        doc.text(`Down Payment:`, summaryX + 10, summaryY)
+          .text(`$0.00`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+        summaryY += 20;
+      }
+
+      // Calculamos el total
+      const subtotal = Number(quote.subtotal) || 0;
+      const discountValue = Number(quote.discountValue) || 0;
+      const taxRate = Number(quote.taxRate) || 0;
+      const downPayment = Number(quote.downPaymentValue) || 0;
+
+      // Calcular el descuento
+      let totalAfterDiscount = discountValue;
+      if (quote.discountType === 'PERCENTAGE') {
+        totalAfterDiscount = subtotal * (discountValue / 100);
+      } else {
+        totalAfterDiscount = discountValue;
+      }
+
+      // Calcular impuestos
+      const taxAmount = (subtotal * (taxRate / 100));
+
+      // Calcular el total
+      let total = subtotal - totalAfterDiscount + taxAmount - downPayment;
+
+      // Mostrar total en el documento
       doc.font('Helvetica-Bold')
-         .text('Total:', summaryX + 10, summaryY)
-         .text(`$${Number(quote.total || 0).toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
+        .text('Total:', summaryX + 10, summaryY)
+        .text(`$${total.toFixed(2)}`, summaryX + summaryWidth - 60, summaryY, { align: 'right' });
 
       // Terms & Conditions
       if (quote.template?.termsAndConditions) {
         doc.addPage();
         doc.font('Helvetica-Bold')
-           .fontSize(16)
-           .text('Terms and Conditions', { align: 'center' })
-           .moveDown(1)
-           .font('Helvetica')
-           .fontSize(11)
-           .text(quote.template.termsAndConditions, {
-             align: 'justify',
-             lineGap: 2
-           });
+          .fontSize(16)
+          .text('Terms and Conditions', { align: 'center' })
+          .moveDown(1)
+          .font('Helvetica')
+          .fontSize(11)
+          .text(quote.template.termsAndConditions, {
+            align: 'justify',
+            lineGap: 2
+          });
       }
 
       // Finalize document
