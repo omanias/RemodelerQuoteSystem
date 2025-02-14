@@ -104,7 +104,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [data, setData] = useState<QuoteFormValues | null>(null);
+  const [data, setData] = useState<QuoteFormValues | null>(defaultValues || null);
 
   const [location, setLocation] = useLocation();
 
@@ -140,9 +140,21 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         downPaymentType: null,
         downPaymentValue: null,
         taxRate: null,
+        remaining: 0,
       },
     },
   });
+
+  // Initialize form with default values when they change
+  useEffect(() => {
+    if (defaultValues) {
+      form.reset(defaultValues);
+      setData(defaultValues);
+      if (defaultValues.calculations) {
+        calculateTotals();
+      }
+    }
+  }, [defaultValues, form]);
 
   // Fetch contacts
   const { data: contacts = [] } = useQuery<Contact[]>({
@@ -317,7 +329,6 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     form.setValue("calculations.total", total);
     form.setValue("calculations.remaining", remaining);
   };
-
 
 
   const steps = [
@@ -587,6 +598,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                 form.setValue("calculations.discountType", value as any);
                 calculateTotals();
               }}
+              value={form.watch("calculations.discountType") || undefined}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select discount type" />
@@ -604,6 +616,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
               <Input
                 type="number"
                 placeholder={form.watch("calculations.discountType") === "PERCENTAGE" ? "%" : "$"}
+                value={form.watch("calculations.discountValue") || ""}
                 onChange={(e) => {
                   form.setValue("calculations.discountValue", Number(e.target.value));
                   calculateTotals();
@@ -619,6 +632,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                 form.setValue("calculations.downPaymentType", value as any);
                 calculateTotals();
               }}
+              value={form.watch("calculations.downPaymentType") || undefined}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select down payment type" />
@@ -636,6 +650,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
               <Input
                 type="number"
                 placeholder={form.watch("calculations.downPaymentType") === "PERCENTAGE" ? "%" : "$"}
+                value={form.watch("calculations.downPaymentValue") || ""}
                 onChange={(e) => {
                   form.setValue("calculations.downPaymentValue", Number(e.target.value));
                   calculateTotals();
@@ -649,6 +664,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
             <Input
               type="number"
               placeholder="%"
+              value={form.watch("calculations.taxRate") || ""}
               onChange={(e) => {
                 form.setValue("calculations.taxRate", Number(e.target.value));
                 calculateTotals();
