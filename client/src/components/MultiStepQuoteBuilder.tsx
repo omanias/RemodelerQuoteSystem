@@ -22,7 +22,6 @@ import debounce from "lodash/debounce";
 import { useLocation } from 'wouter';
 
 
-
 interface Contact {
   id: number;
   firstName: string;
@@ -105,9 +104,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [data, setData] = useState<QuoteFormValues | null>(null);
 
   const [location, setLocation] = useLocation();
-
 
   // Get current user
   const { data: user } = useQuery<User>({
@@ -259,6 +258,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       if (data.contactInfo.clientName && // Only save if we have at least a client name
         !isPending) {
         createOrUpdateQuote(data);
+        setData(data);
       }
     }, 2000),
     [createOrUpdateQuote, isPending]
@@ -773,61 +773,128 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   };
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <Card className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <Steps
-              steps={steps.map((step) => ({
-                title: step.title,
-                description: step.description,
-              }))}
-              currentStep={currentStep}
-            />
-            {lastSavedAt && (
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <Save className="h-4 w-4" />
-                Last saved: {lastSavedAt.toLocaleTimeString()}
+    <div className="flex justify-between space-x-6">
+      {/* Formulario a la izquierda */}
+      <div className="flex-1">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <Card className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <Steps
+                  steps={steps.map((step) => ({
+                    title: step.title,
+                    description: step.description,
+                  }))}
+                  currentStep={currentStep}
+                />
+                {lastSavedAt && (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Save className="h-4 w-4" />
+                    Last saved: {lastSavedAt.toLocaleTimeString()}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="mt-8">
-            {steps[currentStep].content}
-          </div>
+              <div className="mt-8">
+                {steps[currentStep].content}
+              </div>
 
-          <div className="mt-6 flex justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={previousStep}
-              disabled={currentStep === 0}
-            >
-              Previous
-            </Button>
-            {currentStep === steps.length - 1 ? (
-              <Button
-                type="submit"
-                disabled={isPending}
-                onClick={() => {
-                  if (!isPending) {
-                    setLocation('/quotes');
-                  }
-                }}
-              >
-                {isPending ? "Creating..." : "Create Quote"}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={nextStep}
-              >
-                Next
-              </Button>
-            )}
+              <div className="mt-6 flex justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={previousStep}
+                  disabled={currentStep === 0}
+                >
+                  Previous
+                </Button>
+                {currentStep === steps.length - 1 ? (
+                  <Button
+                    type="submit"
+                    disabled={isPending}
+                    onClick={() => {
+                      if (!isPending) {
+                        setLocation('/quotes');
+                      }
+                    }}
+                  >
+                    {isPending ? "Creating..." : "Create Quote"}
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={nextStep}
+                  >
+                    Next
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </form>
+        </Form>
+      </div>
+
+      {/* Card a la derecha */}
+      <div className="w-1/3">
+        <Card className="p-6">
+          <div className="flex flex-col space-y-4">
+            <div>
+              <Label>Contact name: </Label>
+              <span>{data?.contactInfo.clientName}</span>
+            </div>
+            <div>
+              <Label>Category: </Label>
+              <span>{categories.find(category => category.id === data?.categoryAndTemplate.categoryId)?.name || ""}</span>
+            </div>
+            <div>
+              <Label>Template: </Label>
+              <span>{templates.find(template => template.id === data?.categoryAndTemplate.templateId)?.name || ""}</span>
+            </div>
+            {data?.products.map((product, index) => (
+              <div key={index}>
+                <Label>Product: </Label>
+                <span>
+                  {products.find(p => p.id === product.productId)?.name || 'Unknown'} - Quantity {product.quantity} {product.variation === "" ? "" : product.variation} - Price: ${product.unitPrice}
+                </span>
+              </div>
+            ))}
+            <div>
+              <Label>Discount type: </Label>
+              <span>{data?.calculations.discountType}</span>
+            </div>
+            <div>
+              <Label>Discount: </Label>
+              <span>${data?.calculations.discountValue}</span>
+            </div>
+            <div>
+              <Label>Down payment type: </Label>
+              <span>{data?.calculations.downPaymentType}</span>
+            </div>
+            <div>
+              <Label>Down payment value: </Label>
+              <span>${data?.calculations.downPaymentValue}</span>
+            </div>
+            <div>
+              <Label>Tax rate: </Label>
+              <span>{data?.calculations.taxRate}%</span>
+            </div>
+            <div>
+              <Label>Remaining: </Label>
+              <span>${data?.calculations.remaining}</span>
+            </div>
+            <div>
+              <Label>Subtotal: </Label>
+              <span>${data?.calculations.subtotal}</span>
+            </div>
+            <div>
+              <Label>Total: </Label>
+              <span>${data?.calculations.total}</span>
+            </div>
           </div>
         </Card>
-      </form>
-    </Form>
+      </div>
+
+    </div>
+
   );
 }
