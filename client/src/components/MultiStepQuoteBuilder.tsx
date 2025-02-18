@@ -59,6 +59,35 @@ interface Company {
   // Add other company fields as needed
 }
 
+interface Quote {
+  id: number;
+  userId: number;
+  companyId: number;
+  status: string;
+  categoryId: number;
+  templateId: number;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  clientAddress: string | null;
+  content: {
+    products: {
+      id: number;
+      name: string;
+      quantity: number;
+      price: number;
+      variation?: string;
+    }[];
+  };
+  subtotal: number;
+  total: number;
+  discountType: "PERCENTAGE" | "FIXED" | null;
+  discountValue: number | null;
+  downPaymentType: "PERCENTAGE" | "FIXED" | null;
+  downPaymentValue: number | null;
+  taxRate: number | null;
+}
+
 // Schema for the form
 const quoteFormSchema = z.object({
   contactInfo: z.object({
@@ -104,9 +133,11 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
   const [quoteId, setQuoteId] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [data, setData] = useState<QuoteFormValues | null>(defaultValues || null);
+
+  const [data, setData] = useState<QuoteFormValues | null>(null);
 
   const [location, setLocation] = useLocation();
+  const [prevValues, setPrevValues] = useState<QuoteFormValues | null>(null);
 
   // Get current user
   const { data: user } = useQuery<User>({
@@ -145,16 +176,13 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     },
   });
 
-  // Initialize form with default values when they change
+
   useEffect(() => {
-    if (defaultValues) {
-      form.reset(defaultValues);
-      setData(defaultValues);
-      if (defaultValues.calculations) {
-        calculateTotals();
-      }
+    if (form.getValues()) {
+      setPrevValues(form.getValues());
     }
-  }, [defaultValues, form]);
+  }, [form, form.getValues]);
+
 
   // Fetch contacts
   const { data: contacts = [] } = useQuery<Contact[]>({
@@ -272,7 +300,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         createOrUpdateQuote(data);
         setData(data);
       }
-    }, 2000),
+    }, 5000),
     [createOrUpdateQuote, isPending]
   );
 
@@ -329,6 +357,41 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
     form.setValue("calculations.total", total);
     form.setValue("calculations.remaining", remaining);
   };
+
+  // Verifica si "prevValues" tiene datos y usa setValue para establecer los valores en los campos del formulario
+  useEffect(() => {
+    if (prevValues) {
+      // Paso 1: Contact Info
+      if (prevValues.contactInfo) {
+        form.setValue("contactInfo.clientName", prevValues.contactInfo.clientName);
+        form.setValue("contactInfo.clientEmail", prevValues.contactInfo.clientEmail);
+        form.setValue("contactInfo.clientPhone", prevValues.contactInfo.clientPhone);
+        form.setValue("contactInfo.clientAddress", prevValues.contactInfo.clientAddress);
+      }
+
+      // Paso 2: Category & Template
+      if (prevValues.categoryAndTemplate) {
+        form.setValue("categoryAndTemplate.categoryId", prevValues.categoryAndTemplate.categoryId);
+        form.setValue("categoryAndTemplate.templateId", prevValues.categoryAndTemplate.templateId);
+      }
+
+      // Paso 3: Products
+      if (prevValues.products) {
+        form.setValue("products", prevValues.products);
+      }
+
+      // Paso 4: Calculations
+      if (prevValues.calculations) {
+        form.setValue("calculations.discountType", prevValues.calculations.discountType);
+        form.setValue("calculations.discountValue", prevValues.calculations.discountValue);
+        form.setValue("calculations.downPaymentType", prevValues.calculations.downPaymentType);
+        form.setValue("calculations.downPaymentValue", prevValues.calculations.downPaymentValue);
+        form.setValue("calculations.taxRate", prevValues.calculations.taxRate);
+        form.setValue("calculations.subtotal", prevValues.calculations.subtotal);
+        form.setValue("calculations.total", prevValues.calculations.total);
+      }
+    }
+  }, [prevValues]); // Se ejecutará cuando prevValues cambie
 
 
   const steps = [

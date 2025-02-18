@@ -5,8 +5,8 @@ import express from "express";
 import { companyMiddleware, requireAuth, requireCompanyAccess } from "./middleware/company";
 import { storage, UPLOADS_PATH } from "./storage";
 import { db } from "@db";
-import { 
-  users, quotes, contacts, products, categories, 
+import {
+  users, quotes, contacts, products, categories,
   templates, notifications, companies, settings,
   type Quote, type Settings, type Contact
 } from "@db/schema";
@@ -187,6 +187,35 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
+    try {
+      const quoteId = parseInt(req.params.id);
+      if (isNaN(quoteId)) {
+        return res.status(400).json({ message: "Invalid quote ID" });
+      }
+
+      const quote = await db.query.quotes.findFirst({
+        where: eq(quotes.id, quoteId),
+        with: {
+          contact: true,
+          template: true,
+          category: true
+        }
+      });
+
+      console.log(quote);
+
+      if (!quote) {
+        return res.status(404).json({ message: "Quote not found" });
+      }
+
+      res.json(quote);
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Add DELETE route for quotes after the quote creation route
   app.delete("/api/quotes/:id", requireAuth, requireCompanyAccess, async (req, res) => {
     try {
@@ -252,15 +281,15 @@ export function registerRoutes(app: Express): Server {
       const pdfBuffer = await generateQuotePDF({
         quote: {
           ...quote,
-          content: quote.content as { 
-            products: Array<{ 
-              name: string; 
-              description?: string; 
-              quantity: number; 
-              unit?: string; 
-              price: number; 
-              category?: string; 
-            }> 
+          content: quote.content as {
+            products: Array<{
+              name: string;
+              description?: string;
+              quantity: number;
+              unit?: string;
+              price: number;
+              category?: string;
+            }>
           }
         },
         company: quote.company,
