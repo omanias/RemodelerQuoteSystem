@@ -117,6 +117,7 @@ const quoteFormSchema = z.object({
     total: z.number(),
     remaining: z.number().optional(),
   }),
+  status: z.string().optional().nullable(),
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
@@ -216,7 +217,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
       const payload = {
         userId: user.id,
         companyId: company.id,
-        status: "DRAFT",
+        status: data.status || "DRAFT",
         categoryId: data.categoryAndTemplate.categoryId,
         templateId: data.categoryAndTemplate.templateId,
         clientName: data.contactInfo.clientName,
@@ -243,8 +244,6 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
 
       const endpoint = quoteId ? `/api/quotes/${quoteId}` : "/api/quotes";
       const method = quoteId ? "PUT" : "POST";
-
-      console.log(`${method}ing quote with payload:`, payload);
 
       const response = await fetch(endpoint, {
         method,
@@ -389,6 +388,11 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         form.setValue("calculations.taxRate", prevValues.calculations.taxRate);
         form.setValue("calculations.subtotal", prevValues.calculations.subtotal);
         form.setValue("calculations.total", prevValues.calculations.total);
+      }
+
+      // Paso 5: Status
+      if (prevValues.status) {
+        form.setValue("status", prevValues.status);
       }
     }
   }, [prevValues]); // Se ejecutará cuando prevValues cambie
@@ -748,6 +752,35 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         </div>
       ),
     },
+    {
+      //dropdown con status
+      title: "Status",
+      description: "Select quote status",
+      content: (
+        <div className="space-y-4">
+          <div>
+            <Label>Status</Label>
+            <Select
+              onValueChange={(value) => {
+                form.setValue("status", value);
+              }}
+              value={form.watch("status") || undefined}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DRAFT">Draft</SelectItem>
+                <SelectItem value="SENT">Sent</SelectItem>
+                <SelectItem value="APPROVED">Approved</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      ),
+
+    }
   ];
 
   const nextStep = () => {
@@ -766,6 +799,12 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         break;
       case 2: // Products
         isValid = fields.products.length > 0;
+        break;
+      case 3: // Calculations
+        isValid = !!fields.calculations.discountType && !!fields.calculations.downPaymentType;
+        break;
+      case 4: // Status
+        isValid = !!fields.status;
         break;
     }
 
