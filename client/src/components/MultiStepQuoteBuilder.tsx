@@ -20,6 +20,8 @@ import { Plus, Minus, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import debounce from "lodash/debounce";
 import { useLocation } from 'wouter';
+import { SignatureCanvas } from "./SignatureCanvas";
+import { s } from "node_modules/vite/dist/node/types.d-aGj9QkWt";
 
 
 interface Contact {
@@ -118,6 +120,7 @@ const quoteFormSchema = z.object({
     remaining: z.number().optional(),
   }),
   status: z.string().optional().nullable(),
+  signature: z.string().optional().nullable(),
 });
 
 type QuoteFormValues = z.infer<typeof quoteFormSchema>;
@@ -139,6 +142,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
 
   const [location, setLocation] = useLocation();
   const [prevValues, setPrevValues] = useState<QuoteFormValues | null>(null);
+  const [isSignatureOpen, setIsSignatureOpen] = useState(false);
 
   // Get current user
   const { data: user } = useQuery<User>({
@@ -240,6 +244,7 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         downPaymentType: data.calculations.downPaymentType || null,
         downPaymentValue: data.calculations.downPaymentValue ? data.calculations.downPaymentValue.toFixed(2) : null,
         taxRate: data.calculations.taxRate ? data.calculations.taxRate.toFixed(2) : null,
+        signature: data.signature || null,
       };
 
       const endpoint = quoteId ? `/api/quotes/${quoteId}` : "/api/quotes";
@@ -876,6 +881,13 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         });
         return;
       }
+      console.log(data)
+
+      // Si el estado es "APPROVED", abrir el modal de firma
+      if (data.status === "APPROVED") {
+        setIsSignatureOpen(true);
+        return;
+      }
 
       await createOrUpdateQuote(data);
       // Llamar a onSuccess después de crear exitosamente el quote
@@ -930,14 +942,17 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
                   <Button
                     type="submit"
                     disabled={isPending}
-                    onClick={() => {
-                      if (!isPending) {
-                        setLocation('/quotes');
+                    onClick={(e) => {
+                      if (!isPending && data?.status !== "APPROVED") {
+                        setLocation("/quotes");
+                      } else {
+                        setIsSignatureOpen(true);
                       }
                     }}
                   >
                     {isPending ? "Creating..." : "Create Quote"}
                   </Button>
+
                 ) : (
                   <Button
                     type="button"
@@ -951,6 +966,9 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
           </form>
         </Form>
       </div>
+
+
+
 
       {/* Card a la derecha */}
       <div className="w-1/3">
@@ -1012,6 +1030,31 @@ export function MultiStepQuoteBuilder({ onSuccess, defaultValues }: Props) {
         </Card>
       </div>
 
+
+      {
+
+        isSignatureOpen && (
+          <SignatureCanvas
+            onClose={() => setIsSignatureOpen(false)}
+            isOpen={isSignatureOpen}
+            onSave={(signatureData: any) => {
+              console.log("Signature saved:", signatureData);
+
+              // Guardar la firma en el formulario
+              form.setValue("signature", signatureData);
+
+              // Cerrar el modal de firma
+              setIsSignatureOpen(false);
+
+              // Continuar con el guardado de la cotización después de la firma
+              createOrUpdateQuote(form.getValues());
+              onSuccess?.();
+            }}
+            title="Sign Quote"
+            description="Please sign the quote to confirm"
+          />
+        )
+      }
     </div>
 
   );

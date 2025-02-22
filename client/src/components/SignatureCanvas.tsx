@@ -25,13 +25,7 @@ interface SignatureMetadata {
   timezone: string;
 }
 
-export function SignatureCanvas({
-  isOpen,
-  onClose,
-  onSave,
-  title = "Sign Document",
-  description = "Please sign in the box below",
-}: SignatureCanvasProps) {
+export function SignatureCanvas({ isOpen, onClose, onSave, title = "Sign Document", description = "Please sign in the box below" }: SignatureCanvasProps) {
   const signaturePad = useRef<SignaturePad>(null);
   const [isEmpty, setIsEmpty] = useState(true);
 
@@ -52,10 +46,10 @@ export function SignatureCanvas({
 
     const signatureData = signaturePad.current?.toDataURL();
     if (signatureData) {
-      // Create signature metadata
+      // Crear metadata de la firma
       const metadata: SignatureMetadata = {
         browserInfo: navigator.userAgent,
-        ipAddress: "Captured on server", // This will be replaced with actual IP on server
+        ipAddress: "Captured on server", // Se obtiene en backend
         signedAt: new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
@@ -65,6 +59,7 @@ export function SignatureCanvas({
         timestamp: new Date().toISOString(),
         metadata,
       });
+
       handleClear();
       onClose();
     }
